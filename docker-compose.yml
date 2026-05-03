@@ -1,0 +1,55 @@
+services:
+  PostgreSQL:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hyperbot
+      POSTGRES_PASSWORD: hyperbot
+      POSTGRES_DB: hyperbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - PostgreSQLData:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hyperbot -d hyperbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  Redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - RedisData:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  Application:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://hyperbot:hyperbot@PostgreSQL:5432/hyperbot?schema=public
+      REDIS_URL: redis://Redis:6379
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      SUPER_ADMIN_IDS: ${SUPER_ADMIN_IDS:-}
+      PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:-true}
+      PLUGIN_DIRECTORY: dist/Plugins
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      PostgreSQL:
+        condition: service_healthy
+      Redis:
+        condition: service_healthy
+
+volumes:
+  PostgreSQLData:
+  RedisData:

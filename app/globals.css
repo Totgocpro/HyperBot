@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #e2e8f0;
+  background: #020617;
+}
+
+body {
+  min-height: 100vh;
+  background: #020617;
+}
+
+html[data-theme="light"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html[data-theme="light"] img,
+html[data-theme="light"] video {
+  filter: invert(1) hue-rotate(180deg);
+}

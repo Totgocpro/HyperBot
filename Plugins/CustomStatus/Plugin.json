@@ -1,0 +1,60 @@
+{
+  "Metadata": {
+    "Id": "CustomStatus",
+    "DisplayName": "Custom Status",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "CS"
+  },
+  "Scope": "Global",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "StatusText",
+      "Type": "String",
+      "Label": "Status text",
+      "Default": "HyperBot Dashboard"
+    },
+    {
+      "Key": "PresenceStatus",
+      "Type": "Select",
+      "Label": "Presence",
+      "Default": "online",
+      "Options": [
+        {
+          "Label": "Online",
+          "Value": "online"
+        },
+        {
+          "Label": "Idle",
+          "Value": "idle"
+        },
+        {
+          "Label": "Do not disturb",
+          "Value": "dnd"
+        }
+      ]
+    },
+    {
+      "Key": "ActivityType",
+      "Type": "Select",
+      "Label": "Activity type",
+      "Default": "Playing",
+      "Options": [
+        {
+          "Label": "Playing",
+          "Value": "Playing"
+        },
+        {
+          "Label": "Watching",
+          "Value": "Watching"
+        },
+        {
+          "Label": "Listening",
+          "Value": "Listening"
+        }
+      ]
+    }
+  ],
+  "EntryPoint": "./CustomStatusPlugin.ts"
+}

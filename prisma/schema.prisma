@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource Database {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DashboardRole {
+  SuperAdmin
+  User
+}
+
+enum GuildAccessRole {
+  GuildOwner
+  GuildAdmin
+}
+
+model DashboardUser {
+  Id                String         @id @default(cuid())
+  DiscordId         String         @unique
+  Username          String         @unique
+  DisplayName       String
+  PasswordHash      String
+  PasswordSalt      String
+  Role              DashboardRole  @default(User)
+  IsDashboardBanned Boolean        @default(false)
+  CreatedAt         DateTime       @default(now())
+  UpdatedAt         DateTime       @updatedAt
+  SessionTokens     SessionToken[]
+}
+
+model SessionToken {
+  Id              String        @id @default(cuid())
+  UserId          String
+  TokenHash       String
+  RevokedAt       DateTime?
+  CreatedAt       DateTime      @default(now())
+  ExpiresAt       DateTime
+  DashboardUser   DashboardUser @relation(fields: [UserId], references: [Id], onDelete: Cascade)
+
+  @@index([UserId])
+}
+
+model GuildAccess {
+  Id               String   @id @default(cuid())
+  GuildId          String   @unique
+  IsAllowed        Boolean  @default(true)
+  RestrictedReason String?
+  CreatedAt        DateTime @default(now())
+  UpdatedAt        DateTime @updatedAt
+}
+
+model GuildRoleGrant {
+  Id               String          @id @default(cuid())
+  GuildId          String
+  DiscordId        String
+  Role             GuildAccessRole
+  AllowedPluginIds Json?
+  CreatedAt        DateTime        @default(now())
+  UpdatedAt        DateTime        @updatedAt
+
+  @@unique([GuildId, DiscordId])
+  @@index([DiscordId])
+}
+
+model PluginGlobalConfig {
+  Id        String   @id @default(cuid())
+  GuildId   String
+  PluginId  String
+  Key       String
+  Value     Json
+  CreatedAt DateTime @default(now())
+  UpdatedAt DateTime @updatedAt
+
+  @@unique([GuildId, PluginId, Key])
+  @@index([GuildId, PluginId])
+}
+
+model UserPluginValue {
+  Id        String   @id @default(cuid())
+  GuildId   String
+  UserId    String
+  PluginId  String
+  Key       String
+  Value     Json
+  CreatedAt DateTime @default(now())
+  UpdatedAt DateTime @updatedAt
+
+  @@unique([GuildId, UserId, PluginId, Key])
+  @@index([GuildId, UserId])
+}
+
+model SystemSetting {
+  Key       String   @id
+  Value     Json
+  CreatedAt DateTime @default(now())
+  UpdatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  Id        String   @id @default(cuid())
+  ActorId   String
+  Action    String
+  Target    String
+  Metadata  Json?
+  CreatedAt DateTime @default(now())
+
+  @@index([ActorId])
+}

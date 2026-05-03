@@ -1,0 +1,40 @@
+{
+  "name": "hyperbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"tsx watch src/Bot/Main.ts\" \"next dev --webpack\"",
+    "bot:dev": "tsx watch src/Bot/Main.ts",
+    "web:dev": "next dev --webpack",
+    "build": "prisma generate && tsc -p tsconfig.bot.json && next build --webpack",
+    "start": "concurrently \"node dist/src/Bot/Main.js\" \"next start\"",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "chokidar": "^3.6.0",
+    "discord-api-types": "0.37.120",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.1",
+    "next": "16.3.0-canary.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.9",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "postcss": "^8.4.47",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.13",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}
