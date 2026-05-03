@@ -27,6 +27,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
   const [SelectedPluginId, SetSelectedPluginId] = UseState("");
+  const [PluginMenuOpen, SetPluginMenuOpen] = UseState(false);
   const [DraftValues, SetDraftValues] = UseState<Record<string, Record<string, unknown>>>({});
   const [Status, SetStatus] = UseState("Loading plugins...");
 
@@ -92,39 +93,52 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-100">
+    <main className="min-h-screen bg-slate-950 px-3 py-5 text-slate-100 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/20 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-600 text-2xl font-black text-white">
+        <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl bg-blue-600 text-2xl font-black text-white sm:h-16 sm:w-16">
               {Guild?.Icon ? <img alt="" className="h-16 w-16 rounded-3xl" src={Guild.Icon} /> : (Guild?.Name ?? "S").slice(0, 1).toUpperCase()}
             </div>
-            <div>
+            <div className="min-w-0">
               <Link className="text-sm font-semibold text-blue-400" href="/">
                 Back to servers
               </Link>
-              <h1 className="mt-2 text-3xl font-black text-white">{Guild?.Name ?? "Discord server"}</h1>
-              <p className="mt-1 text-sm text-slate-400">
+              <h1 className="mt-2 truncate text-2xl font-black text-white sm:text-3xl">{Guild?.Name ?? "Discord server"}</h1>
+              <p className="mt-1 break-all text-sm text-slate-400 sm:break-normal">
                 {Guild?.MemberCount ?? "?"} members | Guild ID: {Properties.GuildId}
               </p>
             </div>
           </div>
-          <button className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={() => void LoadPlugins()}>
+          <button className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void LoadPlugins()}>
             Refresh
           </button>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <aside className="rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20">
-            <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-500">Plugins</p>
-            <div className="mt-3 space-y-2">
+          <aside className="rounded-3xl border border-slate-800 bg-slate-900 p-3 shadow-xl shadow-black/20 sm:p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-500">Plugins</p>
+              <button
+                aria-expanded={PluginMenuOpen}
+                aria-label="Open plugin menu"
+                className="rounded-2xl border border-slate-700 p-2 text-slate-200 hover:bg-slate-800 lg:hidden"
+                onClick={() => SetPluginMenuOpen(!PluginMenuOpen)}
+              >
+                <PluginHamburgerIcon />
+              </button>
+            </div>
+            <div className={`${PluginMenuOpen ? "grid" : "hidden"} mt-3 gap-2 lg:grid lg:space-y-2`}>
               {Plugins.map((Plugin) => (
                 <button
                   className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
                     SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
                   }`}
                   key={Plugin.Metadata.Id}
-                  onClick={() => SetSelectedPluginId(Plugin.Metadata.Id)}
+                  onClick={() => {
+                    SetSelectedPluginId(Plugin.Metadata.Id);
+                    SetPluginMenuOpen(false);
+                  }}
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
                     {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
@@ -140,7 +154,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
             </div>
           </aside>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-black/20">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
             <p className="mb-5 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">{Status}</p>
 
             {SelectedPlugin ? (
@@ -152,7 +166,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                         Version {SelectedPlugin.Metadata.Version} by {SelectedPlugin.Metadata.Author}
                     </p>
                   </div>
-                  <button className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={() => void SavePlugin(SelectedPlugin)}>
+                  <button className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void SavePlugin(SelectedPlugin)}>
                     Save
                   </button>
                 </div>
@@ -172,6 +186,16 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
         </div>
       </div>
     </main>
+  );
+}
+
+function PluginHamburgerIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </svg>
   );
 }
 

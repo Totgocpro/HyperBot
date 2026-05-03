@@ -44,13 +44,13 @@ export function GuildSelector() {
   }
 
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-black/20">
+    <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-xl font-black text-white">Servers</h2>
           <p className="mt-1 text-sm text-slate-400">{Status}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${BotOnline ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
             {BotOnline ? "Bot online" : "Bot offline"}
           </span>
@@ -75,7 +75,7 @@ export function GuildSelector() {
       </div>
 
       {Guilds.length === 0 ? (
-        <div className="mt-6 rounded-3xl border border-dashed border-slate-700 bg-slate-950 p-8">
+        <div className="mt-6 rounded-3xl border border-dashed border-slate-700 bg-slate-950 p-5 sm:p-8">
           <h3 className="text-lg font-black text-white">No server detected</h3>
           <p className="mt-2 text-sm text-slate-400">
             If the bot is already on your server, restart `./Dev.sh`, wait for the bot connection log, then refresh.
@@ -85,7 +85,7 @@ export function GuildSelector() {
           </p>
         </div>
       ) : (
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
           {Guilds.map((Guild) => (
             <Link
               className="flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-950 p-4 transition hover:border-blue-500 hover:bg-slate-900"

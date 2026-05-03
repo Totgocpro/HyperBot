@@ -80,6 +80,7 @@ const AdminSections: Array<{ Id: AdminSection; Label: string; Description: strin
 
 export function SuperAdminPanel() {
   const [ActiveSection, SetActiveSection] = UseState<AdminSection>("GeneralStatus");
+  const [MobileAdminMenuOpen, SetMobileAdminMenuOpen] = UseState(false);
   const [Health, SetHealth] = UseState<HealthReport | null>(null);
   const [Users, SetUsers] = UseState<DashboardUserRow[]>([]);
   const [Guilds, SetGuilds] = UseState<GuildAccessRow[]>([]);
@@ -352,29 +353,44 @@ export function SuperAdminPanel() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 md:px-8">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[280px_1fr]">
-        <aside className="h-fit rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 lg:sticky lg:top-6">
-          <div className="px-3 py-4">
-            <p className="text-xs uppercase tracking-[0.35em] text-blue-300">SuperAdmin</p>
-            <h1 className="mt-3 text-3xl font-black text-white">Control Panel</h1>
+    <main className="min-h-screen bg-slate-950 px-3 py-4 text-slate-100 sm:px-4 sm:py-6 md:px-8">
+      <div className="mx-auto grid max-w-7xl gap-4 sm:gap-6 lg:grid-cols-[280px_1fr]">
+        <aside className="h-fit rounded-[2rem] border border-slate-800 bg-slate-900 p-3 shadow-xl shadow-black/20 sm:p-4 lg:sticky lg:top-6">
+          <div className="px-2 py-3 sm:px-3 sm:py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.35em] text-blue-300">SuperAdmin</p>
+                <h1 className="mt-3 text-2xl font-black text-white sm:text-3xl">Control Panel</h1>
+              </div>
+              <button
+                aria-expanded={MobileAdminMenuOpen}
+                aria-label="Open admin menu"
+                className="rounded-2xl border border-slate-700 p-2 text-slate-200 hover:bg-slate-800 lg:hidden"
+                onClick={() => SetMobileAdminMenuOpen(!MobileAdminMenuOpen)}
+              >
+                <AdminHamburgerIcon />
+              </button>
+            </div>
             <p className="mt-3 rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">{Status}</p>
           </div>
-          <nav className="mt-2 space-y-2">
+          <nav className={`${MobileAdminMenuOpen ? "grid" : "hidden"} mt-2 gap-2 lg:grid lg:space-y-2`}>
             {AdminSections.map((Section) => (
               <button
                 className={`w-full rounded-2xl px-4 py-3 text-left transition ${
                   ActiveSection === Section.Id ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
                 }`}
                 key={Section.Id}
-                onClick={() => SetActiveSection(Section.Id)}
+                onClick={() => {
+                  SetActiveSection(Section.Id);
+                  SetMobileAdminMenuOpen(false);
+                }}
               >
                 <span className="block text-sm font-black">{Section.Label}</span>
                 <span className={ActiveSection === Section.Id ? "mt-1 block text-xs text-blue-100" : "mt-1 block text-xs text-slate-500"}>{Section.Description}</span>
               </button>
             ))}
           </nav>
-          <button className="mt-4 w-full rounded-2xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800" onClick={() => void LoadAdminData()}>
+          <button className="mt-3 w-full rounded-2xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800 sm:mt-4" onClick={() => void LoadAdminData()}>
             Reload data
           </button>
         </aside>
@@ -436,19 +452,29 @@ export function SuperAdminPanel() {
   );
 }
 
+function AdminHamburgerIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </svg>
+  );
+}
+
 function GeneralStatusPanel(Properties: { Health: HealthReport | null; Users: DashboardUserRow[]; Guilds: GuildAccessRow[]; Grants: GuildGrantRow[] }) {
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-8 shadow-xl shadow-black/20">
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/20 sm:p-8">
         <p className="text-sm uppercase tracking-[0.35em] text-blue-300">General and status</p>
-        <h2 className="mt-3 text-4xl font-black text-white">Instance overview</h2>
+        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">Instance overview</h2>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">Monitor the database, Redis, bot gateway, users, and known servers from one place.</p>
       </section>
       <section className="grid gap-5 md:grid-cols-3">
         {(["Database", "Redis", "Bot"] as const).map((HealthKey) => (
-          <div key={HealthKey} className="rounded-[1.5rem] border border-slate-800 bg-slate-900 p-6">
+          <div key={HealthKey} className="rounded-[1.5rem] border border-slate-800 bg-slate-900 p-5 sm:p-6">
             <p className="text-sm uppercase tracking-[0.25em] text-slate-500">{HealthKey}</p>
-            <p className="mt-3 text-3xl font-black text-white">{Properties.Health?.[HealthKey] ?? "Unknown"}</p>
+            <p className="mt-3 text-2xl font-black text-white sm:text-3xl">{Properties.Health?.[HealthKey] ?? "Unknown"}</p>
           </div>
         ))}
       </section>
@@ -470,21 +496,36 @@ function GlobalPluginsPanel(Properties: {
   SaveGlobalPlugin: (Plugin: AdminPlugin) => Promise<void>;
   UpdateGlobalPluginDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
 }) {
+  const [GlobalPluginMenuOpen, SetGlobalPluginMenuOpen] = UseState(false);
+
   return (
-    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-black/20">
-      <h2 className="text-3xl font-black text-white">Global Plugin</h2>
+    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
+      <h2 className="text-2xl font-black text-white sm:text-3xl">Global Plugin</h2>
       <p className="mt-1 text-sm text-slate-400">These plugins are configured at instance level, not per server.</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-[280px_1fr]">
-        <aside className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
-          <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-500">Global plugins</p>
-          <div className="mt-3 space-y-2">
+        <aside className="rounded-3xl border border-slate-800 bg-slate-950 p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-500">Global plugins</p>
+            <button
+              aria-expanded={GlobalPluginMenuOpen}
+              aria-label="Open global plugin menu"
+              className="rounded-2xl border border-slate-700 p-2 text-slate-200 hover:bg-slate-800 lg:hidden"
+              onClick={() => SetGlobalPluginMenuOpen(!GlobalPluginMenuOpen)}
+            >
+              <AdminHamburgerIcon />
+            </button>
+          </div>
+          <div className={`${GlobalPluginMenuOpen ? "grid" : "hidden"} mt-3 gap-2 lg:grid lg:space-y-2`}>
             {Properties.GlobalPlugins.map((Plugin) => (
               <button
                 className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
                   Properties.SelectedGlobalPluginId === Plugin.Metadata.Id ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
                 }`}
                 key={Plugin.Metadata.Id}
-                onClick={() => Properties.SetSelectedGlobalPluginId(Plugin.Metadata.Id)}
+                onClick={() => {
+                  Properties.SetSelectedGlobalPluginId(Plugin.Metadata.Id);
+                  SetGlobalPluginMenuOpen(false);
+                }}
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
                   {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
@@ -498,7 +539,7 @@ function GlobalPluginsPanel(Properties: {
           </div>
         </aside>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-6">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-6">
           {Properties.SelectedGlobalPlugin ? (
             <>
               <div className="flex flex-col gap-3 border-b border-slate-800 pb-5 md:flex-row md:items-center md:justify-between">
@@ -508,7 +549,7 @@ function GlobalPluginsPanel(Properties: {
                     Version {Properties.SelectedGlobalPlugin.Metadata.Version} by {Properties.SelectedGlobalPlugin.Metadata.Author}
                   </p>
                 </div>
-                <button className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={() => void Properties.SaveGlobalPlugin(Properties.SelectedGlobalPlugin as AdminPlugin)}>
+                <button className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void Properties.SaveGlobalPlugin(Properties.SelectedGlobalPlugin as AdminPlugin)}>
                   Save
                 </button>
               </div>
@@ -557,10 +598,10 @@ function UserManagementPanel(Properties: {
   const IsEditingSelf = Boolean(Properties.SelectedUser && Properties.SelectedUser.DiscordId === Properties.CurrentUserDiscordId);
 
   return (
-    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-black/20">
+    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-3xl font-black text-white">User Management</h2>
+          <h2 className="text-2xl font-black text-white sm:text-3xl">User Management</h2>
           <p className="mt-1 text-sm text-slate-400">Create accounts, edit roles, ban users, reset passwords, and assign server/plugin access.</p>
         </div>
         <button className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-2xl font-black text-white hover:bg-blue-500" onClick={() => Properties.SetIsCreateUserOpen(true)} title="Create user">
@@ -568,13 +609,13 @@ function UserManagementPanel(Properties: {
         </button>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[320px_1fr]">
+      <div className="mt-6 grid gap-4 sm:gap-6 xl:grid-cols-[320px_1fr]">
         <aside className="rounded-3xl border border-slate-800 bg-slate-950 p-3">
           {Properties.Users.length === 0 ? <p className="p-4 text-sm text-slate-400">No user found.</p> : null}
-          <div className="space-y-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 xl:block xl:space-y-2 xl:overflow-visible xl:pb-0">
             {Properties.Users.map((User) => (
               <button
-                className={`w-full rounded-2xl px-4 py-3 text-left transition ${
+                className={`min-w-60 rounded-2xl px-4 py-3 text-left transition xl:w-full xl:min-w-0 ${
                   Properties.SelectedUserDiscordId === User.DiscordId ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
                 }`}
                 key={User.DiscordId}
@@ -589,7 +630,7 @@ function UserManagementPanel(Properties: {
           </div>
         </aside>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-6">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-6">
           {Properties.SelectedUser ? (
             <div className="space-y-6">
               {IsEditingSelf ? (
@@ -635,7 +676,7 @@ function UserManagementPanel(Properties: {
                 ToggleAccessPlugin={Properties.ToggleAccessPlugin}
               />
 
-              <div className="flex flex-wrap gap-3">
+              <div className="grid gap-3 sm:flex sm:flex-wrap">
                 <button className="rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-500" onClick={() => void Properties.SaveUser()}>
                   Save user
                 </button>
@@ -662,11 +703,11 @@ function UserManagementPanel(Properties: {
       </div>
 
       {Properties.IsCreateUserOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-black">
-            <div className="flex items-center justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-2xl shadow-black sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-3xl font-black text-white">Create user</h3>
+                <h3 className="text-2xl font-black text-white sm:text-3xl">Create user</h3>
                 <p className="mt-1 text-sm text-slate-400">Create the account and assign allowed servers/plugins in the same flow.</p>
               </div>
               <button className="rounded-2xl border border-slate-700 px-4 py-2 font-bold text-slate-200 hover:bg-slate-800" onClick={() => Properties.SetIsCreateUserOpen(false)}>
@@ -709,7 +750,7 @@ function UserManagementPanel(Properties: {
                 ToggleAccessPlugin={Properties.ToggleAccessPlugin}
               />
             </div>
-            <button className="mt-6 rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-500" onClick={() => void Properties.CreateUser()}>
+            <button className="mt-6 w-full rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void Properties.CreateUser()}>
               Create user
             </button>
           </div>
@@ -737,20 +778,20 @@ function AccessEditor(Properties: {
           const IsEnabled = Boolean(Properties.AccessDraft[Guild.GuildId]);
 
           return (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4" key={Guild.GuildId}>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3 sm:p-4" key={Guild.GuildId}>
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 font-black text-white">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 font-black text-white">
                     {Guild.Icon ? <img alt="" className="h-11 w-11 rounded-2xl" src={Guild.Icon} /> : Guild.Name.slice(0, 1).toUpperCase()}
                   </div>
-                  <div>
-                    <p className="font-bold text-white">{Guild.Name}</p>
-                    <p className="text-xs text-slate-400">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-white">{Guild.Name}</p>
+                    <p className="break-all text-xs text-slate-400">
                       {Guild.MemberCount ?? "?"} members | {Guild.GuildId}
                     </p>
                   </div>
                 </div>
-                <label className="flex items-center gap-3 text-sm font-bold text-slate-200">
+                <label className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm font-bold text-slate-200 md:w-auto md:border-0 md:bg-transparent md:px-0 md:py-0">
                   Enabled
                   <input checked={IsEnabled} className="h-5 w-5 accent-blue-600" onChange={() => Properties.ToggleAccessGuild(Properties.AccessDraft, Properties.SetAccessDraft, Guild.GuildId)} type="checkbox" />
                 </label>
@@ -785,15 +826,15 @@ function GuildBanlistPanel(Properties: {
   SetManualGuildId: (Value: string) => void;
 }) {
   return (
-    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-black/20">
+    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-3xl font-black text-white">Guild Banlist</h2>
+          <h2 className="text-2xl font-black text-white sm:text-3xl">Guild Banlist</h2>
           <p className="mt-1 text-sm text-slate-400">By default, a server is allowed. Banned means the bot leaves and rejects this server.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:flex">
           <input
-            className="w-56 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500 sm:w-56"
             onChange={(Event) => Properties.SetManualGuildId(Event.target.value)}
             placeholder="Manual guild ID"
             value={Properties.ManualGuildId}
@@ -808,19 +849,19 @@ function GuildBanlistPanel(Properties: {
         {Properties.Guilds.length === 0 ? <p className="py-4 text-sm text-slate-400">No known server.</p> : null}
         {Properties.Guilds.map((Guild) => (
           <div key={Guild.GuildId} className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 font-black text-white">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 font-black text-white">
                 {Guild.Icon ? <img alt="" className="h-11 w-11 rounded-2xl" src={Guild.Icon} /> : Guild.Name.slice(0, 1).toUpperCase()}
               </div>
-              <div>
-                <p className="font-semibold text-white">{Guild.Name}</p>
-                <p className="text-sm text-slate-400">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-white">{Guild.Name}</p>
+                <p className="break-all text-sm text-slate-400">
                   {Guild.GuildId} | {Guild.IsBotPresent ? "Present" : "Absent"} | {Guild.IsBanned ? "Banned" : "Allowed"}
                 </p>
               </div>
             </div>
             <button
-              className={`rounded-2xl px-4 py-2 font-semibold text-white ${Guild.IsBanned ? "bg-emerald-600" : "bg-red-600"}`}
+              className={`rounded-2xl px-4 py-2 font-semibold text-white md:w-auto ${Guild.IsBanned ? "bg-emerald-600" : "bg-red-600"}`}
               onClick={() => void Properties.SetGuildBanned(Guild.GuildId, !Guild.IsBanned)}
             >
               {Guild.IsBanned ? "Unban" : "Ban"}
@@ -834,9 +875,9 @@ function GuildBanlistPanel(Properties: {
 
 function MetricCard(Properties: { Label: string; Value: string }) {
   return (
-    <div className="rounded-[1.5rem] border border-slate-800 bg-slate-900 p-6">
+    <div className="rounded-[1.5rem] border border-slate-800 bg-slate-900 p-5 sm:p-6">
       <p className="text-sm uppercase tracking-[0.25em] text-slate-500">{Properties.Label}</p>
-      <p className="mt-3 text-3xl font-black text-white">{Properties.Value}</p>
+      <p className="mt-3 text-2xl font-black text-white sm:text-3xl">{Properties.Value}</p>
     </div>
   );
 }
