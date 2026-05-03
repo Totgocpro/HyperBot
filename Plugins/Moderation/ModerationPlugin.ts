@@ -1,0 +1,632 @@
+import {
+  ChannelType,
+  EmbedBuilder,
+  PermissionFlagsBits,
+  type ChatInputCommandInteraction,
+  type ForumChannel,
+  type GuildBasedChannel,
+  type GuildMember,
+  type Message,
+  type PartialGuildMember,
+  type PartialMessage,
+  type NewsChannel,
+  type TextChannel,
+  type VoiceChannel,
+  type User
+} from "discord.js";
+import { BasePlugin } from "../../src/Core/BasePlugin.js";
+
+type ModerationSanctionType = "Warn" | "Timeout" | "Ban" | "Kick";
+
+type ModerationSanction = {
+  Type: ModerationSanctionType;
+  UserId: string;
+  UserTag: string;
+  ModeratorId: string;
+  ModeratorTag: string;
+  Reason: string;
+  CreatedAt: string;
+};
+
+type ModerationConfig = {
+  LogChannelId: string;
+  WarnMessage: string;
+  LogMessage: string;
+  DeletedMessageLog: string;
+  EditedMessageLog: string;
+  MemberJoinLog: string;
+  MemberLeaveLog: string;
+  AutoModEnabled: boolean;
+  AutoModRegexPatterns: string[];
+  AutoModAction: "Delete" | "Warn" | "DeleteAndWarn";
+  AutoModReason: string;
+  AutoModLogMessage: string;
+  RepeatedSpamEnabled: boolean;
+  RepeatedSpamWindowSeconds: number;
+  RepeatedSpamThreshold: number;
+  RepeatedSpamAction: "Delete" | "Warn" | "DeleteAndWarn";
+  InviteBlockEnabled: boolean;
+  AllowedInviteCodes: string[];
+  InviteBlockAction: "Delete" | "Warn" | "DeleteAndWarn";
+  InviteBlockReason: string;
+  InviteBlockLogMessage: string;
+};
+
+const DefaultModerationConfig: ModerationConfig = {
+  LogChannelId: "",
+  WarnMessage: "%user% has been warned by %moderator%: %reason%",
+  LogMessage: "%type% applied to %user% by %moderator%: %reason%",
+  DeletedMessageLog: "Message deleted in %channel% from %user%: %content%",
+  EditedMessageLog: "Message edited in %channel% from %user%: before `%old%` after `%new%`",
+  MemberJoinLog: "%user% joined the server.",
+  MemberLeaveLog: "%user% left the server.",
+  AutoModEnabled: false,
+  AutoModRegexPatterns: [],
+  AutoModAction: "DeleteAndWarn",
+  AutoModReason: "Message matched AutoMod rule: %pattern%",
+  AutoModLogMessage: "AutoMod matched %user% in %channel% with `%pattern%`: %content%",
+  RepeatedSpamEnabled: false,
+  RepeatedSpamWindowSeconds: 10,
+  RepeatedSpamThreshold: 3,
+  RepeatedSpamAction: "DeleteAndWarn",
+  InviteBlockEnabled: false,
+  AllowedInviteCodes: [],
+  InviteBlockAction: "DeleteAndWarn",
+  InviteBlockReason: "Invite links to other servers are not allowed: %invite%",
+  InviteBlockLogMessage: "Blocked invite from %user% in %channel%: %invite%"
+};
+
+export default class ModerationPlugin extends BasePlugin {
+  private readonly MessageCache = new Map<string, { AuthorTag: string; ChannelName: string; Content: string }>();
+  private readonly MessageCacheLimit = 5000;
+  private readonly RepeatedMessageCache = new Map<string, Array<{ Content: string; CreatedAt: number }>>();
+
+  public async OnEnable(): Promise<void> {
+    this.Logger.Info("Moderation plugin enabled.");
+  }
+
+  public async OnDisable(): Promise<void> {
+    this.Logger.Info("Moderation plugin disabled.");
+  }
+
+  public async OnSlashCommand(CommandName: string, Interaction: ChatInputCommandInteraction): Promise<void> {
+    if (!Interaction.guildId || !Interaction.inCachedGuild()) {
+      await Interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+      return;
+    }
+
+    if (CommandName === "warn") {
+      await this.HandleWarn(Interaction);
+      return;
+    }
+
+    if (CommandName === "lookup") {
+      await this.HandleLookup(Interaction);
+    }
+  }
+
+  public async OnMessage(MessageValue: Message): Promise<void> {
+    if (!MessageValue.guildId || MessageValue.author.bot) {
+      return;
+    }
+
+    this.RememberMessage(MessageValue);
+    await this.RunAutoMod(MessageValue);
+  }
+
+  public async OnMessageDelete(MessageValue: Message | PartialMessage): Promise<void> {
+    if (!MessageValue.guildId || MessageValue.author?.bot) {
+      return;
+    }
+
+    const Config = await this.GetConfig(MessageValue.guildId);
+
+    if (!Config.DeletedMessageLog.trim()) {
+      return;
+    }
+
+    const CachedMessage = this.MessageCache.get(MessageValue.id);
+    const Content = MessageValue.content?.slice(0, 900) || CachedMessage?.Content || "[No cached content]";
+    const UserTag = MessageValue.author?.tag ?? CachedMessage?.AuthorTag ?? "Unknown user";
+    const ChannelName = this.GetChannelName(MessageValue) ?? CachedMessage?.ChannelName ?? "Unknown channel";
+
+    this.MessageCache.delete(MessageValue.id);
+
+    await this.SendLogMessage(MessageValue.guildId, Config, {
+      Title: "Message deleted",
+      Description: this.ApplyTemplate(Config.DeletedMessageLog, {
+        User: UserTag,
+        Moderator: "System",
+        Reason: "Message deleted",
+        Type: "MessageDelete",
+        Channel: ChannelName,
+        Content,
+        Old: "",
+        New: ""
+      }),
+      Color: 0xef4444
+    });
+  }
+
+  public async OnMessageUpdate(OldMessage: Message | PartialMessage, NewMessage: Message | PartialMessage): Promise<void> {
+    if (!NewMessage.guildId || NewMessage.author?.bot) {
+      return;
+    }
+
+    const OldContent = OldMessage.content?.slice(0, 900) ?? "";
+    const NewContent = NewMessage.content?.slice(0, 900) ?? "";
+
+    if (!OldContent && !NewContent) {
+      return;
+    }
+
+    if (OldContent && OldContent === NewContent) {
+      return;
+    }
+
+    if (!NewMessage.partial && NewMessage.content) {
+      this.RememberMessage(NewMessage as Message);
+    }
+
+    const Config = await this.GetConfig(NewMessage.guildId);
+
+    if (!Config.EditedMessageLog.trim()) {
+      return;
+    }
+
+    const UserTag = NewMessage.author?.tag ?? "Unknown user";
+    const ChannelName = this.GetChannelName(NewMessage) ?? "Unknown channel";
+
+    await this.SendLogMessage(NewMessage.guildId, Config, {
+      Title: "Message edited",
+      Description: this.ApplyTemplate(Config.EditedMessageLog, {
+        User: UserTag,
+        Moderator: "System",
+        Reason: "Message edited",
+        Type: "MessageEdit",
+        Channel: ChannelName,
+        Content: NewContent,
+        Old: OldContent || "[No cached old content]",
+        New: NewContent || "[No cached new content]"
+      }),
+      Color: 0xf59e0b
+    });
+  }
+
+  public async OnGuildMemberAdd(Member: GuildMember): Promise<void> {
+    const Config = await this.GetConfig(Member.guild.id);
+
+    if (!Config.MemberJoinLog.trim()) {
+      return;
+    }
+
+    await this.SendLogMessage(Member.guild.id, Config, {
+      Title: "Member joined",
+      Description: this.ApplyTemplate(Config.MemberJoinLog, {
+        User: Member.user.tag,
+        Moderator: "System",
+        Reason: "Member joined",
+        Type: "MemberJoin",
+        Channel: "",
+        Content: "",
+        Old: "",
+        New: ""
+      }),
+      Color: 0x22c55e
+    });
+  }
+
+  public async OnGuildMemberRemove(Member: GuildMember | PartialGuildMember): Promise<void> {
+    const Config = await this.GetConfig(Member.guild.id);
+
+    if (!Config.MemberLeaveLog.trim()) {
+      return;
+    }
+
+    await this.SendLogMessage(Member.guild.id, Config, {
+      Title: "Member left",
+      Description: this.ApplyTemplate(Config.MemberLeaveLog, {
+        User: Member.user.tag,
+        Moderator: "System",
+        Reason: "Member left",
+        Type: "MemberLeave",
+        Channel: "",
+        Content: "",
+        Old: "",
+        New: ""
+      }),
+      Color: 0x64748b
+    });
+  }
+
+  private async HandleWarn(Interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
+    if (!Interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
+      await Interaction.reply({ content: "You need Moderate Members permission to warn users.", ephemeral: true });
+      return;
+    }
+
+    const TargetUser = Interaction.options.getUser("user", true);
+    const Reason = Interaction.options.getString("reason", true);
+    const Config = await this.GetConfig(Interaction.guildId);
+
+    if (!Config.LogChannelId) {
+      await Interaction.reply({ content: "Moderation log channel is not configured.", ephemeral: true });
+      return;
+    }
+
+    const Sanction: ModerationSanction = {
+      Type: "Warn",
+      UserId: TargetUser.id,
+      UserTag: TargetUser.tag,
+      ModeratorId: Interaction.user.id,
+      ModeratorTag: Interaction.user.tag,
+      Reason,
+      CreatedAt: new Date().toISOString()
+    };
+
+    await this.AppendSanction(Interaction.guildId, TargetUser.id, Sanction);
+
+    const ReplyMessage = this.ApplyTemplate(Config.WarnMessage, {
+      User: TargetUser.tag,
+      Moderator: Interaction.user.tag,
+      Reason,
+      Type: Sanction.Type,
+      Channel: "",
+      Content: "",
+      Old: "",
+      New: ""
+    });
+
+    await Interaction.reply({ content: ReplyMessage, ephemeral: false });
+
+    if (Config.LogMessage.trim()) {
+      await this.SendSanctionLog(Interaction.guildId, Config, Sanction, TargetUser, Interaction.user);
+    }
+  }
+
+  private async HandleLookup(Interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
+    if (!Interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
+      await Interaction.reply({ content: "You need Moderate Members permission to lookup sanctions.", ephemeral: true });
+      return;
+    }
+
+    const TargetUser = Interaction.options.getUser("user", true);
+    const Sanctions = await this.GetSanctions(Interaction.guildId, TargetUser.id);
+    const Embed = new EmbedBuilder()
+      .setTitle(`Moderation lookup: ${TargetUser.tag}`)
+      .setColor(0x2563eb)
+      .setThumbnail(TargetUser.displayAvatarURL())
+      .setDescription(Sanctions.length === 0 ? "No sanction found." : `Found ${Sanctions.length} sanction(s).`);
+
+    for (const Sanction of Sanctions.slice(-20).reverse()) {
+      Embed.addFields({
+        name: `${Sanction.Type} | ${new Date(Sanction.CreatedAt).toLocaleString("en-US")}`,
+        value: `Moderator: ${Sanction.ModeratorTag} (${Sanction.ModeratorId})\nReason: ${Sanction.Reason}`,
+        inline: false
+      });
+    }
+
+    await Interaction.reply({ embeds: [Embed], ephemeral: true });
+  }
+
+  private async SendSanctionLog(GuildId: string, Config: ModerationConfig, Sanction: ModerationSanction, TargetUser: User, Moderator: User): Promise<void> {
+    await this.SendLogMessage(GuildId, Config, {
+      Title: `${Sanction.Type} applied`,
+      Description: this.ApplyTemplate(Config.LogMessage, {
+        User: TargetUser.tag,
+        Moderator: Moderator.tag,
+        Reason: Sanction.Reason,
+        Type: Sanction.Type,
+        Channel: "",
+        Content: "",
+        Old: "",
+        New: ""
+      }),
+      Color: 0x22c55e
+    });
+  }
+
+  private async RunAutoMod(MessageValue: Message): Promise<void> {
+    const GuildId = MessageValue.guildId;
+
+    if (!GuildId || !MessageValue.content) {
+      return;
+    }
+
+    const Config = await this.GetConfig(GuildId);
+
+    const InviteCode = this.FindBlockedInviteCode(MessageValue.content, Config);
+
+    if (Config.InviteBlockEnabled && InviteCode) {
+      await this.ApplyAutomodAction(MessageValue, Config, {
+        Action: Config.InviteBlockAction,
+        Title: "Invite blocked",
+        ReasonTemplate: Config.InviteBlockReason,
+        LogTemplate: Config.InviteBlockLogMessage,
+        Pattern: "",
+        Invite: InviteCode,
+        Color: 0xf97316
+      });
+      return;
+    }
+
+    if (Config.RepeatedSpamEnabled && this.IsRepeatedSpam(MessageValue, Config)) {
+      await this.ApplyAutomodAction(MessageValue, Config, {
+        Action: Config.RepeatedSpamAction,
+        Title: "Repeated spam detected",
+        ReasonTemplate: `Repeated message spam (${Config.RepeatedSpamThreshold} messages in ${Config.RepeatedSpamWindowSeconds}s).`,
+        LogTemplate: "Repeated spam from %user% in %channel%: %content%",
+        Pattern: "",
+        Invite: "",
+        Color: 0xeab308
+      });
+      return;
+    }
+
+    if (!Config.AutoModEnabled) {
+      return;
+    }
+
+    const MatchedPattern = this.FindMatchedPattern(MessageValue.content, Config.AutoModRegexPatterns);
+
+    if (!MatchedPattern) {
+      return;
+    }
+
+    await this.ApplyAutomodAction(MessageValue, Config, {
+      Action: Config.AutoModAction,
+      Title: "AutoMod match",
+      ReasonTemplate: Config.AutoModReason,
+      LogTemplate: Config.AutoModLogMessage,
+      Pattern: MatchedPattern,
+      Invite: "",
+      Color: 0xdc2626
+    });
+  }
+
+  private async ApplyAutomodAction(
+    MessageValue: Message,
+    Config: ModerationConfig,
+    Options: {
+      Action: "Delete" | "Warn" | "DeleteAndWarn";
+      Title: string;
+      ReasonTemplate: string;
+      LogTemplate: string;
+      Pattern: string;
+      Invite: string;
+      Color: number;
+    }
+  ): Promise<void> {
+    const GuildId = MessageValue.guildId;
+
+    if (!GuildId) {
+      return;
+    }
+
+    const ChannelName = this.GetChannelName(MessageValue) ?? "Unknown channel";
+    const Reason = this.ApplyTemplate(Options.ReasonTemplate, {
+      User: MessageValue.author.tag,
+      Moderator: "AutoMod",
+      Reason: "AutoMod regex match",
+      Type: "AutoMod",
+      Channel: ChannelName,
+      Content: MessageValue.content.slice(0, 900),
+      Old: "",
+      New: "",
+      Pattern: Options.Pattern,
+      Invite: Options.Invite
+    });
+    const ShouldDelete = Options.Action === "Delete" || Options.Action === "DeleteAndWarn";
+    const ShouldWarn = Options.Action === "Warn" || Options.Action === "DeleteAndWarn";
+
+    if (ShouldDelete) {
+      if (!MessageValue.deletable) {
+        this.Logger.Warn("AutoMod matched a message but cannot delete it. Check bot permissions and role hierarchy.", {
+          GuildId,
+          ChannelId: MessageValue.channelId,
+          MessageId: MessageValue.id
+        });
+      }
+
+      await MessageValue.delete().catch((ErrorValue: unknown) => {
+        this.Logger.Warn("AutoMod could not delete a matching message.", ErrorValue);
+      });
+    }
+
+    if (ShouldWarn) {
+      await this.AppendSanction(GuildId, MessageValue.author.id, {
+        Type: "Warn",
+        UserId: MessageValue.author.id,
+        UserTag: MessageValue.author.tag,
+        ModeratorId: this.DiscordClient.user?.id ?? "AutoMod",
+        ModeratorTag: this.DiscordClient.user?.tag ?? "AutoMod",
+        Reason,
+        CreatedAt: new Date().toISOString()
+      });
+    }
+
+    if (!Options.LogTemplate.trim()) {
+      return;
+    }
+
+    await this.SendLogMessage(GuildId, Config, {
+      Title: Options.Title,
+      Description: this.ApplyTemplate(Options.LogTemplate, {
+        User: MessageValue.author.tag,
+        Moderator: "AutoMod",
+        Reason,
+        Type: Options.Action,
+        Channel: ChannelName,
+        Content: MessageValue.content.slice(0, 900),
+        Old: "",
+        New: "",
+        Pattern: Options.Pattern,
+        Invite: Options.Invite
+      }),
+      Color: Options.Color
+    });
+  }
+
+  private FindMatchedPattern(Content: string, Patterns: string[]): string | null {
+    for (const Pattern of Patterns.map((Value) => Value.trim()).filter(Boolean)) {
+      try {
+        if (new RegExp(Pattern, "iu").test(Content)) {
+          return Pattern;
+        }
+      } catch (ErrorValue) {
+        this.Logger.Warn("Invalid AutoMod regex ignored.", { Pattern, ErrorValue });
+      }
+    }
+
+    return null;
+  }
+
+  private IsRepeatedSpam(MessageValue: Message, Config: ModerationConfig): boolean {
+    const CacheKey = `${MessageValue.guildId}:${MessageValue.author.id}`;
+    const Now = Date.now();
+    const WindowMilliseconds = Math.max(1, Config.RepeatedSpamWindowSeconds) * 1000;
+    const NormalizedContent = MessageValue.content.trim().toLowerCase();
+    const PreviousMessages = (this.RepeatedMessageCache.get(CacheKey) ?? []).filter((Entry) => Now - Entry.CreatedAt <= WindowMilliseconds);
+    const NextMessages = [...PreviousMessages, { Content: NormalizedContent, CreatedAt: Now }];
+
+    this.RepeatedMessageCache.set(CacheKey, NextMessages);
+
+    return NextMessages.filter((Entry) => Entry.Content === NormalizedContent).length >= Math.max(2, Config.RepeatedSpamThreshold);
+  }
+
+  private FindBlockedInviteCode(Content: string, Config: ModerationConfig): string | null {
+    const InviteMatches = Content.matchAll(/(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-zA-Z0-9-]+)/giu);
+    const AllowedInviteCodes = new Set(Config.AllowedInviteCodes.map((InviteCode) => InviteCode.trim().toLowerCase()).filter(Boolean));
+
+    for (const InviteMatch of InviteMatches) {
+      const InviteCode = InviteMatch[1]?.toLowerCase();
+
+      if (InviteCode && !AllowedInviteCodes.has(InviteCode)) {
+        return InviteCode;
+      }
+    }
+
+    return null;
+  }
+
+  private async SendLogMessage(GuildId: string, Config: ModerationConfig, MessageOptions: { Title: string; Description: string; Color: number }): Promise<void> {
+    const Channel = await this.ResolveWritableLogChannel(GuildId, Config.LogChannelId);
+
+    if (!Channel) {
+      this.Logger.Warn("Moderation log channel is missing or not writable.", { GuildId, ChannelId: Config.LogChannelId });
+      return;
+    }
+
+    const Embed = new EmbedBuilder()
+      .setTitle(MessageOptions.Title)
+      .setDescription(MessageOptions.Description)
+      .setColor(MessageOptions.Color)
+      .setTimestamp(new Date());
+
+    if (Channel.type === ChannelType.GuildForum) {
+      await Channel.threads.create({
+        name: MessageOptions.Title.slice(0, 90),
+        message: { embeds: [Embed] }
+      });
+      return;
+    }
+
+    await Channel.send({ embeds: [Embed] });
+  }
+
+  private async ResolveWritableLogChannel(GuildId: string, ChannelId: string): Promise<TextChannel | NewsChannel | VoiceChannel | ForumChannel | null> {
+    if (!ChannelId) {
+      return null;
+    }
+
+    const Guild = await this.DiscordClient.guilds.fetch(GuildId).catch(() => null);
+    const Channel = (await Guild?.channels.fetch(ChannelId).catch(() => null)) as GuildBasedChannel | null;
+
+    if (!Channel) {
+      return null;
+    }
+
+    if (Channel.type === ChannelType.GuildText || Channel.type === ChannelType.GuildAnnouncement || Channel.type === ChannelType.GuildVoice) {
+      return Channel as TextChannel | NewsChannel | VoiceChannel;
+    }
+
+    if (Channel.type === ChannelType.GuildForum) {
+      return Channel as ForumChannel;
+    }
+
+    return null;
+  }
+
+  private async AppendSanction(GuildId: string, UserId: string, Sanction: ModerationSanction): Promise<void> {
+    const Sanctions = await this.GetSanctions(GuildId, UserId);
+    Sanctions.push(Sanction);
+    await this.Storage.SetUserValue(GuildId, UserId, "Sanctions", Sanctions);
+  }
+
+  private async GetSanctions(GuildId: string, UserId: string): Promise<ModerationSanction[]> {
+    return (await this.Storage.GetUserValue<ModerationSanction[]>(GuildId, UserId, "Sanctions")) ?? [];
+  }
+
+  private async GetConfig(GuildId: string): Promise<ModerationConfig> {
+    return {
+      LogChannelId: (await this.Storage.GetGlobalConfig<string>(GuildId, "LogChannelId")) ?? DefaultModerationConfig.LogChannelId,
+      WarnMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "WarnMessage")) ?? DefaultModerationConfig.WarnMessage,
+      LogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "LogMessage")) ?? DefaultModerationConfig.LogMessage,
+      DeletedMessageLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "DeletedMessageLog")) ?? DefaultModerationConfig.DeletedMessageLog,
+      EditedMessageLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "EditedMessageLog")) ?? DefaultModerationConfig.EditedMessageLog,
+      MemberJoinLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "MemberJoinLog")) ?? DefaultModerationConfig.MemberJoinLog,
+      MemberLeaveLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "MemberLeaveLog")) ?? DefaultModerationConfig.MemberLeaveLog,
+      AutoModEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "AutoModEnabled")) ?? DefaultModerationConfig.AutoModEnabled,
+      AutoModRegexPatterns: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "AutoModRegexPatterns")) ?? DefaultModerationConfig.AutoModRegexPatterns,
+      AutoModAction: (await this.Storage.GetGlobalConfig<ModerationConfig["AutoModAction"]>(GuildId, "AutoModAction")) ?? DefaultModerationConfig.AutoModAction,
+      AutoModReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "AutoModReason")) ?? DefaultModerationConfig.AutoModReason,
+      AutoModLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "AutoModLogMessage")) ?? DefaultModerationConfig.AutoModLogMessage,
+      RepeatedSpamEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "RepeatedSpamEnabled")) ?? DefaultModerationConfig.RepeatedSpamEnabled,
+      RepeatedSpamWindowSeconds: (await this.Storage.GetGlobalConfig<number>(GuildId, "RepeatedSpamWindowSeconds")) ?? DefaultModerationConfig.RepeatedSpamWindowSeconds,
+      RepeatedSpamThreshold: (await this.Storage.GetGlobalConfig<number>(GuildId, "RepeatedSpamThreshold")) ?? DefaultModerationConfig.RepeatedSpamThreshold,
+      RepeatedSpamAction: (await this.Storage.GetGlobalConfig<ModerationConfig["RepeatedSpamAction"]>(GuildId, "RepeatedSpamAction")) ?? DefaultModerationConfig.RepeatedSpamAction,
+      InviteBlockEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "InviteBlockEnabled")) ?? DefaultModerationConfig.InviteBlockEnabled,
+      AllowedInviteCodes: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "AllowedInviteCodes")) ?? DefaultModerationConfig.AllowedInviteCodes,
+      InviteBlockAction: (await this.Storage.GetGlobalConfig<ModerationConfig["InviteBlockAction"]>(GuildId, "InviteBlockAction")) ?? DefaultModerationConfig.InviteBlockAction,
+      InviteBlockReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockReason")) ?? DefaultModerationConfig.InviteBlockReason,
+      InviteBlockLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockLogMessage")) ?? DefaultModerationConfig.InviteBlockLogMessage
+    };
+  }
+
+  private RememberMessage(MessageValue: Message): void {
+    this.MessageCache.set(MessageValue.id, {
+      AuthorTag: MessageValue.author.tag,
+      ChannelName: this.GetChannelName(MessageValue) ?? "Unknown channel",
+      Content: MessageValue.content?.slice(0, 900) || "[No content]"
+    });
+
+    if (this.MessageCache.size <= this.MessageCacheLimit) {
+      return;
+    }
+
+    const FirstKey = this.MessageCache.keys().next().value as string | undefined;
+
+    if (FirstKey) {
+      this.MessageCache.delete(FirstKey);
+    }
+  }
+
+  private GetChannelName(MessageValue: Message | PartialMessage): string | null {
+    return "name" in MessageValue.channel && MessageValue.channel?.name ? `#${MessageValue.channel.name}` : null;
+  }
+
+  private ApplyTemplate(Template: string, Values: { User: string; Moderator: string; Reason: string; Type: string; Channel: string; Content: string; Old: string; New: string; Pattern?: string; Invite?: string }): string {
+    return Template
+      .replaceAll("%user%", Values.User)
+      .replaceAll("%moderator%", Values.Moderator)
+      .replaceAll("%reason%", Values.Reason)
+      .replaceAll("%type%", Values.Type)
+      .replaceAll("%channel%", Values.Channel)
+      .replaceAll("%content%", Values.Content)
+      .replaceAll("%old%", Values.Old)
+      .replaceAll("%new%", Values.New)
+      .replaceAll("%pattern%", Values.Pattern ?? "")
+      .replaceAll("%invite%", Values.Invite ?? "")
+      .slice(0, 4000);
+  }
+}

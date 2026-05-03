@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
 import { PluginStorage } from "@/src/Core/Storage";
-import { PluginScope, type DiscordGuildSummary } from "@/src/Core/Types";
+import { SettingsFieldType, PluginScope, type BotChannelSummary, type DiscordGuildSummary, type SettingsField } from "@/src/Core/Types";
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
@@ -44,7 +44,7 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
           const StoredValue = await Storage.GetGlobalConfig(GuildId, Field.Key);
 
           return {
-            ...Field,
+            ...(await HydrateSettingsField(GuildId, Field)),
             Value: StoredValue ?? Field.Default
           };
         })
@@ -81,6 +81,19 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
     return new Response("Insufficient guild plugin permissions.", { status: 403 });
   }
 
+  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
+  const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
+
+  if (!ManifestEntry) {
+    return new Response("Plugin not found.", { status: 404 });
+  }
+
+  for (const Field of ManifestEntry.Manifest.WebInterface) {
+    if (Field.Required && !Body.Values[Field.Key]) {
+      return new Response(`${Field.Label} is required.`, { status: 400 });
+    }
+  }
+
   const Storage = new PluginStorage(Prisma, RedisClient, Body.PluginId);
 
   for (const [Key, Value] of Object.entries(Body.Values)) {
@@ -88,6 +101,38 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
   }
 
   return NextResponse.json({ GuildId, PluginId: Body.PluginId, Saved: true });
+}
+
+async function HydrateSettingsField(GuildId: string, Field: SettingsField): Promise<SettingsField> {
+  if (Field.Type !== SettingsFieldType.ChannelPicker && !(Field.Type === SettingsFieldType.List && Field.ItemType === "ChannelPicker")) {
+    return Field;
+  }
+
+  const RawChannels = await RedisClient.get(`Bot:Guild:${GuildId}:Channels`);
+  const Channels = RawChannels ? (JSON.parse(RawChannels) as BotChannelSummary[]) : [];
+  const SupportedChannelTypes = new Set(Field.SupportedChannelTypes ?? []);
+  const Options = Channels.map((Channel) => {
+    const TypeAllowed = SupportedChannelTypes.size === 0 || SupportedChannelTypes.has(Channel.Type);
+    const WritableAllowed = !Field.RequireWritable || Channel.IsWritable;
+    const Disabled = !TypeAllowed || !WritableAllowed;
+    const Description = Disabled
+      ? !TypeAllowed
+        ? `Unsupported channel type: ${Channel.Type}`
+        : "The bot cannot write in this channel."
+      : Channel.Type;
+
+    return {
+      Label: `#${Channel.Name} (${Channel.Type})`,
+      Value: Channel.Id,
+      Disabled,
+      Description
+    };
+  });
+
+  return {
+    ...Field,
+    Options
+  };
 }
 
 function BuildGuildSummaryFromHeaders(Request: Request, GuildId: string): DiscordGuildSummary {

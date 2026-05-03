@@ -6,7 +6,8 @@ export enum SettingsFieldType {
   Boolean = "Boolean",
   Number = "Number",
   Select = "Select",
-  ChannelPicker = "ChannelPicker"
+  ChannelPicker = "ChannelPicker",
+  List = "List"
 }
 
 export enum AccessLevel {
@@ -49,10 +50,17 @@ export type SettingsField = {
   Key: string;
   Type: SettingsFieldType;
   Label: string;
-  Default: string | number | boolean | null;
+  Default: string | number | boolean | unknown[] | null;
+  Required?: boolean;
+  ItemType?: "String" | "Number" | "ChannelPicker";
+  ValidateAs?: "Regex";
+  SupportedChannelTypes?: string[];
+  RequireWritable?: boolean;
   Options?: Array<{
     Label: string;
     Value: string | number | boolean;
+    Disabled?: boolean;
+    Description?: string;
   }>;
 };
 
@@ -118,4 +126,11 @@ export type BotGuildSummary = {
   Name: string;
   Icon: string | null;
   MemberCount: number | null;
+};
+
+export type BotChannelSummary = {
+  Id: string;
+  Name: string;
+  Type: string;
+  IsWritable: boolean;
 };

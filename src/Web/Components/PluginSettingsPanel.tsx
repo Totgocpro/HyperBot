@@ -67,6 +67,13 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }
 
   async function SavePlugin(Plugin: DashboardPlugin): Promise<void> {
+    const MissingRequiredField = Plugin.WebInterface.find((Field) => Field.Required && !DraftValues[Plugin.Metadata.Id]?.[Field.Key]);
+
+    if (MissingRequiredField) {
+      SetStatus(`${MissingRequiredField.Label} is required.`);
+      return;
+    }
+
     const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
       method: "PUT",
       headers: {
@@ -234,15 +241,27 @@ function RenderField(
     return (
       <label className="block text-sm font-bold text-slate-200">
         {Field.Label}
-        <select className={BaseClassName} onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.value)} value={String(Value ?? "")}>
-          <option value="">Select</option>
+        <select className={BaseClassName} required={Field.Required} onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.value)} value={String(Value ?? "")}>
+          <option value="">{Field.Required ? "Select a required value" : "Select"}</option>
           {Field.Options?.map((Option) => (
-            <option key={String(Option.Value)} value={String(Option.Value)}>
+            <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
               {Option.Label}
             </option>
           ))}
         </select>
+        {Field.Type === "ChannelPicker" ? <p className="mt-2 text-xs text-slate-500">Only supported writable channels can be selected.</p> : null}
       </label>
+    );
+  }
+
+  if (Field.Type === "List") {
+    return (
+      <ListField
+        Field={Field}
+        PluginId={PluginId}
+        UpdateDraftValue={UpdateDraftValue}
+        Value={Array.isArray(Value) ? Value : []}
+      />
     );
   }
 
@@ -257,4 +276,104 @@ function RenderField(
       />
     </label>
   );
+}
+
+function ListField(Properties: {
+  Field: SettingsField & { Value: unknown };
+  PluginId: string;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+  Value: unknown[];
+}) {
+  const BaseClassName = "w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
+
+  function UpdateItem(Index: number, Value: unknown): void {
+    const NextValue = [...Properties.Value];
+    NextValue[Index] = Value;
+    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, NextValue);
+  }
+
+  function AddItem(): void {
+    const EmptyValue = Properties.Field.ItemType === "Number" ? 0 : "";
+    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, [...Properties.Value, EmptyValue]);
+  }
+
+  function RemoveItem(Index: number): void {
+    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, Properties.Value.filter((_, ItemIndex) => ItemIndex !== Index));
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
+          <p className="mt-1 text-xs text-slate-500">Add one value per row.</p>
+        </div>
+        <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddItem} type="button">
+          Add
+        </button>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {Properties.Value.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-3 text-sm text-slate-500">No value configured.</p> : null}
+        {Properties.Value.map((ItemValue, Index) => (
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]" key={Index}>
+            {Properties.Field.ItemType === "ChannelPicker" ? (
+              <select className={BaseClassName} onChange={(Event) => UpdateItem(Index, Event.target.value)} value={String(ItemValue ?? "")}>
+                <option value="">Select</option>
+                {Properties.Field.Options?.map((Option) => (
+                  <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
+                    {Option.Label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <ValidatedListInput
+                BaseClassName={BaseClassName}
+                Field={Properties.Field}
+                ItemValue={ItemValue}
+                OnChange={(Value) => UpdateItem(Index, Value)}
+              />
+            )}
+            <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveItem(Index)} type="button">
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ValidatedListInput(Properties: {
+  BaseClassName: string;
+  Field: SettingsField & { Value: unknown };
+  ItemValue: unknown;
+  OnChange: (Value: unknown) => void;
+}) {
+  const StringValue = String(Properties.ItemValue ?? "");
+  const RegexError = Properties.Field.ValidateAs === "Regex" ? GetRegexError(StringValue) : null;
+
+  return (
+    <div>
+      <input
+        className={`${Properties.BaseClassName} ${RegexError ? "border-red-500 text-red-100 focus:border-red-400" : ""}`}
+        onChange={(Event) => Properties.OnChange(Properties.Field.ItemType === "Number" ? Number(Event.target.value) : Event.target.value)}
+        type={Properties.Field.ItemType === "Number" ? "number" : "text"}
+        value={StringValue}
+      />
+      {RegexError ? <p className="mt-1 text-xs font-semibold text-red-300">{RegexError}</p> : null}
+    </div>
+  );
+}
+
+function GetRegexError(Value: string): string | null {
+  if (!Value.trim()) {
+    return null;
+  }
+
+  try {
+    new RegExp(Value, "iu");
+    return null;
+  } catch (ErrorValue) {
+    return ErrorValue instanceof Error ? ErrorValue.message : "Invalid regex";
+  }
 }

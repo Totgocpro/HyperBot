@@ -1,0 +1,219 @@
+{
+  "Metadata": {
+    "Id": "Moderation",
+    "DisplayName": "Moderation",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "Mod"
+  },
+  "Scope": "Guild",
+  "Commands": [
+    {
+      "Name": "warn",
+      "Description": "Warn a user and store the sanction.",
+      "Options": [
+        {
+          "Name": "user",
+          "Description": "User to warn.",
+          "Type": "User",
+          "Required": true
+        },
+        {
+          "Name": "reason",
+          "Description": "Reason for the warning.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "lookup",
+      "Description": "Show all known sanctions for a user.",
+      "Options": [
+        {
+          "Name": "user",
+          "Description": "User to inspect.",
+          "Type": "User",
+          "Required": true
+        }
+      ]
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "LogChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Moderation log channel",
+      "Default": "",
+      "Required": true,
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildForum", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "WarnMessage",
+      "Type": "String",
+      "Label": "Warn confirmation message",
+      "Default": "%user% has been warned by %moderator%: %reason%"
+    },
+    {
+      "Key": "LogMessage",
+      "Type": "String",
+      "Label": "Sanction log message",
+      "Default": "%type% applied to %user% by %moderator%: %reason%"
+    },
+    {
+      "Key": "DeletedMessageLog",
+      "Type": "String",
+      "Label": "Deleted message log",
+      "Default": "Message deleted in %channel% from %user%: %content%"
+    },
+    {
+      "Key": "EditedMessageLog",
+      "Type": "String",
+      "Label": "Edited message log",
+      "Default": "Message edited in %channel% from %user%: before `%old%` after `%new%`"
+    },
+    {
+      "Key": "MemberJoinLog",
+      "Type": "String",
+      "Label": "Member join log",
+      "Default": "%user% joined the server."
+    },
+    {
+      "Key": "MemberLeaveLog",
+      "Type": "String",
+      "Label": "Member leave log",
+      "Default": "%user% left the server."
+    },
+    {
+      "Key": "AutoModEnabled",
+      "Type": "Boolean",
+      "Label": "Enable AutoMod regex rules",
+      "Default": false
+    },
+    {
+      "Key": "AutoModRegexPatterns",
+      "Type": "List",
+      "ItemType": "String",
+      "ValidateAs": "Regex",
+      "Label": "AutoMod regex patterns",
+      "Default": []
+    },
+    {
+      "Key": "AutoModAction",
+      "Type": "Select",
+      "Label": "AutoMod action",
+      "Default": "DeleteAndWarn",
+      "Options": [
+        {
+          "Label": "Delete message",
+          "Value": "Delete"
+        },
+        {
+          "Label": "Warn user",
+          "Value": "Warn"
+        },
+        {
+          "Label": "Delete and warn",
+          "Value": "DeleteAndWarn"
+        }
+      ]
+    },
+    {
+      "Key": "AutoModReason",
+      "Type": "String",
+      "Label": "AutoMod warn reason",
+      "Default": "Message matched AutoMod rule: %pattern%"
+    },
+    {
+      "Key": "AutoModLogMessage",
+      "Type": "String",
+      "Label": "AutoMod log message",
+      "Default": "AutoMod matched %user% in %channel% with `%pattern%`: %content%"
+    },
+    {
+      "Key": "RepeatedSpamEnabled",
+      "Type": "Boolean",
+      "Label": "Detect repeated message spam",
+      "Default": false
+    },
+    {
+      "Key": "RepeatedSpamWindowSeconds",
+      "Type": "Number",
+      "Label": "Repeated spam window seconds",
+      "Default": 10
+    },
+    {
+      "Key": "RepeatedSpamThreshold",
+      "Type": "Number",
+      "Label": "Repeated spam threshold",
+      "Default": 3
+    },
+    {
+      "Key": "RepeatedSpamAction",
+      "Type": "Select",
+      "Label": "Repeated spam action",
+      "Default": "DeleteAndWarn",
+      "Options": [
+        {
+          "Label": "Delete message",
+          "Value": "Delete"
+        },
+        {
+          "Label": "Warn user",
+          "Value": "Warn"
+        },
+        {
+          "Label": "Delete and warn",
+          "Value": "DeleteAndWarn"
+        }
+      ]
+    },
+    {
+      "Key": "InviteBlockEnabled",
+      "Type": "Boolean",
+      "Label": "Block invites to other servers",
+      "Default": false
+    },
+    {
+      "Key": "AllowedInviteCodes",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Allowed invite codes",
+      "Default": []
+    },
+    {
+      "Key": "InviteBlockAction",
+      "Type": "Select",
+      "Label": "Invite block action",
+      "Default": "DeleteAndWarn",
+      "Options": [
+        {
+          "Label": "Delete message",
+          "Value": "Delete"
+        },
+        {
+          "Label": "Warn user",
+          "Value": "Warn"
+        },
+        {
+          "Label": "Delete and warn",
+          "Value": "DeleteAndWarn"
+        }
+      ]
+    },
+    {
+      "Key": "InviteBlockReason",
+      "Type": "String",
+      "Label": "Invite block warn reason",
+      "Default": "Invite links to other servers are not allowed: %invite%"
+    },
+    {
+      "Key": "InviteBlockLogMessage",
+      "Type": "String",
+      "Label": "Invite block log message",
+      "Default": "Blocked invite from %user% in %channel%: %invite%"
+    }
+  ],
+  "EntryPoint": "./ModerationPlugin.ts"
+}

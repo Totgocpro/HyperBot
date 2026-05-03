@@ -3,7 +3,7 @@ import Path from "node:path";
 import Chokidar from "chokidar";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
-import type { ChatInputCommandInteraction, Client, Message } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage } from "discord.js";
 import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
 import { PluginStorage } from "./Storage.js";
@@ -49,6 +49,30 @@ export class PluginLoader {
   public async DispatchMessage(Message: Message): Promise<void> {
     for (const LoadedPluginValue of this.Plugins.values()) {
       await LoadedPluginValue.Instance.OnMessage(Message);
+    }
+  }
+
+  public async DispatchMessageDelete(Message: Message | PartialMessage): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnMessageDelete(Message);
+    }
+  }
+
+  public async DispatchMessageUpdate(OldMessage: Message | PartialMessage, NewMessage: Message | PartialMessage): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnMessageUpdate(OldMessage, NewMessage);
+    }
+  }
+
+  public async DispatchGuildMemberAdd(Member: GuildMember): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnGuildMemberAdd(Member);
+    }
+  }
+
+  public async DispatchGuildMemberRemove(Member: GuildMember | PartialGuildMember): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnGuildMemberRemove(Member);
     }
   }
 

@@ -7,12 +7,19 @@ const SettingsFieldSchema = z.object({
   Key: z.string().min(1),
   Type: z.nativeEnum(SettingsFieldType),
   Label: z.string().min(1),
-  Default: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  Default: z.union([z.string(), z.number(), z.boolean(), z.array(z.unknown()), z.null()]),
+  Required: z.boolean().optional(),
+  ItemType: z.enum(["String", "Number", "ChannelPicker"]).optional(),
+  ValidateAs: z.enum(["Regex"]).optional(),
+  SupportedChannelTypes: z.array(z.string()).optional(),
+  RequireWritable: z.boolean().optional(),
   Options: z
     .array(
       z.object({
         Label: z.string(),
-        Value: z.union([z.string(), z.number(), z.boolean()])
+        Value: z.union([z.string(), z.number(), z.boolean()]),
+        Disabled: z.boolean().optional(),
+        Description: z.string().optional()
       })
     )
     .optional()
