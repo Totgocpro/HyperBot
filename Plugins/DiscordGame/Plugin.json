@@ -1,0 +1,147 @@
+{
+  "Metadata": {
+    "Id": "DiscordGame",
+    "DisplayName": "Discord Game",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "DG"
+  },
+  "Scope": "Guild",
+  "Commands": [
+    {
+      "Name": "minesweeper",
+      "Description": "Start a Discord Minesweeper game.",
+      "Options": [
+        {
+          "Name": "difficulty",
+          "Description": "Choose the number of mines.",
+          "Type": "String",
+          "Required": true,
+          "Choices": [
+            {
+              "Name": "Easy",
+              "Value": "Easy"
+            },
+            {
+              "Name": "Medium",
+              "Value": "Medium"
+            },
+            {
+              "Name": "Hard",
+              "Value": "Hard"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "MinesweeperTitle",
+      "Type": "String",
+      "Label": "Minesweeper title",
+      "Default": "Minesweeper - %difficulty%",
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperDescription",
+      "Type": "String",
+      "Label": "Minesweeper description",
+      "Default": "Reveal every safe tile without clicking a mine. Mines: %mines%",
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperWinMessage",
+      "Type": "String",
+      "Label": "Win message",
+      "Default": "%user% cleared the minefield.",
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperLoseMessage",
+      "Type": "String",
+      "Label": "Lose message",
+      "Default": "%user% clicked a mine.",
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperTimeoutMessage",
+      "Type": "String",
+      "Label": "Timeout message",
+      "Default": "This Minesweeper game timed out after %timeoutMinutes% minutes without input.",
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperUnauthorizedMessage",
+      "Type": "String",
+      "Label": "Unauthorized click message",
+      "Default": "Only %user% can play this Minesweeper game.",
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperOnlyCreator",
+      "Type": "Boolean",
+      "Label": "Only command user can play",
+      "Default": true,
+      "Section": "Minesweeper"
+    },
+    {
+      "Key": "MinesweeperColor",
+      "Type": "String",
+      "Label": "Active embed color",
+      "Default": "#5865f2",
+      "Section": "Minesweeper design"
+    },
+    {
+      "Key": "MinesweeperWinColor",
+      "Type": "String",
+      "Label": "Win embed color",
+      "Default": "#22c55e",
+      "Section": "Minesweeper design"
+    },
+    {
+      "Key": "MinesweeperLoseColor",
+      "Type": "String",
+      "Label": "Lose embed color",
+      "Default": "#ef4444",
+      "Section": "Minesweeper design"
+    },
+    {
+      "Key": "MinesweeperTimeoutColor",
+      "Type": "String",
+      "Label": "Timeout embed color",
+      "Default": "#64748b",
+      "Section": "Minesweeper design"
+    },
+    {
+      "Key": "HiddenTileEmoji",
+      "Type": "String",
+      "Label": "Hidden tile label",
+      "Default": "​",
+      "Section": "Minesweeper emojis"
+    },
+    {
+      "Key": "EmptyTileEmoji",
+      "Type": "String",
+      "Label": "Empty tile label",
+      "Default": "​",
+      "Section": "Minesweeper emojis"
+    },
+    {
+      "Key": "MineEmoji",
+      "Type": "String",
+      "Label": "Mine emoji",
+      "Default": "💣",
+      "Section": "Minesweeper emojis"
+    },
+    {
+      "Key": "NumberEmojis",
+      "Type": "List",
+      "Label": "Number emojis from 1 to 8",
+      "Default": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"],
+      "Section": "Minesweeper emojis",
+      "ItemType": "String"
+    }
+  ],
+  "EntryPoint": "./DiscordGamePlugin.ts"
+}
