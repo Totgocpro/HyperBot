@@ -105,29 +105,13 @@ export default class StatisticsPlugin extends BasePlugin {
 
   public async OnVoiceStateUpdate(OldState: VoiceState, NewState: VoiceState): Promise<void> {
     const GuildId = NewState.guild.id;
-    const UserId = NewState.id;
 
     if (!(await this.ShouldTrackBots(GuildId)) && NewState.member?.user.bot) {
       return;
     }
 
-    const SessionKey = this.BuildVoiceSessionKey(GuildId, UserId);
-    const WasTrackable = await this.IsTrackableVoiceState(OldState);
-    const IsTrackable = await this.IsTrackableVoiceState(NewState);
-
-    if (!WasTrackable && IsTrackable) {
-      this.VoiceSessions.set(SessionKey, {
-        GuildId,
-        UserId,
-        LastFlushedAt: Date.now()
-      });
-      return;
-    }
-
-    if (WasTrackable && !IsTrackable) {
-      await this.FlushVoiceSession(SessionKey, Date.now());
-      this.VoiceSessions.delete(SessionKey);
-    }
+    await this.RefreshVoiceChannelSessions(NewState.guild.id, OldState.channelId, Date.now());
+    await this.RefreshVoiceChannelSessions(NewState.guild.id, NewState.channelId, Date.now());
   }
 
   public async OnTick(): Promise<void> {
@@ -195,7 +179,7 @@ export default class StatisticsPlugin extends BasePlugin {
       const Guild = this.DiscordClient.guilds.cache.get(Session.GuildId);
       const CurrentState = Guild?.voiceStates.cache.get(Session.UserId);
 
-      if (!CurrentState || !(await this.IsTrackableVoiceState(CurrentState))) {
+      if (!CurrentState || !(await this.IsCountableVoiceState(CurrentState))) {
         await this.FlushVoiceSession(SessionKey, Now);
         this.VoiceSessions.delete(SessionKey);
         continue;
@@ -310,6 +294,14 @@ export default class StatisticsPlugin extends BasePlugin {
   }
 
   private async IsTrackableVoiceState(State: VoiceState): Promise<boolean> {
+    if (!(await this.IsCountableVoiceState(State))) {
+      return false;
+    }
+
+    return (await this.GetCountableVoiceStates(State.guild.id, State.channelId)).some((VoiceStateValue) => VoiceStateValue.id !== State.id);
+  }
+
+  private async IsCountableVoiceState(State: VoiceState): Promise<boolean> {
     if (!State.channelId) {
       return false;
     }
@@ -320,6 +312,66 @@ export default class StatisticsPlugin extends BasePlugin {
 
     const IgnoredVoiceChannelIds = (await this.Storage.GetGlobalConfig<string[]>(State.guild.id, "IgnoredVoiceChannelIds")) ?? [];
     return !IgnoredVoiceChannelIds.includes(State.channelId);
+  }
+
+  private async RefreshVoiceChannelSessions(GuildId: string, ChannelId: string | null, Now: number): Promise<void> {
+    if (!ChannelId) {
+      return;
+    }
+
+    const Guild = this.DiscordClient.guilds.cache.get(GuildId);
+    const ChannelStates = Guild?.voiceStates.cache.filter((State) => State.channelId === ChannelId);
+
+    if (!ChannelStates) {
+      return;
+    }
+
+    const CountableStates = await this.GetCountableVoiceStates(GuildId, ChannelId);
+    const CountableUserIds = new Set(CountableStates.map((State) => State.id));
+    const ShouldCountTime = CountableStates.length >= 2;
+
+    for (const State of ChannelStates.values()) {
+      const SessionKey = this.BuildVoiceSessionKey(GuildId, State.id);
+      const HasSession = this.VoiceSessions.has(SessionKey);
+      const ShouldHaveSession = ShouldCountTime && CountableUserIds.has(State.id);
+
+      if (!HasSession && ShouldHaveSession) {
+        this.VoiceSessions.set(SessionKey, {
+          GuildId,
+          UserId: State.id,
+          LastFlushedAt: Now
+        });
+        continue;
+      }
+
+      if (HasSession && !ShouldHaveSession) {
+        await this.FlushVoiceSession(SessionKey, Now);
+        this.VoiceSessions.delete(SessionKey);
+      }
+    }
+  }
+
+  private async GetCountableVoiceStates(GuildId: string, ChannelId: string | null): Promise<VoiceState[]> {
+    if (!ChannelId) {
+      return [];
+    }
+
+    const Guild = this.DiscordClient.guilds.cache.get(GuildId);
+    const ChannelStates = Guild?.voiceStates.cache.filter((State) => State.channelId === ChannelId);
+
+    if (!ChannelStates) {
+      return [];
+    }
+
+    const CountableStates: VoiceState[] = [];
+
+    for (const State of ChannelStates.values()) {
+      if (await this.IsCountableVoiceState(State)) {
+        CountableStates.push(State);
+      }
+    }
+
+    return CountableStates;
   }
 
   private async GetStatsTextConfig(GuildId: string): Promise<StatsTextConfig> {
