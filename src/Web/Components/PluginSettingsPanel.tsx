@@ -30,6 +30,28 @@ type PluginConfigSection = {
   Fields: Array<SettingsField & { Value: unknown }>;
 };
 
+type EditableEmbedField = {
+  Name: string;
+  Value: string;
+  Inline: boolean;
+};
+
+type EditableEmbed = {
+  Name: string;
+  Title: string;
+  Description: string;
+  Color: string;
+  Url: string;
+  AuthorName: string;
+  AuthorIconUrl: string;
+  ThumbnailUrl: string;
+  ImageUrl: string;
+  FooterText: string;
+  FooterIconUrl: string;
+  Timestamp: boolean;
+  Fields: EditableEmbedField[];
+};
+
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
@@ -228,6 +250,16 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                 </div>
 
                 <div className="mt-6 grid gap-5">
+                  {SelectedPlugin.Metadata.Id === "SendEmbed" ? (
+                    <SendEmbedEditor
+                      DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : (
+                    <>
                   {SelectedPlugin.DashboardElements?.length ? (
                     <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-overview">
                       <div className="mb-4">
@@ -254,6 +286,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       </div>
                     </section>
                   ))}
+                    </>
+                  )}
                 </div>
               </>
             ) : (
@@ -299,6 +333,300 @@ function DashboardElementRenderer(Properties: { Element: DashboardElement & { Va
       ) : (
         <ChartSvg Series={Series} Type={Properties.Element.Type} Unit={Properties.Element.Unit} />
       )}
+    </section>
+  );
+}
+
+function SendEmbedEditor(Properties: {
+  DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
+  Plugin: DashboardPlugin;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const PluginId = Properties.Plugin.Metadata.Id;
+  const Values = Properties.DraftValues[PluginId] ?? {};
+  const ChannelField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "SendChannelId");
+  const SavedEmbeds = ParseSavedEmbeds(Values.SavedEmbeds);
+  const [CurrentEmbed, SetCurrentEmbed] = UseState<EditableEmbed>(CreateDefaultEmbed());
+  const [IsSending, SetIsSending] = UseState(false);
+
+  function SetChannelId(ChannelId: string): void {
+    Properties.UpdateDraftValue(PluginId, "SendChannelId", ChannelId);
+  }
+
+  function UpdateEmbed(Patch: Partial<EditableEmbed>): void {
+    SetCurrentEmbed((PreviousEmbed) => ({ ...PreviousEmbed, ...Patch }));
+  }
+
+  function SaveCurrentEmbed(): void {
+    const SafeName = CurrentEmbed.Name.trim() || "Untitled embed";
+    const NextEmbed = { ...CurrentEmbed, Name: SafeName };
+    const ExistingIndex = SavedEmbeds.findIndex((EmbedValue) => EmbedValue.Name.toLowerCase() === SafeName.toLowerCase());
+    const NextEmbeds = ExistingIndex >= 0 ? SavedEmbeds.map((EmbedValue, Index) => (Index === ExistingIndex ? NextEmbed : EmbedValue)) : [...SavedEmbeds, NextEmbed];
+
+    Properties.UpdateDraftValue(PluginId, "SavedEmbeds", NextEmbeds);
+    SetCurrentEmbed(NextEmbed);
+    Properties.SetStatus(`${SafeName} saved in draft. Use the main Save button to persist it.`);
+  }
+
+  function LoadEmbed(Name: string): void {
+    const SavedEmbed = SavedEmbeds.find((EmbedValue) => EmbedValue.Name === Name);
+
+    if (SavedEmbed) {
+      SetCurrentEmbed(SavedEmbed);
+      Properties.SetStatus(`${SavedEmbed.Name} loaded.`);
+    }
+  }
+
+  function DeleteEmbed(Name: string): void {
+    Properties.UpdateDraftValue(PluginId, "SavedEmbeds", SavedEmbeds.filter((EmbedValue) => EmbedValue.Name !== Name));
+    Properties.SetStatus(`${Name} removed from draft. Use the main Save button to persist it.`);
+  }
+
+  function UpdateField(Index: number, Patch: Partial<EditableEmbedField>): void {
+    UpdateEmbed({
+      Fields: CurrentEmbed.Fields.map((Field, FieldIndex) => (FieldIndex === Index ? { ...Field, ...Patch } : Field))
+    });
+  }
+
+  function AddField(): void {
+    UpdateEmbed({
+      Fields: [...CurrentEmbed.Fields, { Name: "Field title", Value: "Field value", Inline: false }]
+    });
+  }
+
+  function RemoveField(Index: number): void {
+    UpdateEmbed({
+      Fields: CurrentEmbed.Fields.filter((_, FieldIndex) => FieldIndex !== Index)
+    });
+  }
+
+  async function SendEmbed(): Promise<void> {
+    const ChannelId = String(Values.SendChannelId ?? "");
+
+    if (!ChannelId) {
+      Properties.SetStatus("Select a target channel before sending.");
+      return;
+    }
+
+    SetIsSending(true);
+    Properties.SetStatus("Sending embed...");
+
+    try {
+      const Response = await fetch(`/api/plugins/${Properties.GuildId}/actions`, {
+        method: "POST",
+        headers: {
+          ...BuildGuildHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          PluginId,
+          ActionKey: "SendEmbed",
+          Payload: {
+            ChannelId,
+            Embed: CurrentEmbed
+          }
+        })
+      });
+
+      Properties.SetStatus(Response.ok ? "Embed queued for sending." : await Response.text());
+    } finally {
+      SetIsSending(false);
+    }
+  }
+
+  return (
+    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-send-embed">
+      <div className="mb-5">
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Embed builder</p>
+        <h3 className="mt-2 text-2xl font-black text-white">Create, preview, save, and send embeds</h3>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="grid gap-5">
+          <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block text-sm font-bold text-slate-200">
+                Template name
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Name: Event.target.value })} value={CurrentEmbed.Name} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Target channel
+                <select className={EmbedInputClassName} onChange={(Event) => SetChannelId(Event.target.value)} value={String(Values.SendChannelId ?? "")}>
+                  <option value="">Select a writable channel</option>
+                  {ChannelField?.Options?.map((Option) => (
+                    <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
+                      {Option.Label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Title
+                <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ Title: Event.target.value })} value={CurrentEmbed.Title} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Color
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Color: Event.target.value })} type="color" value={NormalizeEmbedColor(CurrentEmbed.Color)} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200 md:col-span-2">
+                Description
+                <textarea className={`${EmbedInputClassName} min-h-32 resize-y`} maxLength={4096} onChange={(Event) => UpdateEmbed({ Description: Event.target.value })} value={CurrentEmbed.Description} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Title URL
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Url: Event.target.value })} placeholder="https://example.com" value={CurrentEmbed.Url} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Thumbnail URL
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ ThumbnailUrl: Event.target.value })} placeholder="https://example.com/image.png" value={CurrentEmbed.ThumbnailUrl} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Author name
+                <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ AuthorName: Event.target.value })} value={CurrentEmbed.AuthorName} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Author icon URL
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ AuthorIconUrl: Event.target.value })} value={CurrentEmbed.AuthorIconUrl} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Image URL
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ ImageUrl: Event.target.value })} value={CurrentEmbed.ImageUrl} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Footer icon URL
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ FooterIconUrl: Event.target.value })} value={CurrentEmbed.FooterIconUrl} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200 md:col-span-2">
+                Footer text
+                <input className={EmbedInputClassName} maxLength={2048} onChange={(Event) => UpdateEmbed({ FooterText: Event.target.value })} value={CurrentEmbed.FooterText} />
+              </label>
+              <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 font-semibold text-slate-100 md:col-span-2">
+                Add current timestamp
+                <input checked={CurrentEmbed.Timestamp} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateEmbed({ Timestamp: Event.target.checked })} type="checkbox" />
+              </label>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="text-xl font-black text-white">Fields</h4>
+                <p className="mt-1 text-sm text-slate-500">Add Discord embed fields with optional inline layout.</p>
+              </div>
+              <button className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddField} type="button">
+                Add field
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {CurrentEmbed.Fields.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No field configured.</p> : null}
+              {CurrentEmbed.Fields.map((Field, Index) => (
+                <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3 md:grid-cols-[1fr_1fr_auto]" key={Index}>
+                  <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateField(Index, { Name: Event.target.value })} placeholder="Field name" value={Field.Name} />
+                  <input className={EmbedInputClassName} maxLength={1024} onChange={(Event) => UpdateField(Index, { Value: Event.target.value })} placeholder="Field value" value={Field.Value} />
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+                      <input checked={Field.Inline} className="h-4 w-4 accent-blue-600" onChange={(Event) => UpdateField(Index, { Inline: Event.target.checked })} type="checkbox" />
+                      Inline
+                    </label>
+                    <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveField(Index)} type="button">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <aside className="grid content-start gap-5">
+          <DiscordEmbedPreview Embed={CurrentEmbed} />
+          <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+            <h4 className="text-xl font-black text-white">Saved embeds</h4>
+            <div className="mt-4 grid gap-2">
+              {SavedEmbeds.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No saved embed.</p> : null}
+              {SavedEmbeds.map((EmbedValue) => (
+                <div className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-3" key={EmbedValue.Name}>
+                  <p className="truncate font-bold text-white">{EmbedValue.Name}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className="rounded-xl bg-slate-800 px-3 py-2 text-sm font-bold text-slate-100 hover:bg-slate-700" onClick={() => LoadEmbed(EmbedValue.Name)} type="button">
+                      Load
+                    </button>
+                    <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => DeleteEmbed(EmbedValue.Name)} type="button">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-2">
+              <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={SaveCurrentEmbed} type="button">
+                Save template
+              </button>
+              <button className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60" disabled={IsSending} onClick={() => void SendEmbed()} type="button">
+                {IsSending ? "Sending..." : "Send embed"}
+              </button>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function DiscordEmbedPreview(Properties: { Embed: EditableEmbed }) {
+  const Color = NormalizeEmbedColor(Properties.Embed.Color);
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-[#313338] p-4 shadow-xl shadow-black/20">
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Discord preview</p>
+      <div className="flex gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-black text-white">HB</div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-white">
+            HyperBot <span className="rounded bg-[#5865f2] px-1 py-0.5 text-[10px] uppercase text-white">Bot</span>
+          </p>
+          <div className="mt-2 max-w-[520px] overflow-hidden rounded bg-[#2b2d31]" style={{ borderLeft: `4px solid ${Color}` }}>
+            <div className="p-4">
+              {Properties.Embed.AuthorName ? (
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+                  {Properties.Embed.AuthorIconUrl ? <img alt="" className="h-5 w-5 rounded-full object-cover" src={Properties.Embed.AuthorIconUrl} /> : null}
+                  {Properties.Embed.AuthorName}
+                </div>
+              ) : null}
+              <div className="flex gap-4">
+                <div className="min-w-0 flex-1">
+                  {Properties.Embed.Title ? <p className="break-words text-base font-semibold text-[#00a8fc]">{Properties.Embed.Title}</p> : null}
+                  {Properties.Embed.Description ? <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-5 text-[#dbdee1]">{Properties.Embed.Description}</p> : null}
+                  {Properties.Embed.Fields.length ? (
+                    <div className="mt-3 grid gap-3">
+                      {Properties.Embed.Fields.filter((Field) => Field.Name || Field.Value).map((Field, Index) => (
+                        <div className={Field.Inline ? "inline-block min-w-[30%] pr-3 align-top" : "block"} key={Index}>
+                          <p className="break-words text-sm font-semibold text-white">{Field.Name || "\u200b"}</p>
+                          <p className="whitespace-pre-wrap break-words text-sm text-[#dbdee1]">{Field.Value || "\u200b"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {Properties.Embed.ThumbnailUrl ? <img alt="" className="h-20 w-20 shrink-0 rounded object-cover" src={Properties.Embed.ThumbnailUrl} /> : null}
+              </div>
+              {Properties.Embed.ImageUrl ? <img alt="" className="mt-4 max-h-72 w-full rounded object-cover" src={Properties.Embed.ImageUrl} /> : null}
+              {Properties.Embed.FooterText || Properties.Embed.Timestamp ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-[#b5bac1]">
+                  {Properties.Embed.FooterIconUrl ? <img alt="" className="h-5 w-5 rounded-full object-cover" src={Properties.Embed.FooterIconUrl} /> : null}
+                  <span>
+                    {Properties.Embed.FooterText}
+                    {Properties.Embed.FooterText && Properties.Embed.Timestamp ? " | " : ""}
+                    {Properties.Embed.Timestamp ? "Today at preview time" : ""}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
@@ -521,6 +849,46 @@ function BuildPersistablePluginValues(Plugin: DashboardPlugin, Values: Record<st
   const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button").map((Field) => Field.Key));
 
   return Object.fromEntries(Object.entries(Values).filter(([Key]) => PersistableKeys.has(Key)));
+}
+
+const EmbedInputClassName = "mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
+
+function CreateDefaultEmbed(): EditableEmbed {
+  return {
+    Name: "New embed",
+    Title: "Embed title",
+    Description: "Write your Discord embed description here.",
+    Color: "#5865f2",
+    Url: "",
+    AuthorName: "",
+    AuthorIconUrl: "",
+    ThumbnailUrl: "",
+    ImageUrl: "",
+    FooterText: "",
+    FooterIconUrl: "",
+    Timestamp: false,
+    Fields: []
+  };
+}
+
+function ParseSavedEmbeds(Value: unknown): EditableEmbed[] {
+  if (!Array.isArray(Value)) {
+    return [];
+  }
+
+  return Value.filter(IsEditableEmbed);
+}
+
+function IsEditableEmbed(Value: unknown): Value is EditableEmbed {
+  if (!IsRecord(Value)) {
+    return false;
+  }
+
+  return typeof Value.Name === "string" && Array.isArray(Value.Fields);
+}
+
+function NormalizeEmbedColor(Color: string): string {
+  return /^#[0-9a-f]{6}$/iu.test(Color) ? Color : "#5865f2";
 }
 
 function RenderField(

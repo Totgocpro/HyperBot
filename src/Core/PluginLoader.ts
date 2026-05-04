@@ -88,14 +88,14 @@ export class PluginLoader {
     }
   }
 
-  public async DispatchDashboardAction(PluginId: string, GuildId: string, ActionKey: string, ActorId: string): Promise<void> {
+  public async DispatchDashboardAction(PluginId: string, GuildId: string, ActionKey: string, ActorId: string, Payload?: unknown): Promise<void> {
     const LoadedPluginValue = this.Plugins.get(PluginId);
 
     if (!LoadedPluginValue) {
       return;
     }
 
-    await LoadedPluginValue.Instance.OnDashboardAction(GuildId, ActionKey, ActorId);
+    await LoadedPluginValue.Instance.OnDashboardAction(GuildId, ActionKey, ActorId, Payload);
   }
 
   public async DispatchSlashCommand(Interaction: ChatInputCommandInteraction): Promise<void> {

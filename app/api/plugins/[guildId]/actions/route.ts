@@ -17,7 +17,7 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     return User;
   }
 
-  const Body = (await Request.json()) as { PluginId?: string; ActionKey?: string };
+  const Body = (await Request.json()) as { PluginId?: string; ActionKey?: string; Payload?: unknown };
 
   if (!Body.PluginId || !Body.ActionKey) {
     return new Response("PluginId and ActionKey are required.", { status: 400 });
@@ -54,6 +54,7 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
       PluginId: Body.PluginId,
       ActionKey: Body.ActionKey,
       ActorId: User.DiscordId,
+      Payload: Body.Payload,
       CreatedAt: new Date().toISOString()
     })
   );

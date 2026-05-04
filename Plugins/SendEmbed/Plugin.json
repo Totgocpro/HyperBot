@@ -1,0 +1,40 @@
+{
+  "Metadata": {
+    "Id": "SendEmbed",
+    "DisplayName": "Send Embed",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "SE"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "SendChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Target channel",
+      "Default": "",
+      "Section": "Embed editor",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "SavedEmbeds",
+      "Type": "List",
+      "Label": "Saved embeds",
+      "Default": [],
+      "Section": "Embed editor",
+      "ItemType": "String"
+    },
+    {
+      "Key": "SendEmbedButton",
+      "Type": "Button",
+      "Label": "Send embed",
+      "Default": null,
+      "Section": "Embed editor",
+      "ButtonLabel": "Send embed",
+      "ActionKey": "SendEmbed"
+    }
+  ],
+  "EntryPoint": "./SendEmbedPlugin.ts"
+}

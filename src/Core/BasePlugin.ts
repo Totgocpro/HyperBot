@@ -46,7 +46,7 @@ export abstract class BasePlugin {
     return;
   }
 
-  public async OnDashboardAction(_GuildId: string, _ActionKey: string, _ActorId: string): Promise<void> {
+  public async OnDashboardAction(_GuildId: string, _ActionKey: string, _ActorId: string, _Payload?: unknown): Promise<void> {
     return;
   }
 

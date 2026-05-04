@@ -52,6 +52,7 @@ type DashboardPluginAction = {
   ActionKey: string;
   ActorId: string;
   CreatedAt: string;
+  Payload?: unknown;
 };
 
 const DiscordToken = process.env.DISCORD_TOKEN;
@@ -340,7 +341,7 @@ async function ProcessDashboardPluginActions(): Promise<void> {
 
     try {
       const Action = JSON.parse(RawAction) as DashboardPluginAction;
-      await Loader.DispatchDashboardAction(Action.PluginId, Action.GuildId, Action.ActionKey, Action.ActorId);
+      await Loader.DispatchDashboardAction(Action.PluginId, Action.GuildId, Action.ActionKey, Action.ActorId, Action.Payload);
     } catch (ErrorValue) {
       console.error("Dashboard plugin action failed:", ErrorValue);
     }
