@@ -78,14 +78,14 @@ export function LoginPanel() {
             {NeedsSetup ? "First launch" : "Dashboard sign in"}
           </h1>
           <p className="mt-4 text-blue-100">
-            The panel is private. An account is required to access servers, plugins, and administration settings.
+            Welcome to your HyperBot Web Panel
           </p>
           <div className="mt-8 rounded-3xl border border-white/10 bg-white/10 p-5">
-            <p className="font-bold text-white">{NeedsSetup ? "First admin creation" : "Security"}</p>
+            <p className="font-bold text-white">{NeedsSetup ? "First admin creation" : "You need to be log-in"}</p>
             <p className="mt-2 text-sm text-blue-100">
               {NeedsSetup
                 ? "This account will be SuperAdmin and will be able to manage users."
-                : "Sessions are stored in the database and passwords are hashed with PBKDF2."}
+                : "You need to log-in for access the panel"}
             </p>
           </div>
         </div>

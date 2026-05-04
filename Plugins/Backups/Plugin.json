@@ -1,0 +1,55 @@
+{
+  "Metadata": {
+    "Id": "Backups",
+    "DisplayName": "Backups",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "BK"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "BackupName",
+      "Type": "String",
+      "Label": "Backup name",
+      "Default": "Manual backup",
+      "Section": "Backup settings"
+    },
+    {
+      "Key": "DeleteUnknownObjects",
+      "Type": "Boolean",
+      "Label": "Delete roles and channels that are not in the selected backup",
+      "Default": false,
+      "Section": "Restore safety"
+    },
+    {
+      "Key": "CreateBackupButton",
+      "Type": "Button",
+      "Label": "Create backup",
+      "Default": null,
+      "Section": "Backup actions",
+      "ButtonLabel": "Create backup",
+      "ActionKey": "CreateBackup"
+    },
+    {
+      "Key": "RestoreLatestBackupButton",
+      "Type": "Button",
+      "Label": "Restore latest backup",
+      "Default": null,
+      "Section": "Backup actions",
+      "ButtonLabel": "Restore latest backup",
+      "ActionKey": "RestoreLatestBackup"
+    },
+    {
+      "Key": "RestoreSelectedBackupButton",
+      "Type": "Button",
+      "Label": "Restore selected backup",
+      "Default": null,
+      "Section": "Backup actions",
+      "ButtonLabel": "Restore selected backup",
+      "ActionKey": "RestoreBackup"
+    }
+  ],
+  "EntryPoint": "./BackupsPlugin.ts"
+}

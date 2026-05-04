@@ -52,6 +52,17 @@ type EditableEmbed = {
   Fields: EditableEmbedField[];
 };
 
+type BackupSummary = {
+  Id: string;
+  Name: string;
+  GuildName: string;
+  CreatedAt: string;
+  CreatedBy: string;
+  Roles: number;
+  Channels: number;
+  PluginConfigs: number;
+};
+
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
@@ -233,7 +244,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
           </aside>
 
           <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
-            <p className="mb-5 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">{Status}</p>
+            {/* <p className="mb-5 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">{Status}</p> */}
 
             {SelectedPlugin ? (
               <>
@@ -252,6 +263,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                 <div className="mt-6 grid gap-5">
                   {SelectedPlugin.Metadata.Id === "SendEmbed" ? (
                     <SendEmbedEditor
+                      DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : SelectedPlugin.Metadata.Id === "Backups" ? (
+                    <BackupsManager
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
                       Plugin={SelectedPlugin}
@@ -628,6 +647,237 @@ function DiscordEmbedPreview(Properties: { Embed: EditableEmbed }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function BackupsManager(Properties: {
+  DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
+  Plugin: DashboardPlugin;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const PluginId = Properties.Plugin.Metadata.Id;
+  const Values = Properties.DraftValues[PluginId] ?? {};
+  const [Backups, SetBackups] = UseState<BackupSummary[]>([]);
+  const [SelectedBackupId, SetSelectedBackupId] = UseState("");
+  const [IsBusy, SetIsBusy] = UseState(false);
+  const BackupNameField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "BackupName");
+  const DeleteUnknownField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "DeleteUnknownObjects");
+  const SelectedBackup = Backups.find((Backup) => Backup.Id === SelectedBackupId) ?? Backups[0];
+  const BackupName = String(Values.BackupName ?? BackupNameField?.Default ?? "Manual backup");
+  const DeleteUnknownObjects = Boolean(Values.DeleteUnknownObjects ?? DeleteUnknownField?.Default ?? false);
+
+  UseEffect(() => {
+    void LoadBackups();
+  }, [Properties.GuildId]);
+
+  async function LoadBackups(): Promise<void> {
+    const Response = await fetch(`/api/plugins/${Properties.GuildId}/backups`, {
+      headers: BuildGuildHeaders()
+    });
+
+    if (!Response.ok) {
+      Properties.SetStatus(await Response.text());
+      return;
+    }
+
+    const Payload = (await Response.json()) as { Backups: BackupSummary[] };
+    SetBackups(Payload.Backups);
+    SetSelectedBackupId((PreviousId) => PreviousId || Payload.Backups[0]?.Id || "");
+    Properties.SetStatus(`${Payload.Backups.length} backup(s) available.`);
+  }
+
+  async function SendBackupAction(ActionKey: string, Payload: Record<string, unknown>): Promise<void> {
+    SetIsBusy(true);
+
+    try {
+      const Response = await fetch(`/api/plugins/${Properties.GuildId}/actions`, {
+        method: "POST",
+        headers: {
+          ...BuildGuildHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          PluginId,
+          ActionKey,
+          Payload
+        })
+      });
+
+      Properties.SetStatus(Response.ok ? `${ActionKey} queued. Refresh the list in a few seconds.` : await Response.text());
+    } finally {
+      SetIsBusy(false);
+    }
+  }
+
+  async function DeleteBackup(BackupId: string): Promise<void> {
+    SetIsBusy(true);
+
+    try {
+      const Response = await fetch(`/api/plugins/${Properties.GuildId}/backups`, {
+        method: "DELETE",
+        headers: {
+          ...BuildGuildHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ BackupId })
+      });
+
+      if (!Response.ok) {
+        Properties.SetStatus(await Response.text());
+        return;
+      }
+
+      const NextBackups = Backups.filter((Backup) => Backup.Id !== BackupId);
+      SetBackups(NextBackups);
+      SetSelectedBackupId(NextBackups[0]?.Id ?? "");
+      Properties.SetStatus("Backup deleted.");
+    } finally {
+      SetIsBusy(false);
+    }
+  }
+
+  function DownloadBackup(BackupId: string): void {
+    window.open(`/api/plugins/${Properties.GuildId}/backups?backupId=${encodeURIComponent(BackupId)}`, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <div className="grid gap-5">
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid flex-1 gap-4 sm:grid-cols-[1fr_auto]">
+            {BackupNameField ? (
+              <label className="block text-sm font-bold text-slate-200">
+                {BackupNameField.Label}
+                <input
+                  className={EmbedInputClassName}
+                  onChange={(Event) => Properties.UpdateDraftValue(PluginId, "BackupName", Event.target.value)}
+                  type="text"
+                  value={BackupName}
+                />
+              </label>
+            ) : null}
+            <label className="flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm font-semibold text-slate-100">
+              <span>{DeleteUnknownField?.Label ?? "Delete unknown objects"}</span>
+              <input
+                checked={DeleteUnknownObjects}
+                className="h-5 w-5 accent-blue-600"
+                onChange={(Event) => Properties.UpdateDraftValue(PluginId, "DeleteUnknownObjects", Event.target.checked)}
+                type="checkbox"
+              />
+            </label>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              className="rounded-2xl border border-slate-700 px-5 py-3 text-sm font-bold text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={IsBusy}
+              onClick={() => void LoadBackups()}
+              type="button"
+            >
+              Refresh
+            </button>
+            <button
+              className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={IsBusy}
+              onClick={() => void SendBackupAction("CreateBackup", { BackupName })}
+              type="button"
+            >
+              Create backup
+            </button>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Backups include roles, permissions, categories, channels and saved plugin configuration. Discord messages are not copied.
+        </p>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Archives</p>
+            <h3 className="mt-2 text-2xl font-black text-white">Server backups</h3>
+          </div>
+          {SelectedBackup ? (
+            <button
+              className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={IsBusy}
+              onClick={() => void SendBackupAction("RestoreBackup", { BackupId: SelectedBackup.Id, DeleteUnknownObjects })}
+              type="button"
+            >
+              Restore selected
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-5 grid gap-3">
+          {Backups.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-slate-400">
+              No backup created yet.
+            </div>
+          ) : (
+            Backups.map((Backup) => (
+              <button
+                className={`rounded-3xl border p-4 text-left transition ${
+                  SelectedBackup?.Id === Backup.Id ? "border-blue-500 bg-blue-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700"
+                }`}
+                key={Backup.Id}
+                onClick={() => SetSelectedBackupId(Backup.Id)}
+                type="button"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h4 className="text-lg font-black text-white">{Backup.Name}</h4>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {new Date(Backup.CreatedAt).toLocaleString()} | {Backup.GuildName}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-300">
+                    <span className="rounded-full bg-slate-800 px-3 py-2">{Backup.Roles} roles</span>
+                    <span className="rounded-full bg-slate-800 px-3 py-2">{Backup.Channels} channels</span>
+                    <span className="rounded-full bg-slate-800 px-3 py-2">{Backup.PluginConfigs} configs</span>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-100 hover:bg-slate-800"
+                    onClick={(Event) => {
+                      Event.stopPropagation();
+                      DownloadBackup(Backup.Id);
+                    }}
+                    type="button"
+                  >
+                    Download JSON
+                  </button>
+                  <button
+                    className="rounded-2xl bg-amber-500 px-4 py-2 text-sm font-black text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={IsBusy}
+                    onClick={(Event) => {
+                      Event.stopPropagation();
+                      void SendBackupAction("RestoreBackup", { BackupId: Backup.Id, DeleteUnknownObjects });
+                    }}
+                    type="button"
+                  >
+                    Restore
+                  </button>
+                  <button
+                    className="rounded-2xl border border-red-500/50 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={IsBusy}
+                    onClick={(Event) => {
+                      Event.stopPropagation();
+                      void DeleteBackup(Backup.Id);
+                    }}
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
