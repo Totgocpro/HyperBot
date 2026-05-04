@@ -33,6 +33,32 @@
           ]
         }
       ]
+    },
+    {
+      "Name": "tictactoe",
+      "Description": "Start a Tic-Tac-Toe game against the bot.",
+      "Options": [
+        {
+          "Name": "difficulty",
+          "Description": "Choose the bot difficulty.",
+          "Type": "String",
+          "Required": true,
+          "Choices": [
+            {
+              "Name": "Easy",
+              "Value": "Easy"
+            },
+            {
+              "Name": "Medium",
+              "Value": "Medium"
+            },
+            {
+              "Name": "Impossible",
+              "Value": "Impossible"
+            }
+          ]
+        }
+      ]
     }
   ],
   "WebInterface": [
@@ -141,6 +167,111 @@
       "Default": ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"],
       "Section": "Minesweeper emojis",
       "ItemType": "String"
+    },
+    {
+      "Key": "TicTacToeTitle",
+      "Type": "String",
+      "Label": "Tic-Tac-Toe title",
+      "Default": "Tic-Tac-Toe - %difficulty%",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeDescription",
+      "Type": "String",
+      "Label": "Tic-Tac-Toe description",
+      "Default": "%user% plays as %playerEmoji%. Bot plays as %botEmoji%.",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeWinMessage",
+      "Type": "String",
+      "Label": "Player win message",
+      "Default": "%user% won against the bot.",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeLoseMessage",
+      "Type": "String",
+      "Label": "Bot win message",
+      "Default": "The bot won this game.",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeDrawMessage",
+      "Type": "String",
+      "Label": "Draw message",
+      "Default": "This Tic-Tac-Toe game ended in a draw.",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeTimeoutMessage",
+      "Type": "String",
+      "Label": "Timeout message",
+      "Default": "This Tic-Tac-Toe game timed out after %timeoutMinutes% minutes without input.",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeUnauthorizedMessage",
+      "Type": "String",
+      "Label": "Unauthorized click message",
+      "Default": "Only %user% can play this Tic-Tac-Toe game.",
+      "Section": "Tic-Tac-Toe"
+    },
+    {
+      "Key": "TicTacToeColor",
+      "Type": "String",
+      "Label": "Active embed color",
+      "Default": "#5865f2",
+      "Section": "Tic-Tac-Toe design"
+    },
+    {
+      "Key": "TicTacToeWinColor",
+      "Type": "String",
+      "Label": "Win embed color",
+      "Default": "#22c55e",
+      "Section": "Tic-Tac-Toe design"
+    },
+    {
+      "Key": "TicTacToeLoseColor",
+      "Type": "String",
+      "Label": "Lose embed color",
+      "Default": "#ef4444",
+      "Section": "Tic-Tac-Toe design"
+    },
+    {
+      "Key": "TicTacToeDrawColor",
+      "Type": "String",
+      "Label": "Draw embed color",
+      "Default": "#f59e0b",
+      "Section": "Tic-Tac-Toe design"
+    },
+    {
+      "Key": "TicTacToeTimeoutColor",
+      "Type": "String",
+      "Label": "Timeout embed color",
+      "Default": "#64748b",
+      "Section": "Tic-Tac-Toe design"
+    },
+    {
+      "Key": "TicTacToePlayerEmoji",
+      "Type": "String",
+      "Label": "Player emoji",
+      "Default": "❌",
+      "Section": "Tic-Tac-Toe emojis"
+    },
+    {
+      "Key": "TicTacToeBotEmoji",
+      "Type": "String",
+      "Label": "Bot emoji",
+      "Default": "⭕",
+      "Section": "Tic-Tac-Toe emojis"
+    },
+    {
+      "Key": "TicTacToeEmptyLabel",
+      "Type": "String",
+      "Label": "Empty tile label",
+      "Default": "​",
+      "Section": "Tic-Tac-Toe emojis"
     }
   ],
   "EntryPoint": "./DiscordGamePlugin.ts"
