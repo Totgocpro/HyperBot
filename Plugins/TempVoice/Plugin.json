@@ -1,0 +1,73 @@
+{
+  "Metadata": {
+    "Id": "TempVoice",
+    "DisplayName": "Temp Voice",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "TV"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "CreatorChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Creator voice channel",
+      "Default": "",
+      "Section": "Creation",
+      "SupportedChannelTypes": ["GuildVoice"],
+      "RequireWritable": false
+    },
+    {
+      "Key": "ChannelNameTemplate",
+      "Type": "String",
+      "Label": "Temporary channel name",
+      "Default": "%user%'s voice room",
+      "Section": "Creation"
+    },
+    {
+      "Key": "DefaultUserLimit",
+      "Type": "Number",
+      "Label": "Default user limit (0 = unlimited)",
+      "Default": 0,
+      "Section": "Creation"
+    },
+    {
+      "Key": "DefaultBitrateKbps",
+      "Type": "Number",
+      "Label": "Default bitrate in Kbps",
+      "Default": 64,
+      "Section": "Creation"
+    },
+    {
+      "Key": "ProtectedRoleIds",
+      "Type": "List",
+      "Label": "Roles protected from channel bans",
+      "Default": [],
+      "Section": "Protection",
+      "ItemType": "RolePicker"
+    },
+    {
+      "Key": "ControlPanelTitle",
+      "Type": "String",
+      "Label": "Control panel title",
+      "Default": "Temporary voice control panel",
+      "Section": "Control panel"
+    },
+    {
+      "Key": "ControlPanelDescription",
+      "Type": "String",
+      "Label": "Control panel description",
+      "Default": "Only the current room owner can use these controls.",
+      "Section": "Control panel"
+    },
+    {
+      "Key": "ControlPanelColor",
+      "Type": "String",
+      "Label": "Control panel color",
+      "Default": "#38bdf8",
+      "Section": "Control panel"
+    }
+  ],
+  "EntryPoint": "./TempVoicePlugin.ts"
+}

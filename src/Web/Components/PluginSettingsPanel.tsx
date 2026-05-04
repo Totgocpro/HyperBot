@@ -911,7 +911,7 @@ function RenderField(
     );
   }
 
-  if (Field.Type === "Select" || Field.Type === "ChannelPicker") {
+  if (Field.Type === "Select" || Field.Type === "ChannelPicker" || Field.Type === "RolePicker") {
     return (
       <label className="block text-sm font-bold text-slate-200">
         {Field.Label}
@@ -924,6 +924,7 @@ function RenderField(
           ))}
         </select>
         {Field.Type === "ChannelPicker" ? <p className="mt-2 text-xs text-slate-500">Only supported writable channels can be selected.</p> : null}
+        {Field.Type === "RolePicker" ? <p className="mt-2 text-xs text-slate-500">Only selectable server roles are listed.</p> : null}
       </label>
     );
   }
@@ -1041,7 +1042,7 @@ function ListField(Properties: {
         {Properties.Value.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-3 text-sm text-slate-500">No value configured.</p> : null}
         {Properties.Value.map((ItemValue, Index) => (
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]" key={Index}>
-            {Properties.Field.ItemType === "ChannelPicker" ? (
+            {Properties.Field.ItemType === "ChannelPicker" || Properties.Field.ItemType === "RolePicker" ? (
               <select className={BaseClassName} onChange={(Event) => UpdateItem(Index, Event.target.value)} value={String(ItemValue ?? "")}>
                 <option value="">Select</option>
                 {Properties.Field.Options?.map((Option) => (

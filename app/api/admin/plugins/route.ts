@@ -17,7 +17,16 @@ async function Get(Request: Request): Promise<Response> {
   }
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const ManifestEntries = (await ScanPluginManifests(PluginDirectory)).filter((ManifestEntry) => ManifestEntry.Manifest.Scope === PluginScope.Global);
+  const AllManifestEntries = await ScanPluginManifests(PluginDirectory);
+  const ManifestEntries = AllManifestEntries.filter((ManifestEntry) => ManifestEntry.Manifest.Scope === PluginScope.Global);
+  const Commands = AllManifestEntries.flatMap((ManifestEntry) =>
+    ManifestEntry.Manifest.Commands.map((Command) => ({
+      Name: Command.Name,
+      Description: Command.Description,
+      PluginId: ManifestEntry.Manifest.Metadata.Id,
+      PluginName: ManifestEntry.Manifest.Metadata.DisplayName
+    }))
+  );
   const Plugins = await Promise.all(
     ManifestEntries.map(async (ManifestEntry) => {
       const Storage = new PluginStorage(Prisma, RedisClient, ManifestEntry.Manifest.Metadata.Id);
@@ -37,7 +46,7 @@ async function Get(Request: Request): Promise<Response> {
     })
   );
 
-  return NextResponse.json({ Plugins });
+  return NextResponse.json({ Plugins, Commands });
 }
 
 async function Put(Request: Request): Promise<Response> {

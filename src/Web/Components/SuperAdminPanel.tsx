@@ -62,6 +62,20 @@ type AdminPlugin = {
   WebInterface: Array<SettingsField & { Value: unknown }>;
 };
 
+type AdminCommand = {
+  Name: string;
+  Description: string;
+  PluginId: string;
+  PluginName: string;
+};
+
+type CommandAliasDraft = {
+  AliasName: string;
+  TargetCommandName: string;
+  Description: string;
+  Enabled: boolean;
+};
+
 const EmptyUserForm: UserForm = {
   Username: "",
   Password: "",
@@ -87,6 +101,7 @@ export function SuperAdminPanel() {
   const [Grants, SetGrants] = UseState<GuildGrantRow[]>([]);
   const [GrantPlugins, SetGrantPlugins] = UseState<GrantPlugin[]>([]);
   const [GlobalPlugins, SetGlobalPlugins] = UseState<AdminPlugin[]>([]);
+  const [AvailableCommands, SetAvailableCommands] = UseState<AdminCommand[]>([]);
   const [SelectedGlobalPluginId, SetSelectedGlobalPluginId] = UseState("");
   const [GlobalPluginDraftValues, SetGlobalPluginDraftValues] = UseState<Record<string, Record<string, unknown>>>({});
   const [ManualGuildId, SetManualGuildId] = UseState("");
@@ -140,7 +155,7 @@ export function SuperAdminPanel() {
 
     const UsersPayload = ((await UsersResponse.json()) as { Users: DashboardUserRow[] }).Users;
     const CurrentUserPayload = (await CurrentUserResponse.json()) as { User: DashboardUserRow };
-    const GlobalPluginsPayload = (await GlobalPluginsResponse.json()) as { Plugins: AdminPlugin[] };
+    const GlobalPluginsPayload = (await GlobalPluginsResponse.json()) as { Plugins: AdminPlugin[]; Commands: AdminCommand[] };
     const GrantsPayload = (await GrantsResponse.json()) as { Grants: GuildGrantRow[]; Plugins: GrantPlugin[] };
 
     SetHealth((await HealthResponse.json()) as HealthReport);
@@ -148,6 +163,7 @@ export function SuperAdminPanel() {
     SetUsers(UsersPayload);
     SetGuilds(((await GuildsResponse.json()) as { Guilds: GuildAccessRow[] }).Guilds);
     SetGlobalPlugins(GlobalPluginsPayload.Plugins);
+    SetAvailableCommands(GlobalPluginsPayload.Commands);
     SetSelectedGlobalPluginId(GlobalPluginsPayload.Plugins[0]?.Metadata.Id ?? "");
     SetGlobalPluginDraftValues(BuildPluginDraftValues(GlobalPluginsPayload.Plugins));
     SetGrants(GrantsPayload.Grants);
@@ -406,6 +422,7 @@ export function SuperAdminPanel() {
               SelectedGlobalPluginId={SelectedGlobalPluginId}
               SetSelectedGlobalPluginId={SetSelectedGlobalPluginId}
               SaveGlobalPlugin={SaveGlobalPlugin}
+              AvailableCommands={AvailableCommands}
               UpdateGlobalPluginDraftValue={UpdateGlobalPluginDraftValue}
             />
           ) : null}
@@ -488,6 +505,7 @@ function GeneralStatusPanel(Properties: { Health: HealthReport | null; Users: Da
 }
 
 function GlobalPluginsPanel(Properties: {
+  AvailableCommands: AdminCommand[];
   GlobalPlugins: AdminPlugin[];
   GlobalPluginDraftValues: Record<string, Record<string, unknown>>;
   SelectedGlobalPlugin: AdminPlugin | undefined;
@@ -554,11 +572,19 @@ function GlobalPluginsPanel(Properties: {
                 </button>
               </div>
               <div className="mt-6 grid gap-4">
-                {Properties.SelectedGlobalPlugin.WebInterface.map((Field) => (
-                  <div key={Field.Key}>
-                    {RenderPluginField(Properties.SelectedGlobalPlugin?.Metadata.Id ?? "", Field, Properties.GlobalPluginDraftValues, Properties.UpdateGlobalPluginDraftValue)}
-                  </div>
-                ))}
+                {Properties.SelectedGlobalPlugin.Metadata.Id === "CommandAliases" ? (
+                  <CommandAliasesEditor
+                    Aliases={ParseCommandAliases(Properties.GlobalPluginDraftValues.CommandAliases?.Aliases)}
+                    AvailableCommands={Properties.AvailableCommands}
+                    OnChange={(Aliases) => Properties.UpdateGlobalPluginDraftValue("CommandAliases", "Aliases", Aliases)}
+                  />
+                ) : (
+                  Properties.SelectedGlobalPlugin.WebInterface.map((Field) => (
+                    <div key={Field.Key}>
+                      {RenderPluginField(Properties.SelectedGlobalPlugin?.Metadata.Id ?? "", Field, Properties.GlobalPluginDraftValues, Properties.UpdateGlobalPluginDraftValue)}
+                    </div>
+                  ))
+                )}
               </div>
             </>
           ) : (
@@ -873,6 +899,109 @@ function GuildBanlistPanel(Properties: {
   );
 }
 
+function CommandAliasesEditor(Properties: {
+  Aliases: CommandAliasDraft[];
+  AvailableCommands: AdminCommand[];
+  OnChange: (Aliases: CommandAliasDraft[]) => void;
+}) {
+  function AddAlias(): void {
+    Properties.OnChange([
+      ...Properties.Aliases,
+      {
+        AliasName: "",
+        TargetCommandName: Properties.AvailableCommands[0]?.Name ?? "",
+        Description: "",
+        Enabled: true
+      }
+    ]);
+  }
+
+  function UpdateAlias(Index: number, Patch: Partial<CommandAliasDraft>): void {
+    Properties.OnChange(Properties.Aliases.map((Alias, AliasIndex) => (AliasIndex === Index ? { ...Alias, ...Patch } : Alias)));
+  }
+
+  function RemoveAlias(Index: number): void {
+    Properties.OnChange(Properties.Aliases.filter((_, AliasIndex) => AliasIndex !== Index));
+  }
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h4 className="text-xl font-black text-white">Slash command aliases</h4>
+          <p className="mt-1 text-sm text-slate-500">Aliases are registered as Discord slash commands and copy options from the target command.</p>
+        </div>
+        <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={AddAlias} type="button">
+          Add alias
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        {Properties.AvailableCommands.length === 0 ? (
+          <p className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm font-semibold text-amber-100">
+            No base slash command found. Add a plugin command before creating aliases.
+          </p>
+        ) : null}
+        {Properties.Aliases.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No alias configured.</p> : null}
+        {Properties.Aliases.map((Alias, Index) => {
+          const AliasError = GetAliasNameError(Alias.AliasName);
+
+          return (
+            <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4" key={Index}>
+              <div className="grid gap-3 xl:grid-cols-[1fr_1fr]">
+                <label className="block text-sm font-bold text-slate-200">
+                  Alias command
+                  <input
+                    className={`mt-2 w-full rounded-2xl border bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 ${AliasError ? "border-red-500" : "border-slate-700"}`}
+                    onChange={(Event) => UpdateAlias(Index, { AliasName: Event.target.value.toLowerCase() })}
+                    placeholder="ex: sanction"
+                    value={Alias.AliasName}
+                  />
+                  {AliasError ? <span className="mt-1 block text-xs font-semibold text-red-300">{AliasError}</span> : null}
+                </label>
+                <label className="block text-sm font-bold text-slate-200">
+                  Target command
+                  <select
+                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                    onChange={(Event) => UpdateAlias(Index, { TargetCommandName: Event.target.value })}
+                    value={Alias.TargetCommandName}
+                  >
+                    <option value="">Select command</option>
+                    {Properties.AvailableCommands.map((Command) => (
+                      <option key={`${Command.PluginId}:${Command.Name}`} value={Command.Name}>
+                        /{Command.Name} - {Command.PluginName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="block text-sm font-bold text-slate-200">
+                Alias description
+                <input
+                  className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+                  maxLength={100}
+                  onChange={(Event) => UpdateAlias(Index, { Description: Event.target.value })}
+                  placeholder="Leave empty to use Alias for /target"
+                  value={Alias.Description}
+                />
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+                  <input checked={Alias.Enabled} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateAlias(Index, { Enabled: Event.target.checked })} type="checkbox" />
+                  Enabled
+                </label>
+                <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveAlias(Index)} type="button">
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function MetricCard(Properties: { Label: string; Value: string }) {
   return (
     <div className="rounded-[1.5rem] border border-slate-800 bg-slate-900 p-5 sm:p-6">
@@ -926,6 +1055,45 @@ function BuildPluginDraftValues(Plugins: AdminPlugin[]): Record<string, Record<s
   );
 }
 
+function ParseCommandAliases(Value: unknown): CommandAliasDraft[] {
+  if (!Array.isArray(Value)) {
+    return [];
+  }
+
+  return Value.filter(IsCommandAliasDraft).map((Alias) => ({
+    AliasName: Alias.AliasName,
+    TargetCommandName: Alias.TargetCommandName,
+    Description: Alias.Description,
+    Enabled: Alias.Enabled
+  }));
+}
+
+function IsCommandAliasDraft(Value: unknown): Value is CommandAliasDraft {
+  if (typeof Value !== "object" || Value === null || Array.isArray(Value)) {
+    return false;
+  }
+
+  const RecordValue = Value as Record<string, unknown>;
+  return (
+    typeof RecordValue.AliasName === "string" &&
+    typeof RecordValue.TargetCommandName === "string" &&
+    typeof RecordValue.Description === "string" &&
+    typeof RecordValue.Enabled === "boolean"
+  );
+}
+
+function GetAliasNameError(Value: string): string | null {
+  if (!Value.trim()) {
+    return "Alias name is required.";
+  }
+
+  if (!/^[a-z0-9_-]{1,32}$/u.test(Value)) {
+    return "Use 1-32 lowercase characters, numbers, underscore, or dash.";
+  }
+
+  return null;
+}
+
 function RenderPluginField(
   PluginId: string,
   Field: SettingsField & { Value: unknown },
@@ -944,7 +1112,7 @@ function RenderPluginField(
     );
   }
 
-  if (Field.Type === "Select" || Field.Type === "ChannelPicker") {
+  if (Field.Type === "Select" || Field.Type === "ChannelPicker" || Field.Type === "RolePicker") {
     return (
       <label className="block text-sm font-bold text-slate-200">
         {Field.Label}
@@ -1031,7 +1199,7 @@ function AdminListField(Properties: {
         {Properties.Value.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-3 text-sm text-slate-500">No value configured.</p> : null}
         {Properties.Value.map((ItemValue, Index) => (
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]" key={Index}>
-            {Properties.Field.ItemType === "ChannelPicker" ? (
+            {Properties.Field.ItemType === "ChannelPicker" || Properties.Field.ItemType === "RolePicker" ? (
               <select className={BaseClassName} onChange={(Event) => UpdateItem(Index, Event.target.value)} value={String(ItemValue ?? "")}>
                 <option value="">Select</option>
                 {Properties.Field.Options?.map((Option) => (

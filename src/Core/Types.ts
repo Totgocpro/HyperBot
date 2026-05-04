@@ -7,6 +7,7 @@ export enum SettingsFieldType {
   Number = "Number",
   Select = "Select",
   ChannelPicker = "ChannelPicker",
+  RolePicker = "RolePicker",
   List = "List",
   Button = "Button"
 }
@@ -47,6 +48,13 @@ export type CommandDefinition = {
   Options?: CommandOptionDefinition[];
 };
 
+export type CommandAliasDefinition = {
+  AliasName: string;
+  TargetCommandName: string;
+  Description?: string;
+  Enabled?: boolean;
+};
+
 export type SettingsField = {
   Key: string;
   Type: SettingsFieldType;
@@ -56,7 +64,7 @@ export type SettingsField = {
   Required?: boolean;
   ButtonLabel?: string;
   ActionKey?: string;
-  ItemType?: "String" | "Number" | "ChannelPicker";
+  ItemType?: "String" | "Number" | "ChannelPicker" | "RolePicker";
   ValidateAs?: "Regex";
   SupportedChannelTypes?: string[];
   RequireWritable?: boolean;
@@ -152,4 +160,11 @@ export type BotChannelSummary = {
   Name: string;
   Type: string;
   IsWritable: boolean;
+};
+
+export type BotRoleSummary = {
+  Id: string;
+  Name: string;
+  Color: number;
+  Position: number;
 };

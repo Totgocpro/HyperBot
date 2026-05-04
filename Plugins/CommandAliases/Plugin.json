@@ -1,0 +1,22 @@
+{
+  "Metadata": {
+    "Id": "CommandAliases",
+    "DisplayName": "Command Aliases",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "CA"
+  },
+  "Scope": "Global",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "Aliases",
+      "Type": "List",
+      "Label": "Command aliases",
+      "Default": [],
+      "Section": "Aliases",
+      "ItemType": "String"
+    }
+  ],
+  "EntryPoint": "./CommandAliasesPlugin.ts"
+}

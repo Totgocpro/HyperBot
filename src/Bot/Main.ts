@@ -9,7 +9,7 @@ import {
 import Path from "node:path";
 import { Prisma, RedisClient } from "../Core/Clients.js";
 import { PluginLoader } from "../Core/PluginLoader.js";
-import type { BotChannelSummary, BotGuildSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
+import type { BotChannelSummary, BotGuildSummary, BotRoleSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
 
 enum DiscordApplicationCommandOptionType {
   String = 3,
@@ -89,6 +89,7 @@ DiscordClient.once("clientReady", () => {
         await EnforceGuildAccess();
         await RedisClient.set("Bot:Heartbeat", new Date().toISOString(), "EX", 30);
         await CacheBotGuilds();
+        QueueSlashCommandRegistration();
         await Loader.DispatchTick();
         await ProcessDashboardPluginActions();
       });
@@ -141,6 +142,7 @@ DiscordClient.on("voiceStateUpdate", (OldState, NewState) => {
 DiscordClient.on("interactionCreate", (Interaction) => {
   void RunSafely("interactionCreate", async () => {
     if (!Interaction.isChatInputCommand()) {
+      await Loader.DispatchInteraction(Interaction);
       return;
     }
 
@@ -201,7 +203,7 @@ async function RegisterSlashCommands(CommandDefinitions: CommandDefinition[]): P
 
 function QueueSlashCommandRegistration(): void {
   CommandRegistrationPromise = CommandRegistrationPromise
-    .then(() => RegisterSlashCommands(Loader.GetCommandDefinitions()))
+    .then(async () => RegisterSlashCommands(await Loader.GetCommandDefinitions()))
     .catch((ErrorValue: unknown) => {
       console.error("Slash command registration failed without stopping the bot:", ErrorValue);
     });
@@ -329,6 +331,7 @@ async function CacheBotGuilds(): Promise<void> {
 
   await RedisClient.set("Bot:Guilds", JSON.stringify(Guilds), "EX", 30);
   await CacheBotChannels();
+  await CacheBotRoles();
 }
 
 async function ProcessDashboardPluginActions(): Promise<void> {
@@ -345,6 +348,22 @@ async function ProcessDashboardPluginActions(): Promise<void> {
     } catch (ErrorValue) {
       console.error("Dashboard plugin action failed:", ErrorValue);
     }
+  }
+}
+
+async function CacheBotRoles(): Promise<void> {
+  for (const Guild of DiscordClient.guilds.cache.values()) {
+    const Roles = Guild.roles.cache
+      .filter((Role) => Role.id !== Guild.id && !Role.managed)
+      .sort((FirstRole, SecondRole) => SecondRole.position - FirstRole.position)
+      .map<BotRoleSummary>((Role) => ({
+        Id: Role.id,
+        Name: Role.name,
+        Color: Role.color,
+        Position: Role.position
+      }));
+
+    await RedisClient.set(`Bot:Guild:${Guild.id}:Roles`, JSON.stringify(Roles), "EX", 30);
   }
 }
 

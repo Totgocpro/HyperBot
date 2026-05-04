@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
 import type { PluginContext, PluginLoggerContract, PluginManifest, PluginStorageContract } from "./Types.js";
 
 export abstract class BasePlugin {
@@ -47,6 +47,10 @@ export abstract class BasePlugin {
   }
 
   public async OnDashboardAction(_GuildId: string, _ActionKey: string, _ActorId: string, _Payload?: unknown): Promise<void> {
+    return;
+  }
+
+  public async OnInteraction(_Interaction: Interaction): Promise<void> {
     return;
   }
 

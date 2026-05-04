@@ -3,11 +3,11 @@ import Path from "node:path";
 import Chokidar from "chokidar";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
-import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
 import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
 import { PluginStorage } from "./Storage.js";
-import type { LoadedPlugin, PluginConstructor } from "./Types.js";
+import type { CommandAliasDefinition, CommandDefinition, LoadedPlugin, PluginConstructor } from "./Types.js";
 
 export class PluginLoader {
   private readonly PluginDirectory: string;
@@ -42,8 +42,31 @@ export class PluginLoader {
     Watcher.on("unlink", (ChangedPath) => this.ReloadFromChangedPath(ChangedPath));
   }
 
-  public GetCommandDefinitions() {
-    return Array.from(this.Plugins.values()).flatMap((LoadedPluginValue) => LoadedPluginValue.Manifest.Commands);
+  public async GetCommandDefinitions(): Promise<CommandDefinition[]> {
+    const BaseCommands = this.GetBaseCommandDefinitions();
+    const Aliases = await this.GetAliasDefinitions();
+    const BaseCommandMap = new Map(BaseCommands.map((Command) => [Command.Name, Command]));
+    const RegisteredCommandNames = new Set(BaseCommands.map((Command) => Command.Name));
+    const AliasCommands: CommandDefinition[] = [];
+
+    for (const Alias of Aliases) {
+      const AliasName = Alias.AliasName.trim().toLowerCase();
+      const TargetCommandName = Alias.TargetCommandName.trim().toLowerCase();
+      const TargetCommand = BaseCommandMap.get(TargetCommandName);
+
+      if (!Alias.Enabled || !this.IsValidSlashCommandName(AliasName) || !TargetCommand || RegisteredCommandNames.has(AliasName)) {
+        continue;
+      }
+
+      RegisteredCommandNames.add(AliasName);
+      AliasCommands.push({
+        Name: AliasName,
+        Description: Alias.Description?.trim() || `Alias for /${TargetCommandName}`,
+        Options: TargetCommand.Options
+      });
+    }
+
+    return [...BaseCommands, ...AliasCommands];
   }
 
   public async DispatchMessage(Message: Message): Promise<void> {
@@ -98,10 +121,17 @@ export class PluginLoader {
     await LoadedPluginValue.Instance.OnDashboardAction(GuildId, ActionKey, ActorId, Payload);
   }
 
+  public async DispatchInteraction(InteractionValue: Interaction): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnInteraction(InteractionValue);
+    }
+  }
+
   public async DispatchSlashCommand(Interaction: ChatInputCommandInteraction): Promise<void> {
     const CommandName = Interaction.commandName;
+    const ResolvedCommandName = await this.ResolveCommandName(CommandName);
     const LoadedPluginValue = Array.from(this.Plugins.values()).find((PluginValue) =>
-      PluginValue.Manifest.Commands.some((CommandDefinition) => CommandDefinition.Name === CommandName)
+      PluginValue.Manifest.Commands.some((CommandDefinition) => CommandDefinition.Name === ResolvedCommandName)
     );
 
     if (!LoadedPluginValue) {
@@ -109,7 +139,54 @@ export class PluginLoader {
       return;
     }
 
-    await LoadedPluginValue.Instance.OnSlashCommand(CommandName, Interaction);
+    await LoadedPluginValue.Instance.OnSlashCommand(ResolvedCommandName, Interaction);
+  }
+
+  private GetBaseCommandDefinitions(): CommandDefinition[] {
+    return Array.from(this.Plugins.values()).flatMap((LoadedPluginValue) => LoadedPluginValue.Manifest.Commands);
+  }
+
+  private async ResolveCommandName(CommandName: string): Promise<string> {
+    const BaseCommandNames = new Set(this.GetBaseCommandDefinitions().map((Command) => Command.Name));
+
+    if (BaseCommandNames.has(CommandName)) {
+      return CommandName;
+    }
+
+    const Alias = (await this.GetAliasDefinitions()).find(
+      (AliasValue) => AliasValue.Enabled && AliasValue.AliasName.trim().toLowerCase() === CommandName
+    );
+
+    return Alias?.TargetCommandName.trim().toLowerCase() ?? CommandName;
+  }
+
+  private async GetAliasDefinitions(): Promise<CommandAliasDefinition[]> {
+    const Storage = new PluginStorage(this.Prisma, this.RedisClient, "CommandAliases");
+    const Aliases = await Storage.GetGlobalConfig<unknown>("Global", "Aliases");
+
+    if (!Array.isArray(Aliases)) {
+      return [];
+    }
+
+    return Aliases.filter(this.IsCommandAliasDefinition).map((Alias) => ({
+      AliasName: Alias.AliasName,
+      TargetCommandName: Alias.TargetCommandName,
+      Description: Alias.Description,
+      Enabled: Alias.Enabled ?? true
+    }));
+  }
+
+  private IsCommandAliasDefinition(Value: unknown): Value is CommandAliasDefinition {
+    if (typeof Value !== "object" || Value === null || Array.isArray(Value)) {
+      return false;
+    }
+
+    const RecordValue = Value as Record<string, unknown>;
+    return typeof RecordValue.AliasName === "string" && typeof RecordValue.TargetCommandName === "string";
+  }
+
+  private IsValidSlashCommandName(CommandName: string): boolean {
+    return /^[a-z0-9_-]{1,32}$/u.test(CommandName);
   }
 
   private async EnablePlugin(Directory: string): Promise<void> {

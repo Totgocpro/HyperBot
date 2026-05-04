@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
 import { PluginStorage } from "@/src/Core/Storage";
-import { SettingsFieldType, PluginScope, type BotChannelSummary, type DiscordGuildSummary, type SettingsField } from "@/src/Core/Types";
+import { SettingsFieldType, PluginScope, type BotChannelSummary, type BotRoleSummary, type DiscordGuildSummary, type SettingsField } from "@/src/Core/Types";
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
@@ -117,8 +117,26 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
 }
 
 async function HydrateSettingsField(GuildId: string, Field: SettingsField): Promise<SettingsField> {
-  if (Field.Type !== SettingsFieldType.ChannelPicker && !(Field.Type === SettingsFieldType.List && Field.ItemType === "ChannelPicker")) {
+  if (
+    Field.Type !== SettingsFieldType.ChannelPicker &&
+    Field.Type !== SettingsFieldType.RolePicker &&
+    !(Field.Type === SettingsFieldType.List && (Field.ItemType === "ChannelPicker" || Field.ItemType === "RolePicker"))
+  ) {
     return Field;
+  }
+
+  if (Field.Type === SettingsFieldType.RolePicker || (Field.Type === SettingsFieldType.List && Field.ItemType === "RolePicker")) {
+    const RawRoles = await RedisClient.get(`Bot:Guild:${GuildId}:Roles`);
+    const Roles = RawRoles ? (JSON.parse(RawRoles) as BotRoleSummary[]) : [];
+
+    return {
+      ...Field,
+      Options: Roles.map((Role) => ({
+        Label: `@${Role.Name}`,
+        Value: Role.Id,
+        Description: `Position ${Role.Position}`
+      }))
+    };
   }
 
   const RawChannels = await RedisClient.get(`Bot:Guild:${GuildId}:Channels`);
