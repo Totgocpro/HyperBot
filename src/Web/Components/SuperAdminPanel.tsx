@@ -971,6 +971,18 @@ function RenderPluginField(
     );
   }
 
+  if (Field.Type === "Button") {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+        <p className="font-bold text-slate-100">{Field.Label}</p>
+        <p className="mt-1 text-xs text-slate-500">Dashboard actions are available from server plugin pages.</p>
+        <button className="mt-4 cursor-not-allowed rounded-2xl border border-slate-700 px-5 py-3 text-sm font-bold text-slate-500" disabled type="button">
+          {Field.ButtonLabel ?? Field.Label}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <label className="block text-sm font-bold text-slate-200">
       {Field.Label}

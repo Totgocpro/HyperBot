@@ -45,6 +45,7 @@
       "Type": "ChannelPicker",
       "Label": "Moderation log channel",
       "Default": "",
+      "Section": "Log channel",
       "Required": true,
       "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildForum", "GuildVoice"],
       "RequireWritable": true
@@ -53,43 +54,50 @@
       "Key": "WarnMessage",
       "Type": "String",
       "Label": "Warn confirmation message",
-      "Default": "%user% has been warned by %moderator%: %reason%"
+      "Default": "%user% has been warned by %moderator%: %reason%",
+      "Section": "Sanctions"
     },
     {
       "Key": "LogMessage",
       "Type": "String",
       "Label": "Sanction log message",
-      "Default": "%type% applied to %user% by %moderator%: %reason%"
+      "Default": "%type% applied to %user% by %moderator%: %reason%",
+      "Section": "Sanctions"
     },
     {
       "Key": "DeletedMessageLog",
       "Type": "String",
       "Label": "Deleted message log",
-      "Default": "Message deleted in %channel% from %user%: %content%"
+      "Default": "Message deleted in %channel% from %user%: %content%",
+      "Section": "Message logs"
     },
     {
       "Key": "EditedMessageLog",
       "Type": "String",
       "Label": "Edited message log",
-      "Default": "Message edited in %channel% from %user%: before `%old%` after `%new%`"
+      "Default": "Message edited in %channel% from %user%: before `%old%` after `%new%`",
+      "Section": "Message logs"
     },
     {
       "Key": "MemberJoinLog",
       "Type": "String",
       "Label": "Member join log",
-      "Default": "%user% joined the server."
+      "Default": "%user% joined the server.",
+      "Section": "Member logs"
     },
     {
       "Key": "MemberLeaveLog",
       "Type": "String",
       "Label": "Member leave log",
-      "Default": "%user% left the server."
+      "Default": "%user% left the server.",
+      "Section": "Member logs"
     },
     {
       "Key": "AutoModEnabled",
       "Type": "Boolean",
       "Label": "Enable AutoMod regex rules",
-      "Default": false
+      "Default": false,
+      "Section": "Regex AutoMod"
     },
     {
       "Key": "AutoModRegexPatterns",
@@ -97,13 +105,15 @@
       "ItemType": "String",
       "ValidateAs": "Regex",
       "Label": "AutoMod regex patterns",
-      "Default": []
+      "Default": [],
+      "Section": "Regex AutoMod"
     },
     {
       "Key": "AutoModAction",
       "Type": "Select",
       "Label": "AutoMod action",
       "Default": "DeleteAndWarn",
+      "Section": "Regex AutoMod",
       "Options": [
         {
           "Label": "Delete message",
@@ -123,37 +133,43 @@
       "Key": "AutoModReason",
       "Type": "String",
       "Label": "AutoMod warn reason",
-      "Default": "Message matched AutoMod rule: %pattern%"
+      "Default": "Message matched AutoMod rule: %pattern%",
+      "Section": "Regex AutoMod"
     },
     {
       "Key": "AutoModLogMessage",
       "Type": "String",
       "Label": "AutoMod log message",
-      "Default": "AutoMod matched %user% in %channel% with `%pattern%`: %content%"
+      "Default": "AutoMod matched %user% in %channel% with `%pattern%`: %content%",
+      "Section": "Regex AutoMod"
     },
     {
       "Key": "RepeatedSpamEnabled",
       "Type": "Boolean",
       "Label": "Detect repeated message spam",
-      "Default": false
+      "Default": false,
+      "Section": "Repeated spam"
     },
     {
       "Key": "RepeatedSpamWindowSeconds",
       "Type": "Number",
       "Label": "Repeated spam window seconds",
-      "Default": 10
+      "Default": 10,
+      "Section": "Repeated spam"
     },
     {
       "Key": "RepeatedSpamThreshold",
       "Type": "Number",
       "Label": "Repeated spam threshold",
-      "Default": 3
+      "Default": 3,
+      "Section": "Repeated spam"
     },
     {
       "Key": "RepeatedSpamAction",
       "Type": "Select",
       "Label": "Repeated spam action",
       "Default": "DeleteAndWarn",
+      "Section": "Repeated spam",
       "Options": [
         {
           "Label": "Delete message",
@@ -173,20 +189,23 @@
       "Key": "InviteBlockEnabled",
       "Type": "Boolean",
       "Label": "Block invites to other servers",
-      "Default": false
+      "Default": false,
+      "Section": "Invite blocking"
     },
     {
       "Key": "AllowedInviteCodes",
       "Type": "List",
       "ItemType": "String",
       "Label": "Allowed invite codes",
-      "Default": []
+      "Default": [],
+      "Section": "Invite blocking"
     },
     {
       "Key": "InviteBlockAction",
       "Type": "Select",
       "Label": "Invite block action",
       "Default": "DeleteAndWarn",
+      "Section": "Invite blocking",
       "Options": [
         {
           "Label": "Delete message",
@@ -206,13 +225,15 @@
       "Key": "InviteBlockReason",
       "Type": "String",
       "Label": "Invite block warn reason",
-      "Default": "Invite links to other servers are not allowed: %invite%"
+      "Default": "Invite links to other servers are not allowed: %invite%",
+      "Section": "Invite blocking"
     },
     {
       "Key": "InviteBlockLogMessage",
       "Type": "String",
       "Label": "Invite block log message",
-      "Default": "Blocked invite from %user% in %channel%: %invite%"
+      "Default": "Blocked invite from %user% in %channel%: %invite%",
+      "Section": "Invite blocking"
     }
   ],
   "EntryPoint": "./ModerationPlugin.ts"

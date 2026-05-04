@@ -25,6 +25,7 @@ const DiscordGatewayIntentBits = {
   GuildMessages: 512,
   GuildModeration: 4,
   GuildMembers: 2,
+  GuildVoiceStates: 128,
   MessageContent: 32768
 } as const;
 
@@ -43,6 +44,14 @@ type DiscordApplicationCommandOptionBody = {
     name: string;
     value: string | number;
   }>;
+};
+
+type DashboardPluginAction = {
+  GuildId: string;
+  PluginId: string;
+  ActionKey: string;
+  ActorId: string;
+  CreatedAt: string;
 };
 
 const DiscordToken = process.env.DISCORD_TOKEN;
@@ -80,6 +89,7 @@ DiscordClient.once("clientReady", () => {
         await RedisClient.set("Bot:Heartbeat", new Date().toISOString(), "EX", 30);
         await CacheBotGuilds();
         await Loader.DispatchTick();
+        await ProcessDashboardPluginActions();
       });
     }, 10_000);
 
@@ -118,6 +128,12 @@ DiscordClient.on("guildMemberAdd", (Member) => {
 DiscordClient.on("guildMemberRemove", (Member) => {
   void RunSafely("guildMemberRemove", async () => {
     await Loader.DispatchGuildMemberRemove(Member);
+  });
+});
+
+DiscordClient.on("voiceStateUpdate", (OldState, NewState) => {
+  void RunSafely("voiceStateUpdate", async () => {
+    await Loader.DispatchVoiceStateUpdate(OldState, NewState);
   });
 });
 
@@ -314,6 +330,23 @@ async function CacheBotGuilds(): Promise<void> {
   await CacheBotChannels();
 }
 
+async function ProcessDashboardPluginActions(): Promise<void> {
+  for (let Index = 0; Index < 25; Index += 1) {
+    const RawAction = await RedisClient.rpop("Dashboard:PluginActions");
+
+    if (!RawAction) {
+      return;
+    }
+
+    try {
+      const Action = JSON.parse(RawAction) as DashboardPluginAction;
+      await Loader.DispatchDashboardAction(Action.PluginId, Action.GuildId, Action.ActionKey, Action.ActorId);
+    } catch (ErrorValue) {
+      console.error("Dashboard plugin action failed:", ErrorValue);
+    }
+  }
+}
+
 async function CacheBotChannels(): Promise<void> {
   for (const Guild of DiscordClient.guilds.cache.values()) {
     const Channels = Guild.channels.cache
@@ -350,7 +383,8 @@ function BuildGatewayIntents(): number[] {
     DiscordGatewayIntentBits.Guilds,
     DiscordGatewayIntentBits.GuildMessages,
     DiscordGatewayIntentBits.GuildModeration,
-    DiscordGatewayIntentBits.GuildMembers
+    DiscordGatewayIntentBits.GuildMembers,
+    DiscordGatewayIntentBits.GuildVoiceStates
   ];
 
   if (EnableMessageEvents) {

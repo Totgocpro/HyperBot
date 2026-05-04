@@ -1,0 +1,50 @@
+{
+  "Metadata": {
+    "Id": "Statistics",
+    "DisplayName": "Statistics",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "Stats"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "TrackBots",
+      "Type": "Boolean",
+      "Label": "Include bot accounts in statistics",
+      "Default": false
+    }
+  ],
+  "DashboardElements": [
+    {
+      "Key": "MessagesChart",
+      "Type": "BarChart",
+      "Label": "Messages sent",
+      "DataSourceKey": "MessagesDaily",
+      "Unit": "messages"
+    },
+    {
+      "Key": "VoiceTimeChart",
+      "Type": "LineChart",
+      "Label": "Voice time",
+      "DataSourceKey": "VoiceSecondsDaily",
+      "Unit": "seconds"
+    },
+    {
+      "Key": "JoinsChart",
+      "Type": "BarChart",
+      "Label": "Members joined",
+      "DataSourceKey": "JoinsDaily",
+      "Unit": "joins"
+    },
+    {
+      "Key": "LeavesChart",
+      "Type": "BarChart",
+      "Label": "Members left",
+      "DataSourceKey": "LeavesDaily",
+      "Unit": "leaves"
+    }
+  ],
+  "EntryPoint": "./StatisticsPlugin.ts"
+}

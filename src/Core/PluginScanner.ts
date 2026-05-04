@@ -1,14 +1,17 @@
 import { promises as FileSystem } from "node:fs";
 import Path from "node:path";
 import { z } from "zod";
-import { PluginScope, SettingsFieldType, type PluginManifest } from "./Types.js";
+import { DashboardElementType, PluginScope, SettingsFieldType, type PluginManifest } from "./Types.js";
 
 const SettingsFieldSchema = z.object({
   Key: z.string().min(1),
   Type: z.nativeEnum(SettingsFieldType),
   Label: z.string().min(1),
   Default: z.union([z.string(), z.number(), z.boolean(), z.array(z.unknown()), z.null()]),
+  Section: z.string().min(1).optional(),
   Required: z.boolean().optional(),
+  ButtonLabel: z.string().min(1).optional(),
+  ActionKey: z.string().min(1).optional(),
   ItemType: z.enum(["String", "Number", "ChannelPicker"]).optional(),
   ValidateAs: z.enum(["Regex"]).optional(),
   SupportedChannelTypes: z.array(z.string()).optional(),
@@ -59,6 +62,17 @@ const PluginManifestSchema = z.object({
     })
   ),
   WebInterface: z.array(SettingsFieldSchema),
+  DashboardElements: z
+    .array(
+      z.object({
+        Key: z.string().min(1),
+        Type: z.nativeEnum(DashboardElementType),
+        Label: z.string().min(1),
+        DataSourceKey: z.string().min(1),
+        Unit: z.string().optional()
+      })
+    )
+    .optional(),
   EntryPoint: z.string().min(1)
 });
 

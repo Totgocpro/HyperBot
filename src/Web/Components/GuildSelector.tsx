@@ -78,7 +78,7 @@ export function GuildSelector() {
         <div className="mt-6 rounded-3xl border border-dashed border-slate-700 bg-slate-950 p-5 sm:p-8">
           <h3 className="text-lg font-black text-white">No server detected</h3>
           <p className="mt-2 text-sm text-slate-400">
-            If the bot is already on your server, restart `./Dev.sh`, wait for the bot connection log, then refresh.
+            You can add me to any server with the invite button right up.
           </p>
           <p className="mt-3 text-sm text-slate-400">
             Slash commands require the invite to include `applications.commands`.

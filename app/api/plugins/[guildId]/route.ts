@@ -53,7 +53,13 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
       return {
         Metadata: ManifestEntry.Manifest.Metadata,
         Commands: ManifestEntry.Manifest.Commands,
-        WebInterface: Fields
+        WebInterface: Fields,
+        DashboardElements: await Promise.all(
+          (ManifestEntry.Manifest.DashboardElements ?? []).map(async (Element) => ({
+            ...Element,
+            Value: (await Storage.GetGlobalConfig(GuildId, Element.DataSourceKey)) ?? {}
+          }))
+        )
       };
     })
   );
@@ -88,15 +94,22 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
     return new Response("Plugin not found.", { status: 404 });
   }
 
-  for (const Field of ManifestEntry.Manifest.WebInterface) {
+  for (const Field of ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button)) {
     if (Field.Required && !Body.Values[Field.Key]) {
       return new Response(`${Field.Label} is required.`, { status: 400 });
     }
   }
 
   const Storage = new PluginStorage(Prisma, RedisClient, Body.PluginId);
+  const PersistableKeys = new Set(
+    ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button).map((Field) => Field.Key)
+  );
 
   for (const [Key, Value] of Object.entries(Body.Values)) {
+    if (!PersistableKeys.has(Key)) {
+      continue;
+    }
+
     await Storage.SetGlobalConfig(GuildId, Key, Value);
   }
 

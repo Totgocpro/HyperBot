@@ -3,7 +3,7 @@ import Path from "node:path";
 import Chokidar from "chokidar";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
-import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
 import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
 import { PluginStorage } from "./Storage.js";
@@ -76,10 +76,26 @@ export class PluginLoader {
     }
   }
 
+  public async DispatchVoiceStateUpdate(OldState: VoiceState, NewState: VoiceState): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnVoiceStateUpdate(OldState, NewState);
+    }
+  }
+
   public async DispatchTick(): Promise<void> {
     for (const LoadedPluginValue of this.Plugins.values()) {
       await LoadedPluginValue.Instance.OnTick();
     }
+  }
+
+  public async DispatchDashboardAction(PluginId: string, GuildId: string, ActionKey: string, ActorId: string): Promise<void> {
+    const LoadedPluginValue = this.Plugins.get(PluginId);
+
+    if (!LoadedPluginValue) {
+      return;
+    }
+
+    await LoadedPluginValue.Instance.OnDashboardAction(GuildId, ActionKey, ActorId);
   }
 
   public async DispatchSlashCommand(Interaction: ChatInputCommandInteraction): Promise<void> {

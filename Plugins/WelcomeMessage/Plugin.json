@@ -1,0 +1,210 @@
+{
+  "Metadata": {
+    "Id": "WelcomeMessage",
+    "DisplayName": "Welcome Message",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "WM"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "WelcomeEnabled",
+      "Type": "Boolean",
+      "Label": "Enable welcome messages",
+      "Default": true,
+      "Section": "Welcome"
+    },
+    {
+      "Key": "WelcomeChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Welcome channel",
+      "Default": "",
+      "Section": "Welcome",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "WelcomeMode",
+      "Type": "Select",
+      "Label": "Welcome mode",
+      "Default": "Embed",
+      "Section": "Welcome",
+      "Options": [
+        {
+          "Label": "Embed",
+          "Value": "Embed"
+        },
+        {
+          "Label": "Image",
+          "Value": "Image"
+        }
+      ]
+    },
+    {
+      "Key": "WelcomeTitle",
+      "Type": "String",
+      "Label": "Welcome title",
+      "Default": "Welcome %user%",
+      "Section": "Welcome content"
+    },
+    {
+      "Key": "WelcomeMessage",
+      "Type": "String",
+      "Label": "Welcome message",
+      "Default": "You are member #%memberCount% on %server%.",
+      "Section": "Welcome content"
+    },
+    {
+      "Key": "WelcomeColor",
+      "Type": "String",
+      "Label": "Welcome color",
+      "Default": "#2563eb",
+      "Section": "Welcome design"
+    },
+    {
+      "Key": "WelcomeEmbedAuthor",
+      "Type": "Boolean",
+      "Label": "Show member as embed author",
+      "Default": true,
+      "Section": "Welcome design"
+    },
+    {
+      "Key": "LeaveEnabled",
+      "Type": "Boolean",
+      "Label": "Enable leave messages",
+      "Default": true,
+      "Section": "Leave"
+    },
+    {
+      "Key": "LeaveChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Leave channel",
+      "Default": "",
+      "Section": "Leave",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "LeaveMode",
+      "Type": "Select",
+      "Label": "Leave mode",
+      "Default": "Embed",
+      "Section": "Leave",
+      "Options": [
+        {
+          "Label": "Embed",
+          "Value": "Embed"
+        },
+        {
+          "Label": "Image",
+          "Value": "Image"
+        }
+      ]
+    },
+    {
+      "Key": "LeaveTitle",
+      "Type": "String",
+      "Label": "Leave title",
+      "Default": "%user% left the server",
+      "Section": "Leave content"
+    },
+    {
+      "Key": "LeaveMessage",
+      "Type": "String",
+      "Label": "Leave message",
+      "Default": "Goodbye from %server%.",
+      "Section": "Leave content"
+    },
+    {
+      "Key": "LeaveColor",
+      "Type": "String",
+      "Label": "Leave color",
+      "Default": "#ef4444",
+      "Section": "Leave design"
+    },
+    {
+      "Key": "LeaveEmbedAuthor",
+      "Type": "Boolean",
+      "Label": "Show member as embed author",
+      "Default": true,
+      "Section": "Leave design"
+    },
+    {
+      "Key": "ImageBackground",
+      "Type": "String",
+      "Label": "Image background",
+      "Default": "#020617",
+      "Section": "Image design"
+    },
+    {
+      "Key": "ImageAccent",
+      "Type": "String",
+      "Label": "Image accent",
+      "Default": "#38bdf8",
+      "Section": "Image design"
+    },
+    {
+      "Key": "ImageTextColor",
+      "Type": "String",
+      "Label": "Image text color",
+      "Default": "#f8fafc",
+      "Section": "Image design"
+    },
+    {
+      "Key": "ImageMutedTextColor",
+      "Type": "String",
+      "Label": "Image muted text color",
+      "Default": "#cbd5e1",
+      "Section": "Image design"
+    },
+    {
+      "Key": "ImageFooter",
+      "Type": "String",
+      "Label": "Image footer",
+      "Default": "%server% • %memberCount% members",
+      "Section": "Image design"
+    },
+    {
+      "Key": "ImageBadgeText",
+      "Type": "String",
+      "Label": "Image badge text",
+      "Default": "%type%",
+      "Section": "Image design"
+    },
+    {
+      "Key": "ImageShowInitialsAvatar",
+      "Type": "Boolean",
+      "Label": "Show initials avatar",
+      "Default": true,
+      "Section": "Image design"
+    },
+    {
+      "Key": "PingUser",
+      "Type": "Boolean",
+      "Label": "Mention user in message content",
+      "Default": false,
+      "Section": "Behavior"
+    },
+    {
+      "Key": "TestWelcomeButton",
+      "Type": "Button",
+      "Label": "Send a test welcome message",
+      "Default": null,
+      "Section": "Test actions",
+      "ButtonLabel": "Send welcome test",
+      "ActionKey": "TestWelcome"
+    },
+    {
+      "Key": "TestLeaveButton",
+      "Type": "Button",
+      "Label": "Send a test leave message",
+      "Default": null,
+      "Section": "Test actions",
+      "ButtonLabel": "Send leave test",
+      "ActionKey": "TestLeave"
+    }
+  ],
+  "EntryPoint": "./WelcomeMessagePlugin.ts"
+}

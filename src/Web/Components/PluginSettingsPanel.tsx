@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect as UseEffect, useState as UseState } from "react";
-import type { BotGuildSummary, SettingsField } from "../../Core/Types";
+import type { BotGuildSummary, DashboardElement, SettingsField } from "../../Core/Types";
 
 type DashboardPlugin = {
   Metadata: {
@@ -17,10 +17,17 @@ type DashboardPlugin = {
     Description: string;
   }>;
   WebInterface: Array<SettingsField & { Value: unknown }>;
+  DashboardElements?: Array<DashboardElement & { Value: unknown }>;
 };
 
 type PluginSettingsPanelProperties = {
   GuildId: string;
+};
+
+type PluginConfigSection = {
+  Id: string;
+  Label: string;
+  Fields: Array<SettingsField & { Value: unknown }>;
 };
 
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
@@ -28,14 +35,23 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
   const [SelectedPluginId, SetSelectedPluginId] = UseState("");
   const [PluginMenuOpen, SetPluginMenuOpen] = UseState(false);
+  const [SectionMenuOpen, SetSectionMenuOpen] = UseState(true);
   const [DraftValues, SetDraftValues] = UseState<Record<string, Record<string, unknown>>>({});
   const [Status, SetStatus] = UseState("Loading plugins...");
 
   const SelectedPlugin = Plugins.find((Plugin) => Plugin.Metadata.Id === SelectedPluginId) ?? Plugins[0];
+  const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin) : [];
+  const HasDashboardOverview = Boolean(SelectedPlugin?.DashboardElements?.length);
 
   UseEffect(() => {
     void LoadPlugins();
     void LoadGuild();
+
+    const RefreshInterval = window.setInterval(() => {
+      void LoadPlugins(true);
+    }, 5_000);
+
+    return () => window.clearInterval(RefreshInterval);
   }, [Properties.GuildId]);
 
   async function LoadGuild(): Promise<void> {
@@ -49,7 +65,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     SetGuild(Payload.Guilds.find((GuildValue) => GuildValue.Id === Properties.GuildId) ?? null);
   }
 
-  async function LoadPlugins(): Promise<void> {
+  async function LoadPlugins(PreserveDraftValues = false): Promise<void> {
     const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
       headers: BuildGuildHeaders()
     });
@@ -61,8 +77,12 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
 
     const Payload = (await Response.json()) as { Plugins: DashboardPlugin[] };
     SetPlugins(Payload.Plugins);
-    SetSelectedPluginId(Payload.Plugins[0]?.Metadata.Id ?? "");
-    SetDraftValues(BuildDraftValues(Payload.Plugins));
+    SetSelectedPluginId((PreviousPluginId) => PreviousPluginId || Payload.Plugins[0]?.Metadata.Id || "");
+
+    if (!PreserveDraftValues) {
+      SetDraftValues(BuildDraftValues(Payload.Plugins));
+    }
+
     SetStatus(`${Payload.Plugins.length} plugin(s) available.`);
   }
 
@@ -82,7 +102,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
       },
       body: JSON.stringify({
         PluginId: Plugin.Metadata.Id,
-        Values: DraftValues[Plugin.Metadata.Id] ?? {}
+        Values: BuildPersistablePluginValues(Plugin, DraftValues[Plugin.Metadata.Id] ?? {})
       })
     });
 
@@ -145,6 +165,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   onClick={() => {
                     SetSelectedPluginId(Plugin.Metadata.Id);
                     SetPluginMenuOpen(false);
+                    SetSectionMenuOpen(true);
                   }}
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
@@ -159,6 +180,34 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                 </button>
               ))}
             </div>
+
+            {SelectedPlugin ? (
+              <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-950 p-3">
+                <button
+                  className="flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-xs font-black uppercase tracking-wide text-slate-500 hover:bg-slate-900"
+                  onClick={() => SetSectionMenuOpen(!SectionMenuOpen)}
+                >
+                  Sections
+                  <span className={`text-slate-300 transition-transform duration-200 ${SectionMenuOpen ? "rotate-180" : ""}`}>⌄</span>
+                </button>
+                <div className={`grid overflow-hidden transition-all duration-300 ${SectionMenuOpen ? "mt-2 max-h-96 opacity-100" : "max-h-0 opacity-0"}`}>
+                  {HasDashboardOverview ? (
+                    <button className="rounded-2xl px-3 py-2 text-left text-sm font-semibold text-slate-300 hover:bg-slate-900 hover:text-white" onClick={() => ScrollToPluginSection("plugin-section-overview")}>
+                      Overview
+                    </button>
+                  ) : null}
+                  {ConfigSections.map((Section) => (
+                    <button
+                      className="rounded-2xl px-3 py-2 text-left text-sm font-semibold text-slate-300 hover:bg-slate-900 hover:text-white"
+                      key={Section.Id}
+                      onClick={() => ScrollToPluginSection(`plugin-section-${Section.Id}`)}
+                    >
+                      {Section.Label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </aside>
 
           <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
@@ -178,9 +227,32 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   </button>
                 </div>
 
-                <div className="mt-6 grid gap-4">
-                  {SelectedPlugin.WebInterface.map((Field) => (
-                    <div key={Field.Key}>{RenderField(SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue)}</div>
+                <div className="mt-6 grid gap-5">
+                  {SelectedPlugin.DashboardElements?.length ? (
+                    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-overview">
+                      <div className="mb-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Overview</p>
+                        <h3 className="mt-2 text-2xl font-black text-white">Plugin dashboard</h3>
+                      </div>
+                      <div className="grid gap-4">
+                        {SelectedPlugin.DashboardElements.map((Element) => (
+                          <DashboardElementRenderer Element={Element} key={Element.Key} />
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+                  {ConfigSections.map((Section) => (
+                    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id={`plugin-section-${Section.Id}`} key={Section.Id}>
+                      <div className="mb-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Configuration</p>
+                        <h3 className="mt-2 text-2xl font-black text-white">{Section.Label}</h3>
+                      </div>
+                      <div className="grid gap-4">
+                        {Section.Fields.map((Field) => (
+                          <div key={Field.Key}>{RenderField(Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus)}</div>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               </>
@@ -194,6 +266,198 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
       </div>
     </main>
   );
+}
+
+function DashboardElementRenderer(Properties: { Element: DashboardElement & { Value: unknown } }) {
+  const [SelectedMonth, SetSelectedMonth] = UseState(BuildCurrentMonth());
+  const Series = BuildMonthlySeries(Properties.Element.Value, SelectedMonth);
+  const Total = Series.reduce((TotalValue, Point) => TotalValue + Point.Value, 0);
+  const Average = Series.length > 0 ? Total / Series.length : 0;
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-xl font-black text-white">{Properties.Element.Label}</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Total: {FormatChartValue(Total, Properties.Element.Unit)} | Average/day: {FormatChartValue(Average, Properties.Element.Unit)}
+          </p>
+        </div>
+        <input
+          className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+          onChange={(Event) => SetSelectedMonth(Event.target.value)}
+          type="month"
+          value={SelectedMonth}
+        />
+      </div>
+      {Properties.Element.Type === "MetricGrid" ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <MetricTile Label="Total" Value={FormatChartValue(Total, Properties.Element.Unit)} />
+          <MetricTile Label="Average/day" Value={FormatChartValue(Average, Properties.Element.Unit)} />
+          <MetricTile Label="Active days" Value={String(Series.filter((Point) => Point.Value > 0).length)} />
+        </div>
+      ) : (
+        <ChartSvg Series={Series} Type={Properties.Element.Type} Unit={Properties.Element.Unit} />
+      )}
+    </section>
+  );
+}
+
+function ChartSvg(Properties: { Series: Array<{ Label: string; Value: number }>; Type: DashboardElement["Type"]; Unit?: string }) {
+  const [HoveredIndex, SetHoveredIndex] = UseState<number | null>(null);
+  const MaxValue = Math.max(...Properties.Series.map((Point) => Point.Value), 1);
+  const Width = 820;
+  const Height = 280;
+  const Padding = 36;
+  const InnerWidth = Width - Padding * 2;
+  const InnerHeight = Height - Padding * 2;
+
+  if (Properties.Series.length === 0) {
+    return <p className="mt-4 rounded-2xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">No data for this period.</p>;
+  }
+
+  const Points = Properties.Series.map((Point, Index) => {
+    const X = Padding + (Properties.Series.length === 1 ? InnerWidth / 2 : (Index / (Properties.Series.length - 1)) * InnerWidth);
+    const Y = Padding + InnerHeight - (Point.Value / MaxValue) * InnerHeight;
+    return { ...Point, X, Y };
+  });
+  const Polyline = Points.map((Point) => `${Point.X},${Point.Y}`).join(" ");
+  const BarWidth = Math.max(4, InnerWidth / Properties.Series.length - 3);
+  const HoveredPoint = HoveredIndex === null ? null : Points[HoveredIndex] ?? null;
+  const TooltipWidth = 152;
+  const TooltipX = HoveredPoint ? Math.min(Math.max(HoveredPoint.X - TooltipWidth / 2, 10), Width - TooltipWidth - 10) : 0;
+  const TooltipY = HoveredPoint ? Math.max(HoveredPoint.Y - 72, 10) : 0;
+
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <svg className="min-w-[720px]" height={Height} onMouseLeave={() => SetHoveredIndex(null)} viewBox={`0 0 ${Width} ${Height}`} width="100%">
+        <defs>
+          <linearGradient id="HyperBotChartArea" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgb(59 130 246)" stopOpacity="0.38" />
+            <stop offset="100%" stopColor="rgb(59 130 246)" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="HyperBotChartBar" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="rgb(96 165 250)" />
+            <stop offset="100%" stopColor="rgb(37 99 235)" />
+          </linearGradient>
+        </defs>
+        <rect fill="rgb(15 23 42)" height={Height} rx="20" width={Width} />
+        {[0, 0.25, 0.5, 0.75, 1].map((Step) => (
+          <g key={Step}>
+            <line stroke="rgb(51 65 85)" strokeDasharray="4 6" x1={Padding} x2={Width - Padding} y1={Padding + InnerHeight * Step} y2={Padding + InnerHeight * Step} />
+            <text fill="rgb(100 116 139)" fontSize="10" textAnchor="end" x={Padding - 8} y={Padding + InnerHeight * Step + 4}>
+              {FormatChartValue(MaxValue * (1 - Step), Properties.Unit)}
+            </text>
+          </g>
+        ))}
+        {Properties.Type === "LineChart" ? (
+          <>
+            <polygon fill="url(#HyperBotChartArea)" points={`${Padding},${Height - Padding} ${Polyline} ${Width - Padding},${Height - Padding}`} />
+            <polyline fill="none" points={Polyline} stroke="rgb(96 165 250)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+          </>
+        ) : null}
+        {Points.map((Point) =>
+          Properties.Type === "BarChart" ? (
+            <rect
+              fill={HoveredPoint?.Label === Point.Label ? "rgb(147 197 253)" : "url(#HyperBotChartBar)"}
+              height={Height - Padding - Point.Y}
+              key={Point.Label}
+              onMouseEnter={() => SetHoveredIndex(Points.indexOf(Point))}
+              rx="5"
+              width={BarWidth}
+              x={Point.X - BarWidth / 2}
+              y={Point.Y}
+            />
+          ) : (
+            <circle
+              cx={Point.X}
+              cy={Point.Y}
+              fill={HoveredPoint?.Label === Point.Label ? "rgb(255 255 255)" : "rgb(147 197 253)"}
+              key={Point.Label}
+              onMouseEnter={() => SetHoveredIndex(Points.indexOf(Point))}
+              r={HoveredPoint?.Label === Point.Label ? "6" : "4"}
+              stroke="rgb(37 99 235)"
+              strokeWidth="2"
+            />
+          )
+        )}
+        {Points.map((Point, Index) => (
+          <rect
+            fill="transparent"
+            height={InnerHeight}
+            key={`hit-${Point.Label}`}
+            onMouseEnter={() => SetHoveredIndex(Index)}
+            width={Math.max(8, InnerWidth / Properties.Series.length)}
+            x={Point.X - Math.max(8, InnerWidth / Properties.Series.length) / 2}
+            y={Padding}
+          />
+        ))}
+        {Points.filter((_, Index) => Index % Math.ceil(Points.length / 8) === 0).map((Point) => (
+          <text fill="rgb(148 163 184)" fontSize="10" key={Point.Label} textAnchor="middle" x={Point.X} y={Height - 8}>
+            {Point.Label.slice(5)}
+          </text>
+        ))}
+        <text fill="rgb(203 213 225)" fontSize="12" x={Padding} y="18">
+          Max: {FormatChartValue(MaxValue, Properties.Unit)}
+        </text>
+        {HoveredPoint ? (
+          <g pointerEvents="none">
+            <line stroke="rgb(191 219 254)" strokeDasharray="3 5" x1={HoveredPoint.X} x2={HoveredPoint.X} y1={Padding} y2={Height - Padding} />
+            <rect fill="rgb(2 6 23)" height="54" opacity="0.96" rx="12" stroke="rgb(59 130 246)" width={TooltipWidth} x={TooltipX} y={TooltipY} />
+            <text fill="rgb(226 232 240)" fontSize="12" fontWeight="700" x={TooltipX + 12} y={TooltipY + 22}>
+              {HoveredPoint.Label}
+            </text>
+            <text fill="rgb(147 197 253)" fontSize="12" x={TooltipX + 12} y={TooltipY + 40}>
+              {FormatChartValue(HoveredPoint.Value, Properties.Unit)}
+            </text>
+          </g>
+        ) : null}
+      </svg>
+    </div>
+  );
+}
+
+function MetricTile(Properties: { Label: string; Value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{Properties.Label}</p>
+      <p className="mt-2 text-2xl font-black text-white">{Properties.Value}</p>
+    </div>
+  );
+}
+
+function BuildMonthlySeries(Value: unknown, Month: string): Array<{ Label: string; Value: number }> {
+  const Data = IsRecord(Value) ? Value : {};
+  const DaysInMonth = new Date(Number(Month.slice(0, 4)), Number(Month.slice(5, 7)), 0).getDate();
+
+  return Array.from({ length: DaysInMonth }, (_, Index) => {
+    const Day = String(Index + 1).padStart(2, "0");
+    const Label = `${Month}-${Day}`;
+    const RawValue = Data[Label];
+
+    return {
+      Label,
+      Value: typeof RawValue === "number" ? RawValue : 0
+    };
+  });
+}
+
+function BuildCurrentMonth(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function IsRecord(Value: unknown): Value is Record<string, unknown> {
+  return typeof Value === "object" && Value !== null && !Array.isArray(Value);
+}
+
+function FormatChartValue(Value: number, Unit?: string): string {
+  if (Unit === "seconds") {
+    const Hours = Math.floor(Value / 3600);
+    const Minutes = Math.floor((Value % 3600) / 60);
+    return `${Hours}h ${Minutes}m`;
+  }
+
+  return `${Math.round(Value * 10) / 10}${Unit ? ` ${Unit}` : ""}`;
 }
 
 function PluginHamburgerIcon() {
@@ -210,6 +474,40 @@ function BuildGuildHeaders(): HeadersInit {
   return {};
 }
 
+function BuildConfigSections(Plugin: DashboardPlugin): PluginConfigSection[] {
+  const Sections = new Map<string, PluginConfigSection>();
+
+  for (const Field of Plugin.WebInterface) {
+    const Label = Field.Section ?? "General";
+    const Id = BuildSectionId(Label);
+    const ExistingSection = Sections.get(Id);
+
+    if (ExistingSection) {
+      ExistingSection.Fields.push(Field);
+      continue;
+    }
+
+    Sections.set(Id, {
+      Id,
+      Label,
+      Fields: [Field]
+    });
+  }
+
+  return Array.from(Sections.values());
+}
+
+function BuildSectionId(Label: string): string {
+  return Label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "general";
+}
+
+function ScrollToPluginSection(SectionId: string): void {
+  document.getElementById(SectionId)?.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
 function BuildDraftValues(Plugins: DashboardPlugin[]): Record<string, Record<string, unknown>> {
   return Object.fromEntries(
     Plugins.map((Plugin) => [
@@ -219,11 +517,19 @@ function BuildDraftValues(Plugins: DashboardPlugin[]): Record<string, Record<str
   );
 }
 
+function BuildPersistablePluginValues(Plugin: DashboardPlugin, Values: Record<string, unknown>): Record<string, unknown> {
+  const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button").map((Field) => Field.Key));
+
+  return Object.fromEntries(Object.entries(Values).filter(([Key]) => PersistableKeys.has(Key)));
+}
+
 function RenderField(
+  GuildId: string,
   PluginId: string,
   Field: SettingsField & { Value: unknown },
   DraftValues: Record<string, Record<string, unknown>>,
-  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void,
+  SetStatus: (Status: string) => void
 ) {
   const Value = DraftValues[PluginId]?.[Field.Key] ?? Field.Default;
   const BaseClassName = "mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
@@ -265,6 +571,10 @@ function RenderField(
     );
   }
 
+  if (Field.Type === "Button") {
+    return <ActionButton Field={Field} GuildId={GuildId} PluginId={PluginId} SetStatus={SetStatus} />;
+  }
+
   return (
     <label className="block text-sm font-bold text-slate-200">
       {Field.Label}
@@ -275,6 +585,53 @@ function RenderField(
         value={String(Value ?? "")}
       />
     </label>
+  );
+}
+
+function ActionButton(Properties: {
+  Field: SettingsField & { Value: unknown };
+  GuildId: string;
+  PluginId: string;
+  SetStatus: (Status: string) => void;
+}) {
+  const [IsSending, SetIsSending] = UseState(false);
+
+  async function SendAction(): Promise<void> {
+    SetIsSending(true);
+    Properties.SetStatus(`Sending ${Properties.Field.Label}...`);
+
+    try {
+      const Response = await fetch(`/api/plugins/${Properties.GuildId}/actions`, {
+        method: "POST",
+        headers: {
+          ...BuildGuildHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          PluginId: Properties.PluginId,
+          ActionKey: Properties.Field.ActionKey ?? Properties.Field.Key
+        })
+      });
+
+      Properties.SetStatus(Response.ok ? `${Properties.Field.Label} queued.` : await Response.text());
+    } finally {
+      SetIsSending(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+      <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
+      <p className="mt-1 text-xs text-slate-500">Runs a dashboard action without changing saved settings.</p>
+      <button
+        className="mt-4 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={IsSending}
+        onClick={() => void SendAction()}
+        type="button"
+      >
+        {IsSending ? "Sending..." : Properties.Field.ButtonLabel ?? Properties.Field.Label}
+      </button>
+    </div>
   );
 }
 

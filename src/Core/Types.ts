@@ -7,7 +7,8 @@ export enum SettingsFieldType {
   Number = "Number",
   Select = "Select",
   ChannelPicker = "ChannelPicker",
-  List = "List"
+  List = "List",
+  Button = "Button"
 }
 
 export enum AccessLevel {
@@ -51,7 +52,10 @@ export type SettingsField = {
   Type: SettingsFieldType;
   Label: string;
   Default: string | number | boolean | unknown[] | null;
+  Section?: string;
   Required?: boolean;
+  ButtonLabel?: string;
+  ActionKey?: string;
   ItemType?: "String" | "Number" | "ChannelPicker";
   ValidateAs?: "Regex";
   SupportedChannelTypes?: string[];
@@ -64,11 +68,26 @@ export type SettingsField = {
   }>;
 };
 
+export enum DashboardElementType {
+  MetricGrid = "MetricGrid",
+  LineChart = "LineChart",
+  BarChart = "BarChart"
+}
+
+export type DashboardElement = {
+  Key: string;
+  Type: DashboardElementType;
+  Label: string;
+  DataSourceKey: string;
+  Unit?: string;
+};
+
 export type PluginManifest = {
   Metadata: PluginMetadata;
   Scope: PluginScope;
   Commands: CommandDefinition[];
   WebInterface: SettingsField[];
+  DashboardElements?: DashboardElement[];
   EntryPoint: string;
 };
 

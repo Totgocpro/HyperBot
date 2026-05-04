@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
 import type { PluginContext, PluginLoggerContract, PluginManifest, PluginStorageContract } from "./Types.js";
 
 export abstract class BasePlugin {
@@ -38,7 +38,15 @@ export abstract class BasePlugin {
     return;
   }
 
+  public async OnVoiceStateUpdate(_OldState: VoiceState, _NewState: VoiceState): Promise<void> {
+    return;
+  }
+
   public async OnTick(): Promise<void> {
+    return;
+  }
+
+  public async OnDashboardAction(_GuildId: string, _ActionKey: string, _ActorId: string): Promise<void> {
     return;
   }
 

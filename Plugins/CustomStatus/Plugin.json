@@ -2,7 +2,7 @@
   "Metadata": {
     "Id": "CustomStatus",
     "DisplayName": "Custom Status",
-    "Version": "1.0.0",
+    "Version": "1.1.0",
     "Author": "HyperBot",
     "Icon": "CS"
   },
@@ -10,16 +10,18 @@
   "Commands": [],
   "WebInterface": [
     {
-      "Key": "StatusText",
-      "Type": "String",
-      "Label": "Status text",
-      "Default": "HyperBot Dashboard"
+      "Key": "Enabled",
+      "Type": "Boolean",
+      "Label": "Enable custom presence",
+      "Default": true,
+      "Section": "General"
     },
     {
       "Key": "PresenceStatus",
       "Type": "Select",
       "Label": "Presence",
       "Default": "online",
+      "Section": "General",
       "Options": [
         {
           "Label": "Online",
@@ -32,6 +34,10 @@
         {
           "Label": "Do not disturb",
           "Value": "dnd"
+        },
+        {
+          "Label": "Invisible",
+          "Value": "invisible"
         }
       ]
     },
@@ -40,6 +46,7 @@
       "Type": "Select",
       "Label": "Activity type",
       "Default": "Playing",
+      "Section": "Activity",
       "Options": [
         {
           "Label": "Playing",
@@ -52,8 +59,137 @@
         {
           "Label": "Listening",
           "Value": "Listening"
+        },
+        {
+          "Label": "Competing",
+          "Value": "Competing"
         }
       ]
+    },
+    {
+      "Key": "StatusTexts",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Status text rotation",
+      "Default": ["HyperBot Dashboard"],
+      "Section": "Activity"
+    },
+    {
+      "Key": "TextEmoji",
+      "Type": "Select",
+      "Label": "Text bar emoji",
+      "Default": "✨",
+      "Section": "Activity",
+      "Options": [
+        {
+          "Label": "None",
+          "Value": ""
+        },
+        {
+          "Label": "Sparkles ✨",
+          "Value": "✨"
+        },
+        {
+          "Label": "Shield 🛡️",
+          "Value": "🛡️"
+        },
+        {
+          "Label": "Chart 📊",
+          "Value": "📊"
+        },
+        {
+          "Label": "Lightning ⚡",
+          "Value": "⚡"
+        },
+        {
+          "Label": "Robot 🤖",
+          "Value": "🤖"
+        },
+        {
+          "Label": "Star ⭐",
+          "Value": "⭐"
+        }
+      ]
+    },
+    {
+      "Key": "EmojiPlacement",
+      "Type": "Select",
+      "Label": "Emoji placement",
+      "Default": "Prefix",
+      "Section": "Activity",
+      "Options": [
+        {
+          "Label": "Prefix",
+          "Value": "Prefix"
+        },
+        {
+          "Label": "Suffix",
+          "Value": "Suffix"
+        },
+        {
+          "Label": "Disabled",
+          "Value": "Disabled"
+        }
+      ]
+    },
+    {
+      "Key": "RotationMode",
+      "Type": "Select",
+      "Label": "Rotation mode",
+      "Default": "Sequential",
+      "Section": "Rotation",
+      "Options": [
+        {
+          "Label": "Sequential",
+          "Value": "Sequential"
+        },
+        {
+          "Label": "Random",
+          "Value": "Random"
+        }
+      ]
+    },
+    {
+      "Key": "RotationIntervalSeconds",
+      "Type": "Number",
+      "Label": "Rotation interval seconds",
+      "Default": 60,
+      "Section": "Rotation"
+    },
+    {
+      "Key": "AvoidImmediateRepeat",
+      "Type": "Boolean",
+      "Label": "Avoid immediate repeat in random mode",
+      "Default": true,
+      "Section": "Rotation"
+    },
+    {
+      "Key": "UsePlaceholders",
+      "Type": "Boolean",
+      "Label": "Enable placeholders",
+      "Default": true,
+      "Section": "Personalization"
+    },
+    {
+      "Key": "ShowGuildCount",
+      "Type": "Boolean",
+      "Label": "Allow %guilds% placeholder",
+      "Default": true,
+      "Section": "Personalization"
+    },
+    {
+      "Key": "ShowUserCount",
+      "Type": "Boolean",
+      "Label": "Allow %users% placeholder",
+      "Default": true,
+      "Section": "Personalization"
+    },
+    {
+      "Key": "ShowPluginCount",
+      "Type": "Boolean",
+      "Label": "Allow %plugins% placeholder",
+      "Default": true,
+      "Section": "Personalization"
     }
   ],
   "EntryPoint": "./CustomStatusPlugin.ts"
