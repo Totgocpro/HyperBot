@@ -7,13 +7,98 @@
     "Icon": "Stats"
   },
   "Scope": "Guild",
-  "Commands": [],
+  "Commands": [
+    {
+      "Name": "stats",
+      "Description": "Show your server statistics"
+    }
+  ],
   "WebInterface": [
     {
       "Key": "TrackBots",
       "Type": "Boolean",
       "Label": "Include bot accounts in statistics",
-      "Default": false
+      "Default": false,
+      "Section": "Tracking"
+    },
+    {
+      "Key": "IgnoredVoiceChannelIds",
+      "Type": "List",
+      "Label": "Ignored voice channels",
+      "Default": [],
+      "Section": "Tracking",
+      "ItemType": "ChannelPicker",
+      "SupportedChannelTypes": ["GuildVoice"]
+    },
+    {
+      "Key": "StatsEmbedTitle",
+      "Type": "String",
+      "Label": "Stats embed title",
+      "Default": "%user%'s statistics",
+      "Section": "Command text"
+    },
+    {
+      "Key": "MessagesFieldTitle",
+      "Type": "String",
+      "Label": "Messages field title",
+      "Default": "Messages",
+      "Section": "Command text"
+    },
+    {
+      "Key": "VoiceFieldTitle",
+      "Type": "String",
+      "Label": "Voice field title",
+      "Default": "Voice time",
+      "Section": "Command text"
+    },
+    {
+      "Key": "TodayLabel",
+      "Type": "String",
+      "Label": "Today label",
+      "Default": "Today",
+      "Section": "Command text"
+    },
+    {
+      "Key": "ThisWeekLabel",
+      "Type": "String",
+      "Label": "This week label",
+      "Default": "This week",
+      "Section": "Command text"
+    },
+    {
+      "Key": "ThisMonthLabel",
+      "Type": "String",
+      "Label": "This month label",
+      "Default": "This month",
+      "Section": "Command text"
+    },
+    {
+      "Key": "ThisYearLabel",
+      "Type": "String",
+      "Label": "This year label",
+      "Default": "This year",
+      "Section": "Command text"
+    },
+    {
+      "Key": "AllTimeLabel",
+      "Type": "String",
+      "Label": "All-time label",
+      "Default": "All-time",
+      "Section": "Command text"
+    },
+    {
+      "Key": "StatsFooterText",
+      "Type": "String",
+      "Label": "Stats footer text",
+      "Default": "Statistics are tracked from the moment the plugin version with user stats is active.",
+      "Section": "Command text"
+    },
+    {
+      "Key": "StatsEmbedColor",
+      "Type": "String",
+      "Label": "Stats embed color",
+      "Default": "#3b82f6",
+      "Section": "Design"
     }
   ],
   "DashboardElements": [

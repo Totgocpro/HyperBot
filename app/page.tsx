@@ -11,7 +11,7 @@ export default async function HomePage() {
         <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-gradient-to-br from-blue-700 via-blue-950 to-slate-900 p-6 text-white shadow-xl shadow-black/20 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-blue-100">HyperBot</p>
-            <h1 className="mt-2 text-3xl font-black md:text-4xl">Simple Discord dashboard</h1>
+            <h1 className="mt-2 text-3xl font-black md:text-4xl">HyperBot dashboard</h1>
             <p className="mt-2 max-w-2xl text-blue-100">
               Manage servers, enable plugins, and edit settings from one interface.
             </p>
