@@ -1,0 +1,76 @@
+{
+  "Metadata": {
+    "Id": "Leveling",
+    "DisplayName": "Leveling",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "LV"
+  },
+  "Scope": "Guild",
+  "Dependencies": ["Statistics"],
+  "Commands": [
+    {
+      "Name": "leaderboard",
+      "Description": "Show the public XP leaderboard."
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "MessageXp",
+      "Type": "Number",
+      "Label": "XP per counted message",
+      "Default": 5,
+      "Section": "XP rules"
+    },
+    {
+      "Key": "VoiceMinuteXp",
+      "Type": "Number",
+      "Label": "XP per counted voice minute",
+      "Default": 2,
+      "Section": "XP rules"
+    },
+    {
+      "Key": "LeaderboardSize",
+      "Type": "Number",
+      "Label": "Leaderboard size",
+      "Default": 10,
+      "Section": "Leaderboard"
+    },
+    {
+      "Key": "LeaderboardTitle",
+      "Type": "String",
+      "Label": "Leaderboard title",
+      "Default": "Server XP leaderboard",
+      "Section": "Leaderboard text"
+    },
+    {
+      "Key": "LeaderboardDescription",
+      "Type": "String",
+      "Label": "Leaderboard description",
+      "Default": "XP is calculated from valid messages and counted voice time.",
+      "Section": "Leaderboard text"
+    },
+    {
+      "Key": "LeaderboardEmptyText",
+      "Type": "String",
+      "Label": "Empty leaderboard text",
+      "Default": "No XP has been tracked yet.",
+      "Section": "Leaderboard text"
+    },
+    {
+      "Key": "LeaderboardFooterText",
+      "Type": "String",
+      "Label": "Leaderboard footer text",
+      "Default": "Messages deleted after tracking are removed from XP.",
+      "Section": "Leaderboard text"
+    },
+    {
+      "Key": "LeaderboardEmbedColor",
+      "Type": "String",
+      "Label": "Leaderboard embed color",
+      "Default": "#f59e0b",
+      "Section": "Design"
+    }
+  ],
+  "EntryPoint": "./LevelingPlugin.ts"
+}

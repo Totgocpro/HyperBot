@@ -16,6 +16,8 @@ type DashboardPlugin = {
     Name: string;
     Description: string;
   }>;
+  Dependencies?: string[];
+  DependencyErrors?: string[];
   WebInterface: Array<SettingsField & { Value: unknown }>;
   DashboardElements?: Array<DashboardElement & { Value: unknown }>;
 };
@@ -254,6 +256,11 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     <p className="mt-1 text-sm text-slate-400">
                         Version {SelectedPlugin.Metadata.Version} by {SelectedPlugin.Metadata.Author}
                     </p>
+                    {SelectedPlugin.Dependencies?.length ? (
+                      <p className="mt-2 text-xs font-bold text-slate-500">
+                        Requires: {SelectedPlugin.Dependencies.join(", ")}
+                      </p>
+                    ) : null}
                   </div>
                   <button className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void SavePlugin(SelectedPlugin)}>
                     Save
@@ -261,6 +268,11 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                 </div>
 
                 <div className="mt-6 grid gap-5">
+                  {SelectedPlugin.DependencyErrors?.length ? (
+                    <div className="rounded-3xl border border-red-500/40 bg-red-950/50 p-4 text-sm font-bold text-red-100">
+                      {SelectedPlugin.DependencyErrors.join(" ")}
+                    </div>
+                  ) : null}
                   {SelectedPlugin.Metadata.Id === "SendEmbed" ? (
                     <SendEmbedEditor
                       DraftValues={DraftValues}

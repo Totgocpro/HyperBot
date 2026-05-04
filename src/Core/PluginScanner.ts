@@ -37,6 +37,7 @@ const PluginManifestSchema = z.object({
     Icon: z.string().min(1)
   }),
   Scope: z.nativeEnum(PluginScope).default(PluginScope.Guild),
+  Dependencies: z.array(z.string().min(1)).optional(),
   Commands: z.array(
     z.object({
       Name: z.string().min(1),

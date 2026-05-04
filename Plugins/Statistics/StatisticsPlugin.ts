@@ -1,7 +1,12 @@
-import { EmbedBuilder, type ChatInputCommandInteraction, type GuildMember, type Message, type PartialGuildMember, type VoiceState } from "discord.js";
+import { EmbedBuilder, type ChatInputCommandInteraction, type GuildMember, type Message, type PartialGuildMember, type PartialMessage, type VoiceState } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
 type DailyCounters = Record<string, number>;
+
+type MessageLedger = Record<string, {
+  UserId: string;
+  DayKey: string;
+}>;
 
 type VoiceSession = {
   GuildId: string;
@@ -26,6 +31,7 @@ const MessagesDailyKey = "MessagesDaily";
 const VoiceSecondsDailyKey = "VoiceSecondsDaily";
 const JoinsDailyKey = "JoinsDaily";
 const LeavesDailyKey = "LeavesDaily";
+const MessageLedgerKey = "MessageLedger";
 
 const DefaultStatsTextConfig: StatsTextConfig = {
   StatsEmbedTitle: "%user%'s statistics",
@@ -60,6 +66,25 @@ export default class StatisticsPlugin extends BasePlugin {
     const Now = new Date();
     await this.IncrementDailyCounter(MessageValue.guildId, MessagesDailyKey, 1, Now);
     await this.IncrementUserDailyCounter(MessageValue.guildId, MessageValue.author.id, MessagesDailyKey, 1, Now);
+    await this.TrackCountedMessage(MessageValue.guildId, MessageValue.id, MessageValue.author.id, Now);
+  }
+
+  public async OnMessageDelete(MessageValue: Message | PartialMessage): Promise<void> {
+    if (!MessageValue.guildId) {
+      return;
+    }
+
+    const Ledger = (await this.Storage.GetGlobalConfig<MessageLedger>(MessageValue.guildId, MessageLedgerKey)) ?? {};
+    const Entry = Ledger[MessageValue.id];
+
+    if (!Entry) {
+      return;
+    }
+
+    await this.IncrementDailyCounterByDayKey(MessageValue.guildId, MessagesDailyKey, -1, Entry.DayKey);
+    await this.IncrementUserDailyCounterByDayKey(MessageValue.guildId, Entry.UserId, MessagesDailyKey, -1, Entry.DayKey);
+    delete Ledger[MessageValue.id];
+    await this.Storage.SetGlobalConfig(MessageValue.guildId, MessageLedgerKey, Ledger);
   }
 
   public async OnGuildMemberAdd(Member: GuildMember): Promise<void> {
@@ -200,16 +225,33 @@ export default class StatisticsPlugin extends BasePlugin {
 
   private async IncrementDailyCounter(GuildId: string, Key: string, Amount: number, DateValue: Date): Promise<void> {
     const DayKey = DateValue.toISOString().slice(0, 10);
+    await this.IncrementDailyCounterByDayKey(GuildId, Key, Amount, DayKey);
+  }
+
+  private async IncrementDailyCounterByDayKey(GuildId: string, Key: string, Amount: number, DayKey: string): Promise<void> {
     const Counters = (await this.Storage.GetGlobalConfig<DailyCounters>(GuildId, Key)) ?? {};
-    Counters[DayKey] = (Counters[DayKey] ?? 0) + Amount;
+    Counters[DayKey] = Math.max(0, (Counters[DayKey] ?? 0) + Amount);
     await this.Storage.SetGlobalConfig(GuildId, Key, Counters);
   }
 
   private async IncrementUserDailyCounter(GuildId: string, UserId: string, Key: string, Amount: number, DateValue: Date): Promise<void> {
     const DayKey = DateValue.toISOString().slice(0, 10);
+    await this.IncrementUserDailyCounterByDayKey(GuildId, UserId, Key, Amount, DayKey);
+  }
+
+  private async IncrementUserDailyCounterByDayKey(GuildId: string, UserId: string, Key: string, Amount: number, DayKey: string): Promise<void> {
     const Counters = (await this.Storage.GetUserValue<DailyCounters>(GuildId, UserId, Key)) ?? {};
-    Counters[DayKey] = (Counters[DayKey] ?? 0) + Amount;
+    Counters[DayKey] = Math.max(0, (Counters[DayKey] ?? 0) + Amount);
     await this.Storage.SetUserValue(GuildId, UserId, Key, Counters);
+  }
+
+  private async TrackCountedMessage(GuildId: string, MessageId: string, UserId: string, DateValue: Date): Promise<void> {
+    const Ledger = (await this.Storage.GetGlobalConfig<MessageLedger>(GuildId, MessageLedgerKey)) ?? {};
+    Ledger[MessageId] = {
+      UserId,
+      DayKey: this.ToDayKey(DateValue)
+    };
+    await this.Storage.SetGlobalConfig(GuildId, MessageLedgerKey, Ledger);
   }
 
   private SumRange(Counters: DailyCounters, StartDate: Date, EndDate: Date): number {

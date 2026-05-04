@@ -28,6 +28,7 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
   const ManifestEntries = (await ScanPluginManifests(PluginDirectory)).filter((ManifestEntry) => ManifestEntry.Manifest.Scope !== PluginScope.Global);
+  const AvailablePluginIds = new Set(ManifestEntries.map((ManifestEntry) => ManifestEntry.Manifest.Metadata.Id));
   const AllowedManifestEntries = [];
 
   for (const ManifestEntry of ManifestEntries) {
@@ -52,6 +53,8 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
 
       return {
         Metadata: ManifestEntry.Manifest.Metadata,
+        Dependencies: ManifestEntry.Manifest.Dependencies ?? [],
+        DependencyErrors: BuildDependencyErrors(ManifestEntry.Manifest.Dependencies ?? [], AvailablePluginIds),
         Commands: ManifestEntry.Manifest.Commands,
         WebInterface: Fields,
         DashboardElements: await Promise.all(
@@ -94,6 +97,13 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
     return new Response("Plugin not found.", { status: 404 });
   }
 
+  const AvailablePluginIds = new Set((await ScanPluginManifests(PluginDirectory)).map((Entry) => Entry.Manifest.Metadata.Id));
+  const DependencyErrors = BuildDependencyErrors(ManifestEntry.Manifest.Dependencies ?? [], AvailablePluginIds);
+
+  if (DependencyErrors.length > 0) {
+    return new Response(DependencyErrors.join(" "), { status: 400 });
+  }
+
   for (const Field of ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button)) {
     if (Field.Required && !Body.Values[Field.Key]) {
       return new Response(`${Field.Label} is required.`, { status: 400 });
@@ -114,6 +124,12 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
   }
 
   return NextResponse.json({ GuildId, PluginId: Body.PluginId, Saved: true });
+}
+
+function BuildDependencyErrors(Dependencies: string[], AvailablePluginIds: Set<string>): string[] {
+  return Dependencies
+    .filter((DependencyId) => !AvailablePluginIds.has(DependencyId))
+    .map((DependencyId) => `Missing required plugin dependency: ${DependencyId}.`);
 }
 
 async function HydrateSettingsField(GuildId: string, Field: SettingsField): Promise<SettingsField> {
