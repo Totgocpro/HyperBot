@@ -19,7 +19,7 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
   }
 
   const AccessControl = CreateAccessControl();
-  const Guild = BuildGuildSummaryFromHeaders(Request, GuildId);
+  const Guild = BuildServerTrustedGuildSummary(GuildId);
   const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, Guild);
 
   if (!AccessLevel) {
@@ -79,7 +79,7 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
   }
 
   const AccessControl = CreateAccessControl();
-  const Guild = BuildGuildSummaryFromHeaders(Request, GuildId);
+  const Guild = BuildServerTrustedGuildSummary(GuildId);
   const Body = (await Request.json()) as { PluginId?: string; Values?: Record<string, unknown> };
 
   if (!Body.PluginId || !Body.Values) {
@@ -182,13 +182,13 @@ async function HydrateSettingsField(GuildId: string, Field: SettingsField): Prom
   };
 }
 
-function BuildGuildSummaryFromHeaders(Request: Request, GuildId: string): DiscordGuildSummary {
+function BuildServerTrustedGuildSummary(GuildId: string): DiscordGuildSummary {
   return {
     Id: GuildId,
-    Name: Request.headers.get("X-Discord-Guild-Name") ?? GuildId,
+    Name: GuildId,
     Icon: null,
-    Owner: Request.headers.get("X-Discord-Guild-Owner") === "true",
-    Permissions: Request.headers.get("X-Discord-Guild-Permissions") ?? "0"
+    Owner: false,
+    Permissions: "0"
   };
 }
 

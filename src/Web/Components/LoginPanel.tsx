@@ -33,7 +33,7 @@ export function LoginPanel() {
     const Payload = (await Response.json()) as AuthStatus;
 
     if (Payload.Authenticated) {
-      Router.push(SearchParams.get("Next") ?? "/");
+      Router.push(GetSafeNextPath(SearchParams.get("Next")));
       return;
     }
 
@@ -65,7 +65,7 @@ export function LoginPanel() {
       return;
     }
 
-    Router.push(SearchParams.get("Next") ?? "/");
+    Router.push(GetSafeNextPath(SearchParams.get("Next")));
     Router.refresh();
   }
 
@@ -145,4 +145,12 @@ export function LoginPanel() {
       </section>
     </main>
   );
+}
+
+function GetSafeNextPath(NextPath: string | null): string {
+  if (!NextPath || !NextPath.startsWith("/") || NextPath.startsWith("//")) {
+    return "/";
+  }
+
+  return NextPath;
 }

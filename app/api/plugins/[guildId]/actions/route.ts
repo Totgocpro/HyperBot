@@ -24,7 +24,7 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
   }
 
   const AccessControl = CreateAccessControl();
-  const Guild = BuildGuildSummaryFromHeaders(Request, GuildId);
+  const Guild = BuildServerTrustedGuildSummary(GuildId);
 
   if (!(await AccessControl.CanManagePlugin(User.DiscordId, Guild, Body.PluginId))) {
     return new Response("Insufficient guild plugin permissions.", { status: 403 });
@@ -62,13 +62,13 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
   return NextResponse.json({ Queued: true });
 }
 
-function BuildGuildSummaryFromHeaders(Request: Request, GuildId: string): DiscordGuildSummary {
+function BuildServerTrustedGuildSummary(GuildId: string): DiscordGuildSummary {
   return {
     Id: GuildId,
-    Name: Request.headers.get("X-Discord-Guild-Name") ?? GuildId,
+    Name: GuildId,
     Icon: null,
-    Owner: Request.headers.get("X-Discord-Guild-Owner") === "true",
-    Permissions: Request.headers.get("X-Discord-Guild-Permissions") ?? "0"
+    Owner: false,
+    Permissions: "0"
   };
 }
 

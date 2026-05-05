@@ -1,24 +1,29 @@
-FROM node:22-alpine AS Dependencies
+FROM node:22-alpine AS dependencies
 WORKDIR /Application
-COPY package.json ./
-RUN npm install
+RUN apk add --no-cache openssl
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev
 
-FROM node:22-alpine AS Builder
+FROM node:22-alpine AS builder
 WORKDIR /Application
-COPY --from=Dependencies /Application/node_modules ./node_modules
+RUN apk add --no-cache openssl
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=dependencies /Application/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
 RUN npm run build
 RUN mkdir -p dist/Plugins && cp -R Plugins/* dist/Plugins/
 
-FROM node:22-alpine AS Runner
+FROM node:22-alpine AS runner
 WORKDIR /Application
 ENV NODE_ENV=production
-COPY --from=Builder /Application/package.json ./package.json
-COPY --from=Builder /Application/node_modules ./node_modules
-COPY --from=Builder /Application/.next ./.next
-COPY --from=Builder /Application/public ./public
-COPY --from=Builder /Application/dist ./dist
-COPY --from=Builder /Application/prisma ./prisma
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apk add --no-cache openssl
+COPY --from=builder /Application/package.json ./package.json
+COPY --from=builder /Application/node_modules ./node_modules
+COPY --from=builder /Application/.next ./.next
+COPY --from=builder /Application/public ./public
+COPY --from=builder /Application/dist ./dist
+COPY --from=builder /Application/prisma ./prisma
 EXPOSE 3000
 CMD ["npm", "run", "start"]

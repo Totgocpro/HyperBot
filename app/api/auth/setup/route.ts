@@ -1,7 +1,9 @@
+import { Prisma as PrismaNamespace } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
 import { CreateDashboardSession, SessionCookieName } from "@/src/Web/Auth";
 import { HashPassword } from "@/src/Web/Password";
+import { ClearAuthRateLimit, EnforceAuthRateLimit } from "@/src/Web/RateLimit";
 
 async function Post(Request: Request): Promise<Response> {
   const UserCount = await Prisma.dashboardUser.count();
@@ -21,23 +23,60 @@ async function Post(Request: Request): Promise<Response> {
     return new Response("Username and password with at least 8 characters are required.", { status: 400 });
   }
 
-  const Password = HashPassword(Body.Password);
-  const User = await Prisma.dashboardUser.create({
-    data: {
-      Username: Body.Username.trim(),
-      DiscordId: (Body.DiscordId?.trim() || Body.Username.trim()),
-      DisplayName: Body.DisplayName?.trim() || Body.Username.trim(),
-      PasswordHash: Password.PasswordHash,
-      PasswordSalt: Password.PasswordSalt,
-      Role: "SuperAdmin"
+  const RateLimitResponse = await EnforceAuthRateLimit(Request, "setup", Body.Username);
+
+  if (RateLimitResponse) {
+    return RateLimitResponse;
+  }
+
+  const Username = Body.Username.trim();
+  const DiscordId = Body.DiscordId?.trim() || Username;
+  const DisplayName = Body.DisplayName?.trim() || Username;
+
+  const User = await Prisma.$transaction(
+    async (Transaction) => {
+      const TransactionUserCount = await Transaction.dashboardUser.count();
+
+      if (TransactionUserCount > 0) {
+        throw new Response("Initial setup is already completed.", { status: 409 });
+      }
+
+      const Password = HashPassword(Body.Password as string);
+      return Transaction.dashboardUser.create({
+        data: {
+          Username,
+          DiscordId,
+          DisplayName,
+          PasswordHash: Password.PasswordHash,
+          PasswordSalt: Password.PasswordSalt,
+          Role: "SuperAdmin"
+        }
+      });
+    },
+    {
+      isolationLevel: PrismaNamespace.TransactionIsolationLevel.Serializable
     }
+  ).catch((ErrorValue: unknown) => {
+    if (ErrorValue instanceof Response) {
+      return ErrorValue;
+    }
+
+    throw ErrorValue;
   });
+
+  if (User instanceof Response) {
+    return User;
+  }
+
+  await ClearAuthRateLimit(Request, "setup", Body.Username);
+
   const Session = await CreateDashboardSession(User.Id);
   const ResponseValue = NextResponse.json({ Created: true });
 
   ResponseValue.cookies.set(SessionCookieName, Session.SessionToken, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     expires: Session.ExpiresAt
   });
