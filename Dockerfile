@@ -18,7 +18,7 @@ FROM node:22-alpine AS runner
 WORKDIR /Application
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache openssl
+RUN apk add --no-cache fontconfig openssl ttf-dejavu ttf-liberation
 COPY --from=builder /Application/package.json ./package.json
 COPY --from=builder /Application/node_modules ./node_modules
 COPY --from=builder /Application/.next ./.next

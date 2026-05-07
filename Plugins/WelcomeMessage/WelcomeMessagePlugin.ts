@@ -9,7 +9,7 @@ import {
   type TextChannel,
   type VoiceChannel
 } from "discord.js";
-import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import { deflateSync } from "node:zlib";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
@@ -67,6 +67,7 @@ const DefaultConfig: WelcomeMessageConfig = {
 
 export default class WelcomeMessagePlugin extends BasePlugin {
   public async OnEnable(): Promise<void> {
+    this.WarnIfCanvasFontsAreMissing();
     this.Logger.Info("Welcome Message plugin enabled.");
   }
 
@@ -521,6 +522,19 @@ export default class WelcomeMessagePlugin extends BasePlugin {
   private FormatFont(FontSize: number, FontWeight: number): string {
     const SafeWeight = FontWeight >= 700 ? "bold" : FontWeight >= 600 ? "600" : "normal";
     return `${SafeWeight} ${FontSize}px "DejaVu Sans", "Noto Sans", "Liberation Sans", sans-serif`;
+  }
+
+  private WarnIfCanvasFontsAreMissing(): void {
+    const RequiredFontFamilies = ["DejaVu Sans", "Noto Sans", "Liberation Sans"];
+
+    if (RequiredFontFamilies.some((FontFamily) => GlobalFonts.has(FontFamily))) {
+      return;
+    }
+
+    this.Logger.Warn("No expected canvas font family is available. Welcome image cards may render without text.", {
+      ExpectedFontFamilies: RequiredFontFamilies,
+      AvailableFontFamilies: GlobalFonts.families.slice(0, 12).map((FontFamily) => FontFamily.family)
+    });
   }
 
   private NormalizeCardText(Text: string): string {
