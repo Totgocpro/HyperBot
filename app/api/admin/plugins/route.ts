@@ -31,7 +31,7 @@ async function Get(Request: Request): Promise<Response> {
   const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
   const BotPluginStates = await GetBotPluginStates();
   const Commands = AllManifestEntries.flatMap((ManifestEntry) =>
-    DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id)
+    ManifestEntry.Manifest.Scope !== PluginScope.Global && DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id)
       ? []
       : ManifestEntry.Manifest.Commands.map((Command) => ({
           Name: Command.Name,
@@ -54,7 +54,7 @@ async function Get(Request: Request): Promise<Response> {
         Metadata: ManifestEntry.Manifest.Metadata,
         Scope: ManifestEntry.Manifest.Scope,
         Loaded: BotPluginStates.get(ManifestEntry.Manifest.Metadata.Id)?.Loaded ?? false,
-        Disabled: DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id),
+        Disabled: false,
         Commands: ManifestEntry.Manifest.Commands,
         WebInterface: Fields
       };
@@ -69,7 +69,7 @@ async function Get(Request: Request): Promise<Response> {
       Metadata: ManifestEntry.Manifest.Metadata,
       Scope: ManifestEntry.Manifest.Scope,
       Loaded: BotState?.Loaded ?? false,
-      Disabled: DisabledPluginIds.has(PluginId) || BotState?.Disabled === true,
+      Disabled: ManifestEntry.Manifest.Scope === PluginScope.Global ? false : DisabledPluginIds.has(PluginId) || BotState?.Disabled === true,
       Commands: ManifestEntry.Manifest.Commands,
       Dependencies: ManifestEntry.Manifest.Dependencies ?? []
     };
@@ -138,6 +138,10 @@ async function Post(Request: Request): Promise<Response> {
 
   if (!ManifestEntry) {
     return new Response("Plugin not found.", { status: 404 });
+  }
+
+  if (ManifestEntry.Manifest.Scope === PluginScope.Global && (Body.Action === "Enable" || Body.Action === "Disable")) {
+    return new Response("Global plugins cannot be enabled or disabled from the admin panel.", { status: 400 });
   }
 
   if (Body.Action === "Disable") {

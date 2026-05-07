@@ -1,0 +1,61 @@
+{
+  "Metadata": {
+    "Id": "CustomCommands",
+    "DisplayName": "Custom Commands",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "CC"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "Prefix",
+      "Type": "String",
+      "Label": "Command prefix",
+      "Default": "!",
+      "Section": "General"
+    },
+    {
+      "Key": "CaseSensitive",
+      "Type": "Boolean",
+      "Label": "Case sensitive command names",
+      "Default": false,
+      "Section": "General"
+    },
+    {
+      "Key": "DefaultAllowedChannelIds",
+      "Type": "List",
+      "ItemType": "ChannelPicker",
+      "Label": "Default allowed channels",
+      "Default": [],
+      "Section": "Defaults",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "DefaultRequiredRoleIds",
+      "Type": "List",
+      "ItemType": "RolePicker",
+      "Label": "Default required roles",
+      "Default": [],
+      "Section": "Defaults"
+    },
+    {
+      "Key": "DefaultDeniedMessage",
+      "Type": "String",
+      "Label": "Default denied message",
+      "Default": "You cannot use this command here.",
+      "Section": "Defaults"
+    },
+    {
+      "Key": "Commands",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Custom commands",
+      "Default": [],
+      "Section": "Commands"
+    }
+  ],
+  "EntryPoint": "./CustomCommandsPlugin.ts"
+}

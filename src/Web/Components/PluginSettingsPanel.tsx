@@ -65,6 +65,33 @@ type BackupSummary = {
   PluginConfigs: number;
 };
 
+type CustomCommandActionType = "SendMessage" | "Reply" | "DM" | "AddRole" | "RemoveRole" | "ToggleRole" | "DeleteTrigger" | "React";
+
+type CustomCommandActionDraft = {
+  Id: string;
+  Type: CustomCommandActionType;
+  Message: string;
+  RoleId: string;
+  Emoji: string;
+};
+
+type CustomCommandDraft = {
+  Id: string;
+  Name: string;
+  Aliases: string[];
+  Enabled: boolean;
+  MatchMode: "Exact" | "StartsWith";
+  Description: string;
+  Checks: {
+    AllowedChannelIds: string[];
+    BlockedChannelIds: string[];
+    RequiredRoleIds: string[];
+    BlockedRoleIds: string[];
+    DeniedMessage: string;
+  };
+  Actions: CustomCommandActionDraft[];
+};
+
 type SaveFeedback = {
   Message: string;
   Tone: "Success" | "Error";
@@ -347,6 +374,13 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       SetStatus={SetStatus}
                       UpdateDraftValue={UpdateDraftValue}
                     />
+                  ) : SelectedPlugin.Metadata.Id === "CustomCommands" ? (
+                    <CustomCommandsEditor
+                      DraftValues={DraftValues}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
                   ) : (
                     <>
                   {SelectedPlugin.DashboardElements?.length ? (
@@ -427,6 +461,237 @@ function SaveErrorIcon() {
     <svg aria-hidden="true" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
       <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
     </svg>
+  );
+}
+
+function CustomCommandsEditor(Properties: {
+  DraftValues: Record<string, Record<string, unknown>>;
+  Plugin: DashboardPlugin;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const PluginId = Properties.Plugin.Metadata.Id;
+  const Values = Properties.DraftValues[PluginId] ?? {};
+  const Commands = ParseCustomCommands(Values.Commands);
+  const SelectedCommand = Commands[0];
+  const ChannelOptions = Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultAllowedChannelIds")?.Options ?? [];
+  const RoleOptions = Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultRequiredRoleIds")?.Options ?? [];
+
+  function SetValue(Key: string, Value: unknown): void {
+    Properties.UpdateDraftValue(PluginId, Key, Value);
+  }
+
+  function SetCommands(NextCommands: CustomCommandDraft[]): void {
+    SetValue("Commands", NextCommands);
+  }
+
+  function AddCommand(): void {
+    SetCommands([
+      ...Commands,
+      {
+        Id: CreateClientId(),
+        Name: "new-command",
+        Aliases: [],
+        Enabled: true,
+        MatchMode: "Exact",
+        Description: "",
+        Checks: {
+          AllowedChannelIds: [],
+          BlockedChannelIds: [],
+          RequiredRoleIds: [],
+          BlockedRoleIds: [],
+          DeniedMessage: ""
+        },
+        Actions: [{ Id: CreateClientId(), Type: "Reply", Message: "Hello %mention%", RoleId: "", Emoji: "" }]
+      }
+    ]);
+    Properties.SetStatus("Command added in draft. Use Save to persist it.");
+  }
+
+  function UpdateCommand(CommandId: string, Patch: Partial<CustomCommandDraft>): void {
+    SetCommands(Commands.map((Command) => Command.Id === CommandId ? { ...Command, ...Patch } : Command));
+  }
+
+  function RemoveCommand(CommandId: string): void {
+    SetCommands(Commands.filter((Command) => Command.Id !== CommandId));
+  }
+
+  function UpdateAction(CommandId: string, ActionId: string, Patch: Partial<CustomCommandActionDraft>): void {
+    const Command = Commands.find((CommandValue) => CommandValue.Id === CommandId);
+
+    if (!Command) {
+      return;
+    }
+
+    UpdateCommand(CommandId, {
+      Actions: Command.Actions.map((Action) => Action.Id === ActionId ? { ...Action, ...Patch } : Action)
+    });
+  }
+
+  function AddAction(CommandId: string): void {
+    const Command = Commands.find((CommandValue) => CommandValue.Id === CommandId);
+
+    if (!Command) {
+      return;
+    }
+
+    UpdateCommand(CommandId, {
+      Actions: [...Command.Actions, { Id: CreateClientId(), Type: "SendMessage", Message: "", RoleId: "", Emoji: "" }]
+    });
+  }
+
+  function RemoveAction(CommandId: string, ActionId: string): void {
+    const Command = Commands.find((CommandValue) => CommandValue.Id === CommandId);
+
+    if (!Command) {
+      return;
+    }
+
+    UpdateCommand(CommandId, {
+      Actions: Command.Actions.filter((Action) => Action.Id !== ActionId)
+    });
+  }
+
+  return (
+    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-custom-commands">
+      <div className="mb-5">
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Command builder</p>
+        <h3 className="mt-2 text-2xl font-black text-white">Custom prefix commands</h3>
+      </div>
+
+      <div className="grid gap-5">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block text-sm font-bold text-slate-200">
+              Prefix
+              <input className={EmbedInputClassName} maxLength={8} onChange={(Event) => SetValue("Prefix", Event.target.value)} value={String(Values.Prefix ?? "!")} />
+            </label>
+            <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 font-semibold text-slate-100">
+              Case sensitive names
+              <input checked={Boolean(Values.CaseSensitive)} className="h-5 w-5 accent-blue-600" onChange={(Event) => SetValue("CaseSensitive", Event.target.checked)} type="checkbox" />
+            </label>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <MultiSelectField Label="Default allowed channels" OnChange={(Value) => SetValue("DefaultAllowedChannelIds", Value)} Options={ChannelOptions} Value={StringArray(Values.DefaultAllowedChannelIds)} />
+            <MultiSelectField Label="Default required roles" OnChange={(Value) => SetValue("DefaultRequiredRoleIds", Value)} Options={RoleOptions} Value={StringArray(Values.DefaultRequiredRoleIds)} />
+          </div>
+          <label className="mt-4 block text-sm font-bold text-slate-200">
+            Default denied message
+            <input className={EmbedInputClassName} onChange={(Event) => SetValue("DefaultDeniedMessage", Event.target.value)} value={String(Values.DefaultDeniedMessage ?? "You cannot use this command here.")} />
+          </label>
+        </section>
+
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="text-xl font-black text-white">Commands</h4>
+              <p className="mt-1 text-sm text-slate-500">Commands are triggered by messages like {String(Values.Prefix ?? "!")}role.</p>
+            </div>
+            <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={AddCommand} type="button">
+              Add command
+            </button>
+          </div>
+          <div className="mt-4 grid gap-4">
+            {Commands.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No custom command configured.</p> : null}
+            {Commands.map((Command) => (
+              <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4" key={Command.Id}>
+                <div className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
+                  <label className="block text-sm font-bold text-slate-200">
+                    Command name
+                    <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Name: SanitizeCommandDraftName(Event.target.value) })} value={Command.Name} />
+                  </label>
+                  <label className="block text-sm font-bold text-slate-200">
+                    Match mode
+                    <select className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { MatchMode: Event.target.value as CustomCommandDraft["MatchMode"] })} value={Command.MatchMode}>
+                      <option value="Exact">Exact</option>
+                      <option value="StartsWith">Starts with</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 font-semibold text-slate-100">
+                    Enabled
+                    <input checked={Command.Enabled} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateCommand(Command.Id, { Enabled: Event.target.checked })} type="checkbox" />
+                  </label>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <label className="block text-sm font-bold text-slate-200">
+                    Aliases
+                    <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Aliases: SplitCommaList(Event.target.value).map(SanitizeCommandDraftName).filter(Boolean) })} placeholder="rank, role, info" value={Command.Aliases.join(", ")} />
+                  </label>
+                  <label className="block text-sm font-bold text-slate-200">
+                    Description
+                    <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Description: Event.target.value })} value={Command.Description} />
+                  </label>
+                </div>
+
+                <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
+                    <p className="font-black text-white">Checks</p>
+                    <div className="mt-3 grid gap-3">
+                      <MultiSelectField Label="Allowed channels" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, AllowedChannelIds: Value } })} Options={ChannelOptions} Value={Command.Checks.AllowedChannelIds} />
+                      <MultiSelectField Label="Blocked channels" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, BlockedChannelIds: Value } })} Options={ChannelOptions} Value={Command.Checks.BlockedChannelIds} />
+                      <MultiSelectField Label="Required roles" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, RequiredRoleIds: Value } })} Options={RoleOptions} Value={Command.Checks.RequiredRoleIds} />
+                      <MultiSelectField Label="Blocked roles" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, BlockedRoleIds: Value } })} Options={RoleOptions} Value={Command.Checks.BlockedRoleIds} />
+                      <label className="block text-sm font-bold text-slate-200">
+                        Denied message
+                        <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, DeniedMessage: Event.target.value } })} value={Command.Checks.DeniedMessage} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-black text-white">Actions</p>
+                      <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={() => AddAction(Command.Id)} type="button">
+                        Add action
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      {Command.Actions.map((Action) => (
+                        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3" key={Action.Id}>
+                          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <select className={EmbedInputClassName} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Type: Event.target.value as CustomCommandActionType })} value={Action.Type}>
+                              <option value="SendMessage">Send message</option>
+                              <option value="Reply">Reply</option>
+                              <option value="DM">DM user</option>
+                              <option value="AddRole">Add role</option>
+                              <option value="RemoveRole">Remove role</option>
+                              <option value="ToggleRole">Toggle role</option>
+                              <option value="DeleteTrigger">Delete trigger</option>
+                              <option value="React">React</option>
+                            </select>
+                            <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveAction(Command.Id, Action.Id)} type="button">
+                              Remove
+                            </button>
+                          </div>
+                          {ActionNeedsMessage(Action.Type) ? (
+                            <textarea className={`${EmbedInputClassName} min-h-24 resize-y`} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Message: Event.target.value })} placeholder="Use %mention%, %user%, %args%, %server%, %channel%" value={Action.Message} />
+                          ) : null}
+                          {ActionNeedsRole(Action.Type) ? (
+                            <select className={EmbedInputClassName} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { RoleId: Event.target.value })} value={Action.RoleId}>
+                              <option value="">Select a role</option>
+                              {RoleOptions.map((Option) => <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>{Option.Label}</option>)}
+                            </select>
+                          ) : null}
+                          {Action.Type === "React" ? (
+                            <input className={EmbedInputClassName} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Emoji: Event.target.value })} placeholder="Emoji, for example ✅" value={Action.Emoji} />
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500" onClick={() => RemoveCommand(Command.Id)} type="button">
+                    Delete command
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      {SelectedCommand ? null : null}
+    </section>
   );
 }
 
@@ -1249,6 +1514,102 @@ function CreateDefaultEmbed(): EditableEmbed {
     Timestamp: false,
     Fields: []
   };
+}
+
+function ParseCustomCommands(Value: unknown): CustomCommandDraft[] {
+  if (!Array.isArray(Value)) {
+    return [];
+  }
+
+  return Value.filter(IsRecord).map((CommandValue) => ({
+    Id: typeof CommandValue.Id === "string" ? CommandValue.Id : CreateClientId(),
+    Name: SanitizeCommandDraftName(String(CommandValue.Name ?? "")),
+    Aliases: Array.isArray(CommandValue.Aliases) ? CommandValue.Aliases.map((Alias) => SanitizeCommandDraftName(String(Alias))).filter(Boolean) : [],
+    Enabled: CommandValue.Enabled !== false,
+    MatchMode: ParseCustomMatchMode(CommandValue.MatchMode),
+    Description: typeof CommandValue.Description === "string" ? CommandValue.Description : "",
+    Checks: {
+      AllowedChannelIds: ReadNestedStringArray(CommandValue.Checks, "AllowedChannelIds"),
+      BlockedChannelIds: ReadNestedStringArray(CommandValue.Checks, "BlockedChannelIds"),
+      RequiredRoleIds: ReadNestedStringArray(CommandValue.Checks, "RequiredRoleIds"),
+      BlockedRoleIds: ReadNestedStringArray(CommandValue.Checks, "BlockedRoleIds"),
+      DeniedMessage: IsRecord(CommandValue.Checks) && typeof CommandValue.Checks.DeniedMessage === "string" ? CommandValue.Checks.DeniedMessage : ""
+    },
+    Actions: Array.isArray(CommandValue.Actions) ? CommandValue.Actions.filter(IsRecord).map((ActionValue) => ({
+      Id: typeof ActionValue.Id === "string" ? ActionValue.Id : CreateClientId(),
+      Type: ParseCustomActionType(ActionValue.Type),
+      Message: typeof ActionValue.Message === "string" ? ActionValue.Message : "",
+      RoleId: typeof ActionValue.RoleId === "string" ? ActionValue.RoleId : "",
+      Emoji: typeof ActionValue.Emoji === "string" ? ActionValue.Emoji : ""
+    })) : []
+  })).filter((Command) => Command.Name);
+}
+
+function ParseCustomActionType(Value: unknown): CustomCommandActionType {
+  const AllowedTypes: CustomCommandActionType[] = ["SendMessage", "Reply", "DM", "AddRole", "RemoveRole", "ToggleRole", "DeleteTrigger", "React"];
+  return AllowedTypes.includes(String(Value) as CustomCommandActionType) ? String(Value) as CustomCommandActionType : "SendMessage";
+}
+
+function ParseCustomMatchMode(Value: unknown): CustomCommandDraft["MatchMode"] {
+  return Value === "StartsWith" ? "StartsWith" : "Exact";
+}
+
+function ReadNestedStringArray(Value: unknown, Key: string): string[] {
+  if (!IsRecord(Value) || !Array.isArray(Value[Key])) {
+    return [];
+  }
+
+  return Value[Key].map((Item) => String(Item)).filter(Boolean);
+}
+
+function StringArray(Value: unknown): string[] {
+  return Array.isArray(Value) ? Value.map((Item) => String(Item)).filter(Boolean) : [];
+}
+
+function SplitCommaList(Value: string): string[] {
+  return Value.split(",").map((Item) => Item.trim()).filter(Boolean);
+}
+
+function SanitizeCommandDraftName(Value: string): string {
+  return Value.trim().replace(/^!+/u, "").split(/\s+/u)[0]?.slice(0, 48) ?? "";
+}
+
+function ActionNeedsMessage(Type: CustomCommandActionType): boolean {
+  return Type === "SendMessage" || Type === "Reply" || Type === "DM";
+}
+
+function ActionNeedsRole(Type: CustomCommandActionType): boolean {
+  return Type === "AddRole" || Type === "RemoveRole" || Type === "ToggleRole";
+}
+
+function CreateClientId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function MultiSelectField(Properties: {
+  Label: string;
+  OnChange: (Value: string[]) => void;
+  Options: NonNullable<SettingsField["Options"]>;
+  Value: string[];
+}) {
+  function Toggle(Value: string): void {
+    Properties.OnChange(Properties.Value.includes(Value) ? Properties.Value.filter((Item) => Item !== Value) : [...Properties.Value, Value]);
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3">
+      <p className="text-sm font-bold text-slate-200">{Properties.Label}</p>
+      <div className="mt-2 grid max-h-40 gap-2 overflow-y-auto pr-1">
+        {Properties.Options.length === 0 ? <p className="text-xs text-slate-500">No option available.</p> : null}
+        {Properties.Options.map((Option) => (
+          <label className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${Option.Disabled ? "cursor-not-allowed text-slate-600" : "text-slate-200 hover:bg-slate-800"}`} key={String(Option.Value)}>
+            <input checked={Properties.Value.includes(String(Option.Value))} className="h-4 w-4 accent-blue-600" disabled={Option.Disabled} onChange={() => Toggle(String(Option.Value))} type="checkbox" />
+            <span className="truncate">{Option.Label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ParseSavedEmbeds(Value: unknown): EditableEmbed[] {

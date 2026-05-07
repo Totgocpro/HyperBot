@@ -20,6 +20,7 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 | --- | --- | --- | --- |
 | `Backups` | Guild | - | Create and restore backups from the dashboard. |
 | `CommandAliases` | Global | - | Add aliases for existing slash commands. |
+| `CustomCommands` | Guild | - | Create prefix commands such as `!role` with checks and actions from the dashboard. |
 | `CustomStatus` | Global | - | Custom Discord presence with rotating status text. |
 | `DiscordGame` | Guild | `/minesweeper`, `/tictactoe` | Interactive Discord mini-games. |
 | `Giveaway` | Guild | `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list` | Button-based giveaways with automatic ending, winner rerolls, entry rules, and role bonuses. |

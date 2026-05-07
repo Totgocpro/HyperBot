@@ -569,10 +569,15 @@ function GlobalPluginsPanel(Properties: {
                 {Plugin.Disabled ? "Disabled" : Plugin.Loaded ? "Active" : "Pending"}
               </span>
             </div>
+            {Plugin.Scope === "Global" ? (
+              <p className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-3 text-xs font-semibold text-slate-400">
+                Global plugins are core-wide services. They can be configured and reloaded, but cannot be enabled or disabled from this panel.
+              </p>
+            ) : null}
             <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
               <button
                 className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!Plugin.Disabled && Plugin.Loaded}
+                disabled={Plugin.Scope === "Global" || (!Plugin.Disabled && Plugin.Loaded)}
                 onClick={() => void Properties.ControlPlugin(Plugin.Metadata.Id, "Enable")}
               >
                 Enable / add
@@ -586,7 +591,7 @@ function GlobalPluginsPanel(Properties: {
               </button>
               <button
                 className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={Plugin.Disabled}
+                disabled={Plugin.Scope === "Global" || Plugin.Disabled}
                 onClick={() => void Properties.ControlPlugin(Plugin.Metadata.Id, "Disable")}
               >
                 Disable

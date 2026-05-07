@@ -8,6 +8,7 @@ import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
 import { IsPluginDisabled } from "./PluginState.js";
 import { PluginStorage } from "./Storage.js";
+import { PluginScope } from "./Types.js";
 import type { CommandAliasDefinition, CommandDefinition, LoadedPlugin, PluginConstructor } from "./Types.js";
 
 export class PluginLoader {
@@ -28,7 +29,7 @@ export class PluginLoader {
     const ManifestEntries = await ScanPluginManifests(this.PluginDirectory);
 
     for (const ManifestEntry of ManifestEntries) {
-      if (await IsPluginDisabled(this.Prisma, ManifestEntry.Manifest.Metadata.Id)) {
+      if (ManifestEntry.Manifest.Scope !== PluginScope.Global && await IsPluginDisabled(this.Prisma, ManifestEntry.Manifest.Metadata.Id)) {
         continue;
       }
 
