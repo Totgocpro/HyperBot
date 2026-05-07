@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect as UseEffect, useState as UseState } from "react";
+import { useEffect as UseEffect, useRef as UseRef, useState as UseState } from "react";
 import type { BotGuildSummary, DashboardElement, SettingsField } from "../../Core/Types";
 
 type DashboardPlugin = {
@@ -65,6 +65,12 @@ type BackupSummary = {
   PluginConfigs: number;
 };
 
+type SaveFeedback = {
+  Message: string;
+  Tone: "Success" | "Error";
+  Key: number;
+};
+
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
@@ -73,6 +79,9 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [SectionMenuOpen, SetSectionMenuOpen] = UseState(true);
   const [DraftValues, SetDraftValues] = UseState<Record<string, Record<string, unknown>>>({});
   const [Status, SetStatus] = UseState("Loading plugins...");
+  const [SavingPluginId, SetSavingPluginId] = UseState("");
+  const [SaveFeedbackValue, SetSaveFeedbackValue] = UseState<SaveFeedback | null>(null);
+  const SaveFeedbackTimeout = UseRef<number | null>(null);
 
   const SelectedPlugin = Plugins.find((Plugin) => Plugin.Metadata.Id === SelectedPluginId) ?? Plugins[0];
   const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin) : [];
@@ -88,6 +97,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
 
     return () => window.clearInterval(RefreshInterval);
   }, [Properties.GuildId]);
+
+  UseEffect(() => {
+    return () => {
+      if (SaveFeedbackTimeout.current) {
+        window.clearTimeout(SaveFeedbackTimeout.current);
+      }
+    };
+  }, []);
 
   async function LoadGuild(): Promise<void> {
     const Response = await fetch("/api/guilds");
@@ -126,22 +143,56 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
 
     if (MissingRequiredField) {
       SetStatus(`${MissingRequiredField.Label} is required.`);
+      ShowSaveFeedback(`${MissingRequiredField.Label} is required.`, "Error");
       return;
     }
 
-    const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
-      method: "PUT",
-      headers: {
-        ...BuildGuildHeaders(),
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        PluginId: Plugin.Metadata.Id,
-        Values: BuildPersistablePluginValues(Plugin, DraftValues[Plugin.Metadata.Id] ?? {})
-      })
+    SetSavingPluginId(Plugin.Metadata.Id);
+
+    try {
+      const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
+        method: "PUT",
+        headers: {
+          ...BuildGuildHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          PluginId: Plugin.Metadata.Id,
+          Values: BuildPersistablePluginValues(Plugin, DraftValues[Plugin.Metadata.Id] ?? {})
+        })
+      });
+
+      if (Response.ok) {
+        const Message = "Settings saved successfully.";
+
+        SetStatus(`${Plugin.Metadata.DisplayName} saved.`);
+        ShowSaveFeedback(Message, "Success");
+        return;
+      }
+
+      const ErrorMessage = await Response.text();
+      SetStatus(ErrorMessage);
+      ShowSaveFeedback(ErrorMessage, "Error");
+    } finally {
+      SetSavingPluginId("");
+    }
+  }
+
+  function ShowSaveFeedback(Message: string, Tone: SaveFeedback["Tone"]): void {
+    if (SaveFeedbackTimeout.current) {
+      window.clearTimeout(SaveFeedbackTimeout.current);
+    }
+
+    SetSaveFeedbackValue({
+      Message,
+      Tone,
+      Key: Date.now()
     });
 
-    SetStatus(Response.ok ? `${Plugin.Metadata.DisplayName} saved.` : await Response.text());
+    SaveFeedbackTimeout.current = window.setTimeout(() => {
+      SetSaveFeedbackValue(null);
+      SaveFeedbackTimeout.current = null;
+    }, 2_800);
   }
 
   function UpdateDraftValue(PluginId: string, Key: string, Value: unknown): void {
@@ -156,6 +207,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
 
   return (
     <main className="min-h-screen bg-slate-950 px-3 py-5 text-slate-100 sm:px-6 sm:py-8">
+      {SaveFeedbackValue ? <SaveFeedbackToast Feedback={SaveFeedbackValue} /> : null}
       <div className="mx-auto max-w-7xl">
         <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
@@ -262,8 +314,12 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       </p>
                     ) : null}
                   </div>
-                  <button className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void SavePlugin(SelectedPlugin)}>
-                    Save
+                  <button
+                    className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                    disabled={SavingPluginId === SelectedPlugin.Metadata.Id}
+                    onClick={() => void SavePlugin(SelectedPlugin)}
+                  >
+                    {SavingPluginId === SelectedPlugin.Metadata.Id ? "Saving..." : "Save"}
                   </button>
                 </div>
 
@@ -330,6 +386,45 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
         </div>
       </div>
     </main>
+  );
+}
+
+function SaveFeedbackToast(Properties: { Feedback: SaveFeedback }) {
+  const IsSuccess = Properties.Feedback.Tone === "Success";
+
+  return (
+    <div
+      aria-live="polite"
+      className={`hyperbot-save-toast fixed right-4 top-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-2xl border p-4 shadow-2xl shadow-black/30 sm:right-6 sm:top-6 ${
+        IsSuccess ? "border-emerald-400/40 bg-emerald-950 text-emerald-50" : "border-red-400/40 bg-red-950 text-red-50"
+      }`}
+      key={Properties.Feedback.Key}
+      role="status"
+    >
+      <span className={`hyperbot-save-toast-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${IsSuccess ? "bg-emerald-500" : "bg-red-500"}`}>
+        {IsSuccess ? <SaveCheckIcon /> : <SaveErrorIcon />}
+      </span>
+      <span>
+        <span className="block text-sm font-black">{IsSuccess ? "Settings saved" : "Save failed"}</span>
+        <span className={IsSuccess ? "mt-0.5 block text-sm text-emerald-100" : "mt-0.5 block text-sm text-red-100"}>{Properties.Feedback.Message}</span>
+      </span>
+    </div>
+  );
+}
+
+function SaveCheckIcon() {
+  return (
+    <svg aria-hidden="true" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
+      <path className="hyperbot-save-check-path" d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function SaveErrorIcon() {
+  return (
+    <svg aria-hidden="true" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
+      <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+    </svg>
   );
 }
 
