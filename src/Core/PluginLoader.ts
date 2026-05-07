@@ -6,6 +6,7 @@ import type { Redis } from "ioredis";
 import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
 import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
+import { IsPluginDisabled } from "./PluginState.js";
 import { PluginStorage } from "./Storage.js";
 import type { CommandAliasDefinition, CommandDefinition, LoadedPlugin, PluginConstructor } from "./Types.js";
 
@@ -27,8 +28,34 @@ export class PluginLoader {
     const ManifestEntries = await ScanPluginManifests(this.PluginDirectory);
 
     for (const ManifestEntry of ManifestEntries) {
-      await this.EnablePlugin(ManifestEntry.Directory);
+      if (await IsPluginDisabled(this.Prisma, ManifestEntry.Manifest.Metadata.Id)) {
+        continue;
+      }
+
+      await this.EnablePluginFromDirectory(ManifestEntry.Directory);
     }
+  }
+
+  public async EnablePlugin(PluginId: string): Promise<void> {
+    const ManifestEntry = (await ScanPluginManifests(this.PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === PluginId);
+
+    if (!ManifestEntry) {
+      throw new Error(`Plugin ${PluginId} not found.`);
+    }
+
+    await this.EnablePluginFromDirectory(ManifestEntry.Directory);
+  }
+
+  public async DisablePlugin(PluginId: string): Promise<void> {
+    await this.DisableLoadedPlugin(PluginId);
+  }
+
+  public async ReloadPlugin(PluginId: string): Promise<void> {
+    await this.EnablePlugin(PluginId);
+  }
+
+  public GetLoadedPluginIds(): string[] {
+    return Array.from(this.Plugins.keys());
   }
 
   public Watch(): void {
@@ -189,7 +216,7 @@ export class PluginLoader {
     return /^[a-z0-9_-]{1,32}$/u.test(CommandName);
   }
 
-  private async EnablePlugin(Directory: string): Promise<void> {
+  private async EnablePluginFromDirectory(Directory: string): Promise<void> {
     const ManifestEntry = (await ScanPluginManifests(this.PluginDirectory)).find(
       (Entry) => Path.resolve(Entry.Directory) === Path.resolve(Directory)
     );
@@ -199,7 +226,7 @@ export class PluginLoader {
     }
 
     const PluginId = ManifestEntry.Manifest.Metadata.Id;
-    await this.DisablePlugin(PluginId);
+    await this.DisableLoadedPlugin(PluginId);
 
     const EntryPointPath = this.ResolveEntryPoint(ManifestEntry.Directory, ManifestEntry.Manifest.EntryPoint);
     const ModuleUrl = `${pathToFileURL(EntryPointPath).href}?Reload=${Date.now()}`;
@@ -225,7 +252,7 @@ export class PluginLoader {
     });
   }
 
-  private async DisablePlugin(PluginId: string): Promise<void> {
+  private async DisableLoadedPlugin(PluginId: string): Promise<void> {
     const LoadedPluginValue = this.Plugins.get(PluginId);
 
     if (!LoadedPluginValue) {
@@ -243,7 +270,20 @@ export class PluginLoader {
       return;
     }
 
-    await this.EnablePlugin(Directory);
+    const ManifestEntry = (await ScanPluginManifests(this.PluginDirectory)).find(
+      (Entry) => Path.resolve(Entry.Directory) === Path.resolve(Directory)
+    );
+
+    if (!ManifestEntry) {
+      return;
+    }
+
+    if (await IsPluginDisabled(this.Prisma, ManifestEntry.Manifest.Metadata.Id)) {
+      await this.DisableLoadedPlugin(ManifestEntry.Manifest.Metadata.Id);
+      return;
+    }
+
+    await this.EnablePluginFromDirectory(Directory);
   }
 
   private ResolvePluginDirectory(ChangedPath: string): string | null {

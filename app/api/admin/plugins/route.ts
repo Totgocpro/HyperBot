@@ -3,11 +3,20 @@ import { Prisma as PrismaNamespace } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { GetDisabledPluginIds, SetPluginDisabled } from "@/src/Core/PluginState";
 import { PluginStorage } from "@/src/Core/Storage";
 import { PluginScope } from "@/src/Core/Types";
 import { RequireSuperAdmin } from "@/src/Web/Auth";
 
 const GlobalConfigGuildId = "Global";
+
+type PluginControlAction = "Enable" | "Disable" | "Reload";
+
+type BotPluginState = {
+  Id: string;
+  Loaded: boolean;
+  Disabled: boolean;
+};
 
 async function Get(Request: Request): Promise<Response> {
   try {
@@ -19,13 +28,17 @@ async function Get(Request: Request): Promise<Response> {
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
   const AllManifestEntries = await ScanPluginManifests(PluginDirectory);
   const ManifestEntries = AllManifestEntries.filter((ManifestEntry) => ManifestEntry.Manifest.Scope === PluginScope.Global);
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const BotPluginStates = await GetBotPluginStates();
   const Commands = AllManifestEntries.flatMap((ManifestEntry) =>
-    ManifestEntry.Manifest.Commands.map((Command) => ({
-      Name: Command.Name,
-      Description: Command.Description,
-      PluginId: ManifestEntry.Manifest.Metadata.Id,
-      PluginName: ManifestEntry.Manifest.Metadata.DisplayName
-    }))
+    DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id)
+      ? []
+      : ManifestEntry.Manifest.Commands.map((Command) => ({
+          Name: Command.Name,
+          Description: Command.Description,
+          PluginId: ManifestEntry.Manifest.Metadata.Id,
+          PluginName: ManifestEntry.Manifest.Metadata.DisplayName
+        }))
   );
   const Plugins = await Promise.all(
     ManifestEntries.map(async (ManifestEntry) => {
@@ -40,13 +53,29 @@ async function Get(Request: Request): Promise<Response> {
       return {
         Metadata: ManifestEntry.Manifest.Metadata,
         Scope: ManifestEntry.Manifest.Scope,
+        Loaded: BotPluginStates.get(ManifestEntry.Manifest.Metadata.Id)?.Loaded ?? false,
+        Disabled: DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id),
         Commands: ManifestEntry.Manifest.Commands,
         WebInterface: Fields
       };
     })
   );
 
-  return NextResponse.json({ Plugins, Commands });
+  const ManageablePlugins = AllManifestEntries.map((ManifestEntry) => {
+    const PluginId = ManifestEntry.Manifest.Metadata.Id;
+    const BotState = BotPluginStates.get(PluginId);
+
+    return {
+      Metadata: ManifestEntry.Manifest.Metadata,
+      Scope: ManifestEntry.Manifest.Scope,
+      Loaded: BotState?.Loaded ?? false,
+      Disabled: DisabledPluginIds.has(PluginId) || BotState?.Disabled === true,
+      Commands: ManifestEntry.Manifest.Commands,
+      Dependencies: ManifestEntry.Manifest.Dependencies ?? []
+    };
+  });
+
+  return NextResponse.json({ Plugins, Commands, ManageablePlugins });
 }
 
 async function Put(Request: Request): Promise<Response> {
@@ -87,6 +116,60 @@ async function Put(Request: Request): Promise<Response> {
   return NextResponse.json({ PluginId: Body.PluginId, Saved: true });
 }
 
+async function Post(Request: Request): Promise<Response> {
+  const ActorId = await ResolveSuperAdmin(Request);
+
+  if (ActorId instanceof Response) {
+    return ActorId;
+  }
+
+  const Body = (await Request.json()) as { PluginId?: string; Action?: PluginControlAction };
+
+  if (!Body.PluginId || !Body.Action) {
+    return new Response("PluginId and Action are required.", { status: 400 });
+  }
+
+  if (!["Enable", "Disable", "Reload"].includes(Body.Action)) {
+    return new Response("Unsupported plugin action.", { status: 400 });
+  }
+
+  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
+  const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
+
+  if (!ManifestEntry) {
+    return new Response("Plugin not found.", { status: 404 });
+  }
+
+  if (Body.Action === "Disable") {
+    await SetPluginDisabled(Prisma, Body.PluginId, true);
+  } else if (Body.Action === "Enable") {
+    await SetPluginDisabled(Prisma, Body.PluginId, false);
+  }
+
+  await RedisClient.lpush(
+    "Dashboard:PluginControlActions",
+    JSON.stringify({
+      PluginId: Body.PluginId,
+      Action: Body.Action,
+      ActorId,
+      CreatedAt: new Date().toISOString()
+    })
+  );
+
+  await Prisma.auditLog.create({
+    data: {
+      ActorId,
+      Action: `Plugin${Body.Action}Queued`,
+      Target: Body.PluginId,
+      Metadata: {
+        DisplayName: ManifestEntry.Manifest.Metadata.DisplayName
+      }
+    }
+  });
+
+  return NextResponse.json({ PluginId: Body.PluginId, Action: Body.Action, Queued: true });
+}
+
 async function ResolveSuperAdmin(Request: Request): Promise<string | Response> {
   try {
     return await RequireSuperAdmin(Request);
@@ -95,4 +178,15 @@ async function ResolveSuperAdmin(Request: Request): Promise<string | Response> {
   }
 }
 
-export { Get as GET, Put as PUT };
+async function GetBotPluginStates(): Promise<Map<string, BotPluginState>> {
+  const RawPluginStates = await RedisClient.get("Bot:Plugins");
+
+  if (!RawPluginStates) {
+    return new Map();
+  }
+
+  const ParsedStates = JSON.parse(RawPluginStates) as BotPluginState[];
+  return new Map(ParsedStates.map((State) => [State.Id, State]));
+}
+
+export { Get as GET, Put as PUT, Post as POST };

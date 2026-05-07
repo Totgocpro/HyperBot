@@ -8,6 +8,7 @@ type GlobalWithClients = typeof globalThis & {
 
 const GlobalClients = globalThis as GlobalWithClients;
 const IsNextProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
+const RedisPassword = process.env.REDIS_PASSWORD;
 
 export const Prisma = GlobalClients.HyperBotPrisma ?? new PrismaClient();
 
@@ -21,6 +22,7 @@ export const RedisClient =
       })
     : new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
         lazyConnect: true,
+        password: RedisPassword,
         maxRetriesPerRequest: 2
       }));
 

@@ -2,6 +2,7 @@ import Path from "node:path";
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { GetDisabledPluginIds } from "@/src/Core/PluginState";
 import { PluginScope } from "@/src/Core/Types";
 import { RequireSuperAdmin } from "@/src/Web/Auth";
 
@@ -13,8 +14,9 @@ async function Get(Request: Request): Promise<Response> {
   }
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
   const Plugins = (await ScanPluginManifests(PluginDirectory))
-    .filter((Entry) => Entry.Manifest.Scope === PluginScope.Guild)
+    .filter((Entry) => Entry.Manifest.Scope === PluginScope.Guild && !DisabledPluginIds.has(Entry.Manifest.Metadata.Id))
     .map((Entry) => ({
       Id: Entry.Manifest.Metadata.Id,
       DisplayName: Entry.Manifest.Metadata.DisplayName
@@ -46,6 +48,9 @@ async function Put(Request: Request): Promise<Response> {
     return new Response("GuildId, DiscordId and AllowedPluginIds are required.", { status: 400 });
   }
 
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const AllowedPluginIds = Body.AllowedPluginIds.filter((PluginId) => !DisabledPluginIds.has(PluginId));
+
   const Grant = await Prisma.guildRoleGrant.upsert({
     where: {
       GuildId_DiscordId: {
@@ -55,13 +60,13 @@ async function Put(Request: Request): Promise<Response> {
     },
     update: {
       Role: "GuildAdmin",
-      AllowedPluginIds: Body.AllowedPluginIds
+      AllowedPluginIds
     },
     create: {
       GuildId: Body.GuildId,
       DiscordId: Body.DiscordId,
       Role: "GuildAdmin",
-      AllowedPluginIds: Body.AllowedPluginIds
+      AllowedPluginIds
     }
   });
 
@@ -70,7 +75,7 @@ async function Put(Request: Request): Promise<Response> {
       ActorId,
       Action: "GuildRoleGrantUpdated",
       Target: `${Body.GuildId}:${Body.DiscordId}`,
-      Metadata: { AllowedPluginIds: Body.AllowedPluginIds }
+      Metadata: { AllowedPluginIds }
     }
   });
 

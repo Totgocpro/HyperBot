@@ -55,11 +55,21 @@ type AdminPlugin = {
     Author: string;
     Icon: string;
   };
+  Scope?: "Guild" | "Global";
+  Loaded?: boolean;
+  Disabled?: boolean;
   Commands: Array<{
     Name: string;
     Description: string;
   }>;
   WebInterface: Array<SettingsField & { Value: unknown }>;
+};
+
+type ManageablePlugin = Omit<AdminPlugin, "WebInterface"> & {
+  Scope: "Guild" | "Global";
+  Loaded: boolean;
+  Disabled: boolean;
+  Dependencies: string[];
 };
 
 type AdminCommand = {
@@ -87,7 +97,7 @@ const EmptyUserForm: UserForm = {
 
 const AdminSections: Array<{ Id: AdminSection; Label: string; Description: string }> = [
   { Id: "GeneralStatus", Label: "General and status", Description: "Instance health and quick metrics." },
-  { Id: "GlobalPlugins", Label: "Global Plugin", Description: "Instance-level plugin settings." },
+  { Id: "GlobalPlugins", Label: "Plugins", Description: "Enable, disable, reload, and configure plugins." },
   { Id: "UserManagement", Label: "User Management", Description: "Accounts, roles, bans, and access." },
   { Id: "GuildBanlist", Label: "Guild Banlist", Description: "Servers blocked from using the bot." }
 ];
@@ -101,6 +111,7 @@ export function SuperAdminPanel() {
   const [Grants, SetGrants] = UseState<GuildGrantRow[]>([]);
   const [GrantPlugins, SetGrantPlugins] = UseState<GrantPlugin[]>([]);
   const [GlobalPlugins, SetGlobalPlugins] = UseState<AdminPlugin[]>([]);
+  const [ManageablePlugins, SetManageablePlugins] = UseState<ManageablePlugin[]>([]);
   const [AvailableCommands, SetAvailableCommands] = UseState<AdminCommand[]>([]);
   const [SelectedGlobalPluginId, SetSelectedGlobalPluginId] = UseState("");
   const [GlobalPluginDraftValues, SetGlobalPluginDraftValues] = UseState<Record<string, Record<string, unknown>>>({});
@@ -155,7 +166,7 @@ export function SuperAdminPanel() {
 
     const UsersPayload = ((await UsersResponse.json()) as { Users: DashboardUserRow[] }).Users;
     const CurrentUserPayload = (await CurrentUserResponse.json()) as { User: DashboardUserRow };
-    const GlobalPluginsPayload = (await GlobalPluginsResponse.json()) as { Plugins: AdminPlugin[]; Commands: AdminCommand[] };
+    const GlobalPluginsPayload = (await GlobalPluginsResponse.json()) as { Plugins: AdminPlugin[]; Commands: AdminCommand[]; ManageablePlugins: ManageablePlugin[] };
     const GrantsPayload = (await GrantsResponse.json()) as { Grants: GuildGrantRow[]; Plugins: GrantPlugin[] };
 
     SetHealth((await HealthResponse.json()) as HealthReport);
@@ -163,6 +174,7 @@ export function SuperAdminPanel() {
     SetUsers(UsersPayload);
     SetGuilds(((await GuildsResponse.json()) as { Guilds: GuildAccessRow[] }).Guilds);
     SetGlobalPlugins(GlobalPluginsPayload.Plugins);
+    SetManageablePlugins(GlobalPluginsPayload.ManageablePlugins);
     SetAvailableCommands(GlobalPluginsPayload.Commands);
     SetSelectedGlobalPluginId(GlobalPluginsPayload.Plugins[0]?.Metadata.Id ?? "");
     SetGlobalPluginDraftValues(BuildPluginDraftValues(GlobalPluginsPayload.Plugins));
@@ -288,6 +300,19 @@ export function SuperAdminPanel() {
     await LoadAdminData();
   }
 
+  async function ControlPlugin(PluginId: string, Action: "Enable" | "Disable" | "Reload"): Promise<void> {
+    const Response = await fetch("/api/admin/plugins", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ PluginId, Action })
+    });
+
+    SetStatus(Response.ok ? `${PluginId}: ${Action.toLowerCase()} queued.` : await Response.text());
+    await LoadAdminData();
+  }
+
   function UpdateGlobalPluginDraftValue(PluginId: string, Key: string, Value: unknown): void {
     SetGlobalPluginDraftValues((PreviousValues) => ({
       ...PreviousValues,
@@ -300,11 +325,16 @@ export function SuperAdminPanel() {
 
   async function SaveAccessDraft(DiscordId: string, AccessDraft: UserAccessDraft): Promise<void> {
     const ExistingGrants = Grants.filter((Grant) => Grant.DiscordId === DiscordId);
-    const RequestedGuildIds = new Set(Object.keys(AccessDraft).filter((GuildId) => AccessDraft[GuildId]?.length));
+    const AvailablePluginIds = new Set(GrantPlugins.map((Plugin) => Plugin.Id));
+    const SanitizedAccessDraft = Object.fromEntries(
+      Object.entries(AccessDraft)
+        .map(([GuildId, PluginIds]) => [GuildId, PluginIds.filter((PluginId) => AvailablePluginIds.has(PluginId))] as const)
+        .filter(([, PluginIds]) => PluginIds.length > 0)
+    );
+    const RequestedGuildIds = new Set(Object.keys(SanitizedAccessDraft));
 
     await Promise.all(
-      Object.entries(AccessDraft)
-        .filter(([, PluginIds]) => PluginIds.length > 0)
+      Object.entries(SanitizedAccessDraft)
         .map(([GuildId, PluginIds]) =>
           fetch("/api/admin/grants", {
             method: "PUT",
@@ -418,10 +448,12 @@ export function SuperAdminPanel() {
             <GlobalPluginsPanel
               GlobalPlugins={GlobalPlugins}
               GlobalPluginDraftValues={GlobalPluginDraftValues}
+              ManageablePlugins={ManageablePlugins}
               SelectedGlobalPlugin={SelectedGlobalPlugin}
               SelectedGlobalPluginId={SelectedGlobalPluginId}
               SetSelectedGlobalPluginId={SetSelectedGlobalPluginId}
               SaveGlobalPlugin={SaveGlobalPlugin}
+              ControlPlugin={ControlPlugin}
               AvailableCommands={AvailableCommands}
               UpdateGlobalPluginDraftValue={UpdateGlobalPluginDraftValue}
             />
@@ -506,8 +538,10 @@ function GeneralStatusPanel(Properties: { Health: HealthReport | null; Users: Da
 
 function GlobalPluginsPanel(Properties: {
   AvailableCommands: AdminCommand[];
+  ControlPlugin: (PluginId: string, Action: "Enable" | "Disable" | "Reload") => Promise<void>;
   GlobalPlugins: AdminPlugin[];
   GlobalPluginDraftValues: Record<string, Record<string, unknown>>;
+  ManageablePlugins: ManageablePlugin[];
   SelectedGlobalPlugin: AdminPlugin | undefined;
   SelectedGlobalPluginId: string;
   SetSelectedGlobalPluginId: (Value: string) => void;
@@ -518,8 +552,49 @@ function GlobalPluginsPanel(Properties: {
 
   return (
     <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
-      <h2 className="text-2xl font-black text-white sm:text-3xl">Global Plugin</h2>
-      <p className="mt-1 text-sm text-slate-400">These plugins are configured at instance level, not per server.</p>
+      <h2 className="text-2xl font-black text-white sm:text-3xl">Plugins</h2>
+      <p className="mt-1 text-sm text-slate-400">Manage runtime plugin state without restarting the bot.</p>
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {Properties.ManageablePlugins.map((Plugin) => (
+          <div className="rounded-3xl border border-slate-800 bg-slate-950 p-4" key={Plugin.Metadata.Id}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{Plugin.Scope} plugin</p>
+                <h3 className="mt-1 text-lg font-black text-white">{Plugin.Metadata.DisplayName}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {Plugin.Metadata.Id} | v{Plugin.Metadata.Version} | {Plugin.Commands.length} command(s)
+                </p>
+              </div>
+              <span className={`w-fit rounded-full px-3 py-1 text-xs font-black ${Plugin.Disabled ? "bg-red-500/15 text-red-200" : Plugin.Loaded ? "bg-emerald-500/15 text-emerald-200" : "bg-amber-500/15 text-amber-200"}`}>
+                {Plugin.Disabled ? "Disabled" : Plugin.Loaded ? "Active" : "Pending"}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+              <button
+                className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!Plugin.Disabled && Plugin.Loaded}
+                onClick={() => void Properties.ControlPlugin(Plugin.Metadata.Id, "Enable")}
+              >
+                Enable / add
+              </button>
+              <button
+                className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Plugin.Disabled}
+                onClick={() => void Properties.ControlPlugin(Plugin.Metadata.Id, "Reload")}
+              >
+                Reload
+              </button>
+              <button
+                className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={Plugin.Disabled}
+                onClick={() => void Properties.ControlPlugin(Plugin.Metadata.Id, "Disable")}
+              >
+                Disable
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
       <div className="mt-5 grid gap-6 lg:grid-cols-[280px_1fr]">
         <aside className="rounded-3xl border border-slate-800 bg-slate-950 p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">

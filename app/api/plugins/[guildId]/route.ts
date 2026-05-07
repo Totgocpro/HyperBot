@@ -2,6 +2,7 @@ import Path from "node:path";
 import { NextResponse } from "next/server";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { GetDisabledPluginIds } from "@/src/Core/PluginState";
 import { PluginStorage } from "@/src/Core/Storage";
 import { SettingsFieldType, PluginScope, type BotChannelSummary, type BotRoleSummary, type DiscordGuildSummary, type SettingsField } from "@/src/Core/Types";
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
@@ -27,7 +28,10 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
   }
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const ManifestEntries = (await ScanPluginManifests(PluginDirectory)).filter((ManifestEntry) => ManifestEntry.Manifest.Scope !== PluginScope.Global);
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const ManifestEntries = (await ScanPluginManifests(PluginDirectory)).filter(
+    (ManifestEntry) => ManifestEntry.Manifest.Scope !== PluginScope.Global && !DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id)
+  );
   const AvailablePluginIds = new Set(ManifestEntries.map((ManifestEntry) => ManifestEntry.Manifest.Metadata.Id));
   const AllowedManifestEntries = [];
 
@@ -91,13 +95,18 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
   }
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
   const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
 
-  if (!ManifestEntry) {
+  if (!ManifestEntry || DisabledPluginIds.has(Body.PluginId)) {
     return new Response("Plugin not found.", { status: 404 });
   }
 
-  const AvailablePluginIds = new Set((await ScanPluginManifests(PluginDirectory)).map((Entry) => Entry.Manifest.Metadata.Id));
+  const AvailablePluginIds = new Set(
+    (await ScanPluginManifests(PluginDirectory))
+      .filter((Entry) => !DisabledPluginIds.has(Entry.Manifest.Metadata.Id))
+      .map((Entry) => Entry.Manifest.Metadata.Id)
+  );
   const DependencyErrors = BuildDependencyErrors(ManifestEntry.Manifest.Dependencies ?? [], AvailablePluginIds);
 
   if (DependencyErrors.length > 0) {

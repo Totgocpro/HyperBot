@@ -1,7 +1,8 @@
 import Path from "node:path";
 import { NextResponse } from "next/server";
-import { RedisClient } from "@/src/Core/Clients";
+import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { IsPluginDisabled } from "@/src/Core/PluginState";
 import { PluginScope, SettingsFieldType, type DiscordGuildSummary } from "@/src/Core/Types";
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
@@ -37,6 +38,10 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
 
   if (!ManifestEntry) {
     return new Response("Plugin not found.", { status: 404 });
+  }
+
+  if (await IsPluginDisabled(Prisma, Body.PluginId)) {
+    return new Response("Plugin is disabled.", { status: 404 });
   }
 
   const ActionExists = ManifestEntry.Manifest.WebInterface.some(

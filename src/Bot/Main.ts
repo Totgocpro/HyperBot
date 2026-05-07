@@ -9,6 +9,8 @@ import {
 import Path from "node:path";
 import { Prisma, RedisClient } from "../Core/Clients.js";
 import { PluginLoader } from "../Core/PluginLoader.js";
+import { ScanPluginManifests } from "../Core/PluginScanner.js";
+import { GetDisabledPluginIds, IsPluginDisabled, SetPluginDisabled } from "../Core/PluginState.js";
 import type { BotChannelSummary, BotGuildSummary, BotRoleSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
 
 enum DiscordApplicationCommandOptionType {
@@ -55,6 +57,13 @@ type DashboardPluginAction = {
   Payload?: unknown;
 };
 
+type DashboardPluginControlAction = {
+  PluginId: string;
+  Action: "Enable" | "Disable" | "Reload";
+  ActorId: string;
+  CreatedAt: string;
+};
+
 const DiscordToken = process.env.DISCORD_TOKEN;
 const DiscordClientId = process.env.DISCORD_CLIENT_ID;
 const DiscordGuildId = process.env.DISCORD_GUILD_ID;
@@ -81,6 +90,7 @@ DiscordClient.once("clientReady", () => {
     Loader.Watch();
     await EnforceGuildAccess();
     await CacheBotGuilds();
+    await CachePluginStates();
     QueueSlashCommandRegistration();
     await RedisClient.set("Bot:Heartbeat", new Date().toISOString(), "EX", 30);
 
@@ -89,11 +99,20 @@ DiscordClient.once("clientReady", () => {
         await EnforceGuildAccess();
         await RedisClient.set("Bot:Heartbeat", new Date().toISOString(), "EX", 30);
         await CacheBotGuilds();
+        await ProcessDashboardPluginControlActions();
+        await CachePluginStates();
         QueueSlashCommandRegistration();
         await Loader.DispatchTick();
         await ProcessDashboardPluginActions();
       });
     }, 10_000);
+
+    setInterval(() => {
+      void RunSafely("plugin control tick", async () => {
+        await ProcessDashboardPluginControlActions();
+        await CachePluginStates();
+      });
+    }, 1_000);
 
     console.info(`Bot connected as ${DiscordClient.user?.tag ?? "Unknown"}.`);
   });
@@ -349,6 +368,71 @@ async function ProcessDashboardPluginActions(): Promise<void> {
       console.error("Dashboard plugin action failed:", ErrorValue);
     }
   }
+}
+
+async function ProcessDashboardPluginControlActions(): Promise<void> {
+  for (let Index = 0; Index < 25; Index += 1) {
+    const RawAction = await RedisClient.rpop("Dashboard:PluginControlActions");
+
+    if (!RawAction) {
+      return;
+    }
+
+    try {
+      const Action = JSON.parse(RawAction) as DashboardPluginControlAction;
+      await ApplyDashboardPluginControlAction(Action);
+      await Prisma.auditLog.create({
+        data: {
+          ActorId: Action.ActorId,
+          Action: `Plugin${Action.Action}`,
+          Target: Action.PluginId,
+          Metadata: {
+            Source: "SuperAdminPanel",
+            CreatedAt: Action.CreatedAt
+          }
+        }
+      });
+      QueueSlashCommandRegistration();
+      await CachePluginStates();
+    } catch (ErrorValue) {
+      console.error("Dashboard plugin control action failed:", ErrorValue);
+    }
+  }
+}
+
+async function ApplyDashboardPluginControlAction(Action: DashboardPluginControlAction): Promise<void> {
+  switch (Action.Action) {
+    case "Enable":
+      await SetPluginDisabled(Prisma, Action.PluginId, false);
+      await Loader.EnablePlugin(Action.PluginId);
+      return;
+    case "Disable":
+      await Loader.DisablePlugin(Action.PluginId);
+      await SetPluginDisabled(Prisma, Action.PluginId, true);
+      return;
+    case "Reload":
+      if (await IsPluginDisabled(Prisma, Action.PluginId)) {
+        throw new Error(`Plugin ${Action.PluginId} is disabled and cannot be reloaded.`);
+      }
+
+      await Loader.ReloadPlugin(Action.PluginId);
+      return;
+  }
+}
+
+async function CachePluginStates(): Promise<void> {
+  const ManifestEntries = await ScanPluginManifests(PluginDirectory);
+  const LoadedPluginIds = new Set(Loader.GetLoadedPluginIds());
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const PluginStates = ManifestEntries.map((Entry) => ({
+    Id: Entry.Manifest.Metadata.Id,
+    Loaded: LoadedPluginIds.has(Entry.Manifest.Metadata.Id),
+    Disabled: DisabledPluginIds.has(Entry.Manifest.Metadata.Id),
+    DisplayName: Entry.Manifest.Metadata.DisplayName,
+    Scope: Entry.Manifest.Scope
+  }));
+
+  await RedisClient.set("Bot:Plugins", JSON.stringify(PluginStates), "EX", 30);
 }
 
 async function CacheBotRoles(): Promise<void> {
