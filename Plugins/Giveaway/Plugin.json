@@ -1,0 +1,218 @@
+{
+  "Metadata": {
+    "Id": "Giveaway",
+    "DisplayName": "Giveaway",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "GA"
+  },
+  "Scope": "Guild",
+  "Commands": [
+    {
+      "Name": "giveaway-start",
+      "Description": "Start a giveaway with a join button.",
+      "Options": [
+        {
+          "Name": "prize",
+          "Description": "Prize to give away.",
+          "Type": "String",
+          "Required": true
+        },
+        {
+          "Name": "duration",
+          "Description": "Duration, for example 10m, 2h, 3d.",
+          "Type": "String",
+          "Required": true
+        },
+        {
+          "Name": "winners",
+          "Description": "Number of winners.",
+          "Type": "Integer",
+          "Required": true
+        },
+        {
+          "Name": "channel",
+          "Description": "Target channel. Defaults to the current channel.",
+          "Type": "Channel",
+          "Required": false
+        }
+      ]
+    },
+    {
+      "Name": "giveaway-end",
+      "Description": "End a giveaway immediately.",
+      "Options": [
+        {
+          "Name": "message_id",
+          "Description": "Giveaway message ID.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "giveaway-reroll",
+      "Description": "Reroll winners for an ended giveaway.",
+      "Options": [
+        {
+          "Name": "message_id",
+          "Description": "Giveaway message ID.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "giveaway-list",
+      "Description": "List active giveaways for this server."
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "DefaultChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Default giveaway channel",
+      "Default": "",
+      "Section": "Defaults",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "DefaultDuration",
+      "Type": "String",
+      "Label": "Default duration",
+      "Default": "1d",
+      "Section": "Defaults"
+    },
+    {
+      "Key": "DefaultWinnerCount",
+      "Type": "Number",
+      "Label": "Default winner count",
+      "Default": 1,
+      "Section": "Defaults"
+    },
+    {
+      "Key": "MaxWinnerCount",
+      "Type": "Number",
+      "Label": "Maximum winner count",
+      "Default": 20,
+      "Section": "Defaults"
+    },
+    {
+      "Key": "RequiredRoleIds",
+      "Type": "List",
+      "ItemType": "RolePicker",
+      "Label": "Required roles",
+      "Default": [],
+      "Section": "Entry rules"
+    },
+    {
+      "Key": "BlockedRoleIds",
+      "Type": "List",
+      "ItemType": "RolePicker",
+      "Label": "Blocked roles",
+      "Default": [],
+      "Section": "Entry rules"
+    },
+    {
+      "Key": "BonusEntryRules",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Bonus entry rules",
+      "Default": [],
+      "Section": "Entry rules"
+    },
+    {
+      "Key": "GiveawayTitle",
+      "Type": "String",
+      "Label": "Giveaway title",
+      "Default": "🎉 Giveaway: %prize%",
+      "Section": "Messages"
+    },
+    {
+      "Key": "GiveawayDescription",
+      "Type": "String",
+      "Label": "Giveaway description",
+      "Default": "Click the button below to enter. Ends %endsAt%.",
+      "Section": "Messages"
+    },
+    {
+      "Key": "EndedDescription",
+      "Type": "String",
+      "Label": "Ended giveaway description",
+      "Default": "This giveaway has ended. Winners: %winners%.",
+      "Section": "Messages"
+    },
+    {
+      "Key": "NoWinnerText",
+      "Type": "String",
+      "Label": "No winner text",
+      "Default": "No valid winner could be selected.",
+      "Section": "Messages"
+    },
+    {
+      "Key": "WinnerAnnouncement",
+      "Type": "String",
+      "Label": "Winner announcement",
+      "Default": "Congratulations %winners%! You won **%prize%**.",
+      "Section": "Messages"
+    },
+    {
+      "Key": "RerollAnnouncement",
+      "Type": "String",
+      "Label": "Reroll announcement",
+      "Default": "New winner(s) for **%prize%**: %winners%.",
+      "Section": "Messages"
+    },
+    {
+      "Key": "JoinButtonLabel",
+      "Type": "String",
+      "Label": "Join button label",
+      "Default": "Enter giveaway",
+      "Section": "Button"
+    },
+    {
+      "Key": "LeaveButtonLabel",
+      "Type": "String",
+      "Label": "Leave button label",
+      "Default": "Leave giveaway",
+      "Section": "Button"
+    },
+    {
+      "Key": "EntryAcceptedMessage",
+      "Type": "String",
+      "Label": "Entry accepted message",
+      "Default": "You entered the giveaway.",
+      "Section": "Button"
+    },
+    {
+      "Key": "EntryRemovedMessage",
+      "Type": "String",
+      "Label": "Entry removed message",
+      "Default": "Your giveaway entry was removed.",
+      "Section": "Button"
+    },
+    {
+      "Key": "NotEligibleMessage",
+      "Type": "String",
+      "Label": "Not eligible message",
+      "Default": "You are not eligible for this giveaway.",
+      "Section": "Button"
+    },
+    {
+      "Key": "GiveawayColor",
+      "Type": "String",
+      "Label": "Active embed color",
+      "Default": "#5865f2",
+      "Section": "Design"
+    },
+    {
+      "Key": "EndedColor",
+      "Type": "String",
+      "Label": "Ended embed color",
+      "Default": "#22c55e",
+      "Section": "Design"
+    }
+  ],
+  "EntryPoint": "./GiveawayPlugin.ts"
+}

@@ -22,12 +22,24 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 | `CommandAliases` | Global | - | Add aliases for existing slash commands. |
 | `CustomStatus` | Global | - | Custom Discord presence with rotating status text. |
 | `DiscordGame` | Guild | `/minesweeper`, `/tictactoe` | Interactive Discord mini-games. |
+| `Giveaway` | Guild | `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list` | Button-based giveaways with automatic ending, winner rerolls, entry rules, and role bonuses. |
 | `Leveling` | Guild | `/leaderboard` | XP, rankings, and member progression. Depends on `Statistics`. |
 | `Moderation` | Guild | `/warn`, `/lookup` | Sanctions, moderation logs, and AutoMod rules. |
 | `SendEmbed` | Guild | - | Create and send embeds from the dashboard. |
 | `Statistics` | Guild | `/stats` | Message, voice, join, and leave statistics. |
 | `TempVoice` | Guild | - | Temporary voice channels with a control panel. |
 | `WelcomeMessage` | Guild | - | Join and leave messages, as embeds or images. |
+
+### Giveaway Plugin
+
+The `Giveaway` plugin provides Mee6-style giveaway messages with Discord buttons.
+
+- `/giveaway-start prize duration winners [channel]`: creates a giveaway message with enter and leave buttons.
+- `/giveaway-end message_id`: ends a giveaway immediately and selects winners.
+- `/giveaway-reroll message_id`: rerolls winners for an ended giveaway.
+- `/giveaway-list`: shows active giveaways for the server.
+
+Dashboard settings include default channel and duration, maximum winners, required roles, blocked roles, custom messages, embed colors, and role-based bonus entries. Bonus entries use the format `ROLE_ID=ENTRIES`, for example `123456789012345678=3` gives members with that role three total entries.
 
 ## Requirements
 
