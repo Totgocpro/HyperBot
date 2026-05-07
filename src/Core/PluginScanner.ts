@@ -3,6 +3,12 @@ import Path from "node:path";
 import { z } from "zod";
 import { DashboardElementType, PluginScope, SettingsFieldType, type PluginManifest } from "./Types.js";
 
+const SettingsFieldVisibilityRuleSchema = z.object({
+  Key: z.string().min(1),
+  Value: z.union([z.string(), z.number(), z.boolean()]),
+  Operator: z.enum(["Equals", "NotEquals"]).optional()
+});
+
 const SettingsFieldSchema = z.object({
   Key: z.string().min(1),
   Type: z.nativeEnum(SettingsFieldType),
@@ -16,6 +22,8 @@ const SettingsFieldSchema = z.object({
   ValidateAs: z.enum(["Regex"]).optional(),
   SupportedChannelTypes: z.array(z.string()).optional(),
   RequireWritable: z.boolean().optional(),
+  VisibleWhen: z.union([SettingsFieldVisibilityRuleSchema, z.array(SettingsFieldVisibilityRuleSchema)]).optional(),
+  VisibleWhenAny: z.array(SettingsFieldVisibilityRuleSchema).optional(),
   Options: z
     .array(
       z.object({

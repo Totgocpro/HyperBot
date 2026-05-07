@@ -84,7 +84,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const SaveFeedbackTimeout = UseRef<number | null>(null);
 
   const SelectedPlugin = Plugins.find((Plugin) => Plugin.Metadata.Id === SelectedPluginId) ?? Plugins[0];
-  const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin) : [];
+  const SelectedPluginDraftValues = SelectedPlugin ? DraftValues[SelectedPlugin.Metadata.Id] ?? {} : {};
+  const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin, SelectedPluginDraftValues) : [];
   const HasDashboardOverview = Boolean(SelectedPlugin?.DashboardElements?.length);
 
   UseEffect(() => {
@@ -139,7 +140,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }
 
   async function SavePlugin(Plugin: DashboardPlugin): Promise<void> {
-    const MissingRequiredField = Plugin.WebInterface.find((Field) => Field.Required && !DraftValues[Plugin.Metadata.Id]?.[Field.Key]);
+    const PluginDraftValues = DraftValues[Plugin.Metadata.Id] ?? {};
+    const MissingRequiredField = Plugin.WebInterface.find((Field) => Field.Required && IsFieldVisible(Field, PluginDraftValues) && !PluginDraftValues[Field.Key]);
 
     if (MissingRequiredField) {
       SetStatus(`${MissingRequiredField.Label} is required.`);
@@ -1159,10 +1161,10 @@ function BuildGuildHeaders(): HeadersInit {
   return {};
 }
 
-function BuildConfigSections(Plugin: DashboardPlugin): PluginConfigSection[] {
+function BuildConfigSections(Plugin: DashboardPlugin, Values: Record<string, unknown>): PluginConfigSection[] {
   const Sections = new Map<string, PluginConfigSection>();
 
-  for (const Field of Plugin.WebInterface) {
+  for (const Field of Plugin.WebInterface.filter((FieldValue) => IsFieldVisible(FieldValue, Values))) {
     const Label = Field.Section ?? "General";
     const Id = BuildSectionId(Label);
     const ExistingSection = Sections.get(Id);
@@ -1180,6 +1182,27 @@ function BuildConfigSections(Plugin: DashboardPlugin): PluginConfigSection[] {
   }
 
   return Array.from(Sections.values());
+}
+
+function IsFieldVisible(Field: SettingsField, Values: Record<string, unknown>): boolean {
+  const AllRules = Array.isArray(Field.VisibleWhen) ? Field.VisibleWhen : Field.VisibleWhen ? [Field.VisibleWhen] : [];
+
+  if (AllRules.length > 0 && !AllRules.every((Rule) => MatchesVisibilityRule(Rule, Values))) {
+    return false;
+  }
+
+  if (Field.VisibleWhenAny?.length && !Field.VisibleWhenAny.some((Rule) => MatchesVisibilityRule(Rule, Values))) {
+    return false;
+  }
+
+  return true;
+}
+
+function MatchesVisibilityRule(Rule: NonNullable<SettingsField["VisibleWhenAny"]>[number], Values: Record<string, unknown>): boolean {
+  const CurrentValue = Values[Rule.Key];
+  const Matches = String(CurrentValue) === String(Rule.Value);
+
+  return Rule.Operator === "NotEquals" ? !Matches : Matches;
 }
 
 function BuildSectionId(Label: string): string {
@@ -1301,6 +1324,18 @@ function RenderField(
     return <ActionButton Field={Field} GuildId={GuildId} PluginId={PluginId} SetStatus={SetStatus} />;
   }
 
+  if (PluginId === "WelcomeMessage" && IsWelcomeImageField(Field.Key)) {
+    return (
+      <ImageUploadField
+        Field={Field}
+        PluginId={PluginId}
+        SetStatus={SetStatus}
+        UpdateDraftValue={UpdateDraftValue}
+        Value={String(Value ?? "")}
+      />
+    );
+  }
+
   return (
     <label className="block text-sm font-bold text-slate-200">
       {Field.Label}
@@ -1311,6 +1346,73 @@ function RenderField(
         value={String(Value ?? "")}
       />
     </label>
+  );
+}
+
+function IsWelcomeImageField(Key: string): boolean {
+  return Key === "ImageBackgroundImage" || Key === "WelcomeImageBackgroundImage" || Key === "LeaveImageBackgroundImage";
+}
+
+function ImageUploadField(Properties: {
+  Field: SettingsField & { Value: unknown };
+  PluginId: string;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+  Value: string;
+}) {
+  const MaxImageBytes = 1_500_000;
+  const IsPreviewable = Properties.Value.startsWith("data:image/") || /^https?:\/\//iu.test(Properties.Value);
+
+  function UpdateValue(Value: string): void {
+    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, Value);
+  }
+
+  function UploadFile(FileValue: File | undefined): void {
+    if (!FileValue) {
+      return;
+    }
+
+    if (!FileValue.type.startsWith("image/")) {
+      Properties.SetStatus("Select an image file.");
+      return;
+    }
+
+    if (FileValue.size > MaxImageBytes) {
+      Properties.SetStatus("Image is too large. Maximum size is 1.5 MB.");
+      return;
+    }
+
+    const Reader = new FileReader();
+    Reader.onload = () => {
+      UpdateValue(String(Reader.result ?? ""));
+      Properties.SetStatus(`${Properties.Field.Label} uploaded in draft. Use Save to persist it.`);
+    };
+    Reader.onerror = () => Properties.SetStatus("Image upload failed.");
+    Reader.readAsDataURL(FileValue);
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+      <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
+      <p className="mt-1 text-xs text-slate-500">Paste an image URL or upload a PNG/JPG/WebP file. Uploaded images are stored with this plugin configuration.</p>
+      <input
+        className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+        onChange={(Event) => UpdateValue(Event.target.value)}
+        placeholder="https://example.com/background.png"
+        type="text"
+        value={Properties.Value}
+      />
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500">
+          Upload image
+          <input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(Event) => UploadFile(Event.target.files?.[0])} type="file" />
+        </label>
+        <button className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800" onClick={() => UpdateValue("")} type="button">
+          Clear
+        </button>
+      </div>
+      {IsPreviewable ? <img alt="" className="mt-4 max-h-44 w-full rounded-2xl border border-slate-800 object-cover" src={Properties.Value} /> : null}
+    </div>
   );
 }
 

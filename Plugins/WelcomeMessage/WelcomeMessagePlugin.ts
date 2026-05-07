@@ -14,6 +14,8 @@ import { deflateSync } from "node:zlib";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
 type MessageMode = "Embed" | "Image";
+type ImageFitMode = "Cover" | "Contain" | "Stretch";
+type ImageAvatarStyle = "Circle" | "Rounded" | "Square";
 
 type WelcomeMessageConfig = {
   WelcomeEnabled: boolean;
@@ -31,11 +33,25 @@ type WelcomeMessageConfig = {
   LeaveColor: string;
   LeaveEmbedAuthor: boolean;
   ImageBackground: string;
+  ImageBackgroundImage: string;
+  WelcomeImageBackgroundImage: string;
+  LeaveImageBackgroundImage: string;
+  ImageBackgroundFit: ImageFitMode;
+  ImageBackgroundOpacity: number;
+  ImageOverlayOpacity: number;
   ImageAccent: string;
   ImageTextColor: string;
   ImageMutedTextColor: string;
   ImageFooter: string;
+  ImageFooterEnabled: boolean;
   ImageBadgeText: string;
+  ImageBadgeEnabled: boolean;
+  ImagePanelEnabled: boolean;
+  ImagePanelOpacity: number;
+  ImageAvatarStyle: ImageAvatarStyle;
+  ImageAvatarSize: number;
+  ImageTitleFontSize: number;
+  ImageDescriptionFontSize: number;
   ImageShowInitialsAvatar: boolean;
   PingUser: boolean;
 };
@@ -56,11 +72,25 @@ const DefaultConfig: WelcomeMessageConfig = {
   LeaveColor: "#ef4444",
   LeaveEmbedAuthor: true,
   ImageBackground: "#020617",
+  ImageBackgroundImage: "",
+  WelcomeImageBackgroundImage: "",
+  LeaveImageBackgroundImage: "",
+  ImageBackgroundFit: "Cover",
+  ImageBackgroundOpacity: 100,
+  ImageOverlayOpacity: 55,
   ImageAccent: "#38bdf8",
   ImageTextColor: "#f8fafc",
   ImageMutedTextColor: "#cbd5e1",
   ImageFooter: "%server% • %memberCount% members",
+  ImageFooterEnabled: true,
   ImageBadgeText: "%type%",
+  ImageBadgeEnabled: true,
+  ImagePanelEnabled: true,
+  ImagePanelOpacity: 86,
+  ImageAvatarStyle: "Circle",
+  ImageAvatarSize: 140,
+  ImageTitleFontSize: 40,
+  ImageDescriptionFontSize: 15,
   ImageShowInitialsAvatar: true,
   PingUser: false
 };
@@ -177,16 +207,26 @@ export default class WelcomeMessagePlugin extends BasePlugin {
 
     if (Options.Mode === "Image") {
       const Png = await this.BuildWelcomePng({
-        AccentColor: Options.Color || Options.Config.ImageAccent,
+        AccentColor: Options.Config.ImageAccent || Options.Color,
         BackgroundColor: Options.Config.ImageBackground,
+        BackgroundFit: Options.Config.ImageBackgroundFit,
+        BackgroundImageSource: this.ResolveImageBackgroundSource(Options.Config, Options.Type),
+        BackgroundOpacity: Options.Config.ImageBackgroundOpacity,
         Description,
+        DescriptionFontSize: Options.Config.ImageDescriptionFontSize,
         MutedTextColor: Options.Config.ImageMutedTextColor,
-        Footer: this.ApplyTemplate(Options.Config.ImageFooter, Options.Member),
-        BadgeText: this.ApplyTemplate(Options.Config.ImageBadgeText, Options.Member).replaceAll("%type%", Options.Type),
+        Footer: Options.Config.ImageFooterEnabled ? this.ApplyTemplate(Options.Config.ImageFooter, Options.Member) : "",
+        BadgeText: Options.Config.ImageBadgeEnabled ? this.ApplyTemplate(Options.Config.ImageBadgeText, Options.Member).replaceAll("%type%", Options.Type) : "",
+        OverlayOpacity: Options.Config.ImageOverlayOpacity,
+        PanelEnabled: Options.Config.ImagePanelEnabled,
+        PanelOpacity: Options.Config.ImagePanelOpacity,
+        AvatarSize: Options.Config.ImageAvatarSize,
+        AvatarStyle: Options.Config.ImageAvatarStyle,
         Member: Options.Member,
         ShowInitialsAvatar: Options.Config.ImageShowInitialsAvatar,
         TextColor: Options.Config.ImageTextColor,
         Title,
+        TitleFontSize: Options.Config.ImageTitleFontSize,
         Type: Options.Type
       });
       const Attachment = new AttachmentBuilder(Png, { name: `${Options.Type.toLowerCase()}-${Options.Member.user.id}.png` });
@@ -214,14 +254,24 @@ export default class WelcomeMessagePlugin extends BasePlugin {
   private async BuildWelcomePng(Options: {
     AccentColor: string;
     BackgroundColor: string;
+    BackgroundFit: ImageFitMode;
+    BackgroundImageSource: string;
+    BackgroundOpacity: number;
     BadgeText: string;
     Description: string;
+    DescriptionFontSize: number;
     Footer: string;
     Member: GuildMember | PartialGuildMember;
     MutedTextColor: string;
+    OverlayOpacity: number;
+    PanelEnabled: boolean;
+    PanelOpacity: number;
+    AvatarSize: number;
+    AvatarStyle: ImageAvatarStyle;
     ShowInitialsAvatar: boolean;
     TextColor: string;
     Title: string;
+    TitleFontSize: number;
     Type: "Welcome" | "Leave";
   }): Promise<Buffer> {
     const Width = 1000;
@@ -233,7 +283,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     const TextColor = this.HexToRgb(this.SanitizeColor(Options.TextColor, "#f8fafc"));
     const MutedTextColor = this.HexToRgb(this.SanitizeColor(Options.MutedTextColor, "#cbd5e1"));
     const PanelColor = "#0f172a";
-    const DarkPanelColor = "rgba(2, 6, 23, 0.86)";
+    const DarkPanelColor = `rgba(2, 6, 23, ${this.ClampPercent(Options.PanelOpacity, 86) / 100})`;
     const Username = Options.Member.user.tag;
     const Initials = this.BuildInitials(Options.Member.user.username);
     const Accent = this.ToCssColor(AccentColor);
@@ -250,21 +300,42 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     Context.fillStyle = BackgroundGradient;
     Context.fillRect(0, 0, Width, Height);
 
-    Context.shadowColor = "rgba(0, 0, 0, 0.36)";
-    Context.shadowBlur = 18;
-    Context.shadowOffsetY = 10;
-    this.DrawRoundedRect(Context, 34, 34, 932, 252, 26, DarkPanelColor);
-    Context.shadowColor = "transparent";
-    Context.lineWidth = 2;
-    Context.strokeStyle = this.ToCssColor({ ...AccentColor, Alpha: 160 });
-    this.StrokeRoundedRect(Context, 34, 34, 932, 252, 26);
+    const BackgroundImage = await this.LoadConfiguredImage(Options.BackgroundImageSource);
 
-    this.DrawAvatar(Context, 134, 160, 70, Accent, Text, Initials, Options.ShowInitialsAvatar, AvatarImage);
+    if (BackgroundImage) {
+      Context.save();
+      Context.globalAlpha = this.ClampPercent(Options.BackgroundOpacity, 100) / 100;
+      this.DrawFittedImage(Context, BackgroundImage, 0, 0, Width, Height, Options.BackgroundFit);
+      Context.restore();
+    }
+
+    const OverlayOpacity = this.ClampPercent(Options.OverlayOpacity, 55) / 100;
+    const OverlayGradient = Context.createLinearGradient(0, 0, Width, Height);
+    OverlayGradient.addColorStop(0, `rgba(2, 6, 23, ${OverlayOpacity})`);
+    OverlayGradient.addColorStop(1, `rgba(15, 23, 42, ${Math.min(0.9, OverlayOpacity + 0.16)})`);
+    Context.fillStyle = OverlayGradient;
+    Context.fillRect(0, 0, Width, Height);
+
+    if (Options.PanelEnabled) {
+      Context.shadowColor = "rgba(0, 0, 0, 0.36)";
+      Context.shadowBlur = 18;
+      Context.shadowOffsetY = 10;
+      this.DrawRoundedRect(Context, 34, 34, 932, 252, 26, DarkPanelColor);
+      Context.shadowColor = "transparent";
+      Context.lineWidth = 2;
+      Context.strokeStyle = this.ToCssColor({ ...AccentColor, Alpha: 160 });
+      this.StrokeRoundedRect(Context, 34, 34, 932, 252, 26);
+    }
+
+    this.DrawAvatar(Context, 134, 160, this.ClampNumber(Options.AvatarSize, 64, 190, 140) / 2, Accent, Text, Initials, Options.ShowInitialsAvatar, AvatarImage, Options.AvatarStyle);
 
     const BadgeText = this.TruncateText(Context, this.NormalizeCardText(Options.BadgeText.replaceAll("%type%", Options.Type).toUpperCase()), 210, 13, 700);
-    this.DrawBadge(Context, TextX, 72, BadgeText || Options.Type.toUpperCase(), Accent);
 
-    const TitleFontSize = this.ResolveAdaptiveFontSize(Options.Title, 40, 17, 44, 92);
+    if (BadgeText) {
+      this.DrawBadge(Context, TextX, 72, BadgeText, Accent);
+    }
+
+    const TitleFontSize = this.ResolveAdaptiveFontSize(Options.Title, this.ClampNumber(Options.TitleFontSize, 20, 58, 40), 17, 44, 92);
     const TitleLineHeight = Math.round(TitleFontSize * 1.45);
     const TitleLines = this.WrapText(Context, Options.Title, ContentWidth, TitleFontSize, 700, 2);
     this.FillTextBlock(Context, {
@@ -277,7 +348,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       Y: 145
     });
 
-    const DescriptionFontSize = this.ResolveAdaptiveFontSize(Options.Description, 15, 12, 70, 150);
+    const DescriptionFontSize = this.ResolveAdaptiveFontSize(Options.Description, this.ClampNumber(Options.DescriptionFontSize, 11, 26, 15), 12, 70, 150);
     const DescriptionLineHeight = Math.round(DescriptionFontSize * 1.62);
     const DescriptionY = 122 + TitleLines.length * TitleLineHeight;
     const DescriptionLines = this.WrapText(Context, Options.Description, ContentWidth, DescriptionFontSize, 400, 3);
@@ -298,9 +369,67 @@ export default class WelcomeMessagePlugin extends BasePlugin {
 
     Context.font = this.FormatFont(11, 400);
     Context.fillStyle = "rgba(148, 163, 184, 0.86)";
-    Context.fillText(this.TruncateText(Context, this.NormalizeCardText(Options.Footer), 360, 11, 400), 570, MetadataY);
+    if (Options.Footer) {
+      Context.fillText(this.TruncateText(Context, this.NormalizeCardText(Options.Footer), 360, 11, 400), 570, MetadataY);
+    }
 
     return Canvas.encodeSync("png");
+  }
+
+  private ResolveImageBackgroundSource(Config: WelcomeMessageConfig, Type: "Welcome" | "Leave"): string {
+    const SpecificSource = Type === "Welcome" ? Config.WelcomeImageBackgroundImage : Config.LeaveImageBackgroundImage;
+    return SpecificSource.trim() || Config.ImageBackgroundImage.trim();
+  }
+
+  private async LoadConfiguredImage(Source: string): Promise<Image | null> {
+    const TrimmedSource = Source.trim();
+
+    if (!TrimmedSource) {
+      return null;
+    }
+
+    if (TrimmedSource.startsWith("data:image/")) {
+      const Match = TrimmedSource.match(/^data:image\/[a-z0-9.+-]+;base64,(.+)$/iu);
+
+      if (!Match?.[1]) {
+        return null;
+      }
+
+      return await loadImage(Buffer.from(Match[1], "base64")).catch((ErrorValue: unknown) => {
+        this.Logger.Warn("Uploaded welcome background could not be loaded.", {
+          Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue)
+        });
+        return null;
+      });
+    }
+
+    if (!/^https?:\/\//iu.test(TrimmedSource)) {
+      return null;
+    }
+
+    return await loadImage(TrimmedSource).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Remote welcome background could not be loaded.", {
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue)
+      });
+      return null;
+    });
+  }
+
+  private DrawFittedImage(Context: SKRSContext2D, ImageValue: Image, X: number, Y: number, Width: number, Height: number, Fit: ImageFitMode): void {
+    if (Fit === "Stretch") {
+      Context.drawImage(ImageValue, X, Y, Width, Height);
+      return;
+    }
+
+    const ImageWidth = ImageValue.width;
+    const ImageHeight = ImageValue.height;
+    const Scale = Fit === "Contain" ? Math.min(Width / ImageWidth, Height / ImageHeight) : Math.max(Width / ImageWidth, Height / ImageHeight);
+    const DrawWidth = ImageWidth * Scale;
+    const DrawHeight = ImageHeight * Scale;
+    const DrawX = X + (Width - DrawWidth) / 2;
+    const DrawY = Y + (Height - DrawHeight) / 2;
+
+    Context.drawImage(ImageValue, DrawX, DrawY, DrawWidth, DrawHeight);
   }
 
   private async LoadMemberAvatar(Member: GuildMember | PartialGuildMember): Promise<Image | null> {
@@ -324,17 +453,17 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     Text: string,
     Initials: string,
     ShowInitialsAvatar: boolean,
-    AvatarImage: Image | null
+    AvatarImage: Image | null,
+    AvatarStyle: ImageAvatarStyle
   ): void {
     Context.save();
-    this.DrawCircle(Context, CenterX, CenterY, Radius + 12, "rgba(255, 255, 255, 0.05)");
-    this.DrawCircle(Context, CenterX, CenterY, Radius + 6, Accent);
-    this.DrawCircle(Context, CenterX, CenterY, Radius, "rgba(2, 6, 23, 0.92)");
+    this.DrawAvatarFrame(Context, CenterX, CenterY, Radius + 12, AvatarStyle, "rgba(255, 255, 255, 0.05)");
+    this.DrawAvatarFrame(Context, CenterX, CenterY, Radius + 6, AvatarStyle, Accent);
+    this.DrawAvatarFrame(Context, CenterX, CenterY, Radius, AvatarStyle, "rgba(2, 6, 23, 0.92)");
 
     if (AvatarImage) {
       Context.save();
-      Context.beginPath();
-      Context.arc(CenterX, CenterY, Radius - 7, 0, Math.PI * 2);
+      this.BuildAvatarPath(Context, CenterX, CenterY, Radius - 7, AvatarStyle);
       Context.clip();
       Context.imageSmoothingEnabled = true;
       Context.imageSmoothingQuality = "high";
@@ -344,7 +473,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       const AvatarGradient = Context.createLinearGradient(CenterX - Radius, CenterY - Radius, CenterX + Radius, CenterY + Radius);
       AvatarGradient.addColorStop(0, Accent);
       AvatarGradient.addColorStop(1, "rgba(15, 23, 42, 0.82)");
-      this.DrawCircle(Context, CenterX, CenterY, Radius - 7, AvatarGradient);
+      this.DrawAvatarFrame(Context, CenterX, CenterY, Radius - 7, AvatarStyle, AvatarGradient);
       Context.font = this.FormatFont(38, 900);
       Context.fillStyle = Text;
       Context.textAlign = "center";
@@ -355,6 +484,24 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     }
 
     Context.restore();
+  }
+
+  private DrawAvatarFrame(Context: SKRSContext2D, CenterX: number, CenterY: number, Radius: number, AvatarStyle: ImageAvatarStyle, FillStyle: SKRSContext2D["fillStyle"]): void {
+    this.BuildAvatarPath(Context, CenterX, CenterY, Radius, AvatarStyle);
+    Context.fillStyle = FillStyle;
+    Context.fill();
+  }
+
+  private BuildAvatarPath(Context: SKRSContext2D, CenterX: number, CenterY: number, Radius: number, AvatarStyle: ImageAvatarStyle): void {
+    if (AvatarStyle === "Circle") {
+      Context.beginPath();
+      Context.arc(CenterX, CenterY, Radius, 0, Math.PI * 2);
+      return;
+    }
+
+    const Size = Radius * 2;
+    const RadiusValue = AvatarStyle === "Rounded" ? Math.max(12, Radius * 0.25) : 4;
+    this.BuildRoundedRectPath(Context, CenterX - Radius, CenterY - Radius, Size, Size, RadiusValue);
   }
 
   private DrawCircle(Context: SKRSContext2D, CenterX: number, CenterY: number, Radius: number, FillStyle: SKRSContext2D["fillStyle"]): void {
@@ -519,6 +666,14 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     return Math.round(MaxFontSize - (MaxFontSize - MinFontSize) * Ratio);
   }
 
+  private ClampPercent(Value: number, Fallback: number): number {
+    return this.ClampNumber(Value, 0, 100, Fallback);
+  }
+
+  private ClampNumber(Value: number, Minimum: number, Maximum: number, Fallback: number): number {
+    return Number.isFinite(Value) ? Math.min(Maximum, Math.max(Minimum, Number(Value))) : Fallback;
+  }
+
   private FormatFont(FontSize: number, FontWeight: number): string {
     const SafeWeight = FontWeight >= 700 ? "bold" : FontWeight >= 600 ? "600" : "normal";
     return `${SafeWeight} ${FontSize}px "DejaVu Sans", "Noto Sans", "Liberation Sans", sans-serif`;
@@ -587,11 +742,25 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       LeaveColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "LeaveColor")) ?? DefaultConfig.LeaveColor,
       LeaveEmbedAuthor: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "LeaveEmbedAuthor")) ?? DefaultConfig.LeaveEmbedAuthor,
       ImageBackground: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageBackground")) ?? DefaultConfig.ImageBackground,
+      ImageBackgroundImage: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageBackgroundImage")) ?? DefaultConfig.ImageBackgroundImage,
+      WelcomeImageBackgroundImage: (await this.Storage.GetGlobalConfig<string>(GuildId, "WelcomeImageBackgroundImage")) ?? DefaultConfig.WelcomeImageBackgroundImage,
+      LeaveImageBackgroundImage: (await this.Storage.GetGlobalConfig<string>(GuildId, "LeaveImageBackgroundImage")) ?? DefaultConfig.LeaveImageBackgroundImage,
+      ImageBackgroundFit: (await this.Storage.GetGlobalConfig<ImageFitMode>(GuildId, "ImageBackgroundFit")) ?? DefaultConfig.ImageBackgroundFit,
+      ImageBackgroundOpacity: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageBackgroundOpacity")) ?? DefaultConfig.ImageBackgroundOpacity,
+      ImageOverlayOpacity: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageOverlayOpacity")) ?? DefaultConfig.ImageOverlayOpacity,
       ImageAccent: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageAccent")) ?? DefaultConfig.ImageAccent,
       ImageTextColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageTextColor")) ?? DefaultConfig.ImageTextColor,
       ImageMutedTextColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageMutedTextColor")) ?? DefaultConfig.ImageMutedTextColor,
       ImageFooter: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageFooter")) ?? DefaultConfig.ImageFooter,
+      ImageFooterEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ImageFooterEnabled")) ?? DefaultConfig.ImageFooterEnabled,
       ImageBadgeText: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageBadgeText")) ?? DefaultConfig.ImageBadgeText,
+      ImageBadgeEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ImageBadgeEnabled")) ?? DefaultConfig.ImageBadgeEnabled,
+      ImagePanelEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ImagePanelEnabled")) ?? DefaultConfig.ImagePanelEnabled,
+      ImagePanelOpacity: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImagePanelOpacity")) ?? DefaultConfig.ImagePanelOpacity,
+      ImageAvatarStyle: (await this.Storage.GetGlobalConfig<ImageAvatarStyle>(GuildId, "ImageAvatarStyle")) ?? DefaultConfig.ImageAvatarStyle,
+      ImageAvatarSize: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageAvatarSize")) ?? DefaultConfig.ImageAvatarSize,
+      ImageTitleFontSize: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageTitleFontSize")) ?? DefaultConfig.ImageTitleFontSize,
+      ImageDescriptionFontSize: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageDescriptionFontSize")) ?? DefaultConfig.ImageDescriptionFontSize,
       ImageShowInitialsAvatar: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ImageShowInitialsAvatar")) ?? DefaultConfig.ImageShowInitialsAvatar,
       PingUser: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "PingUser")) ?? DefaultConfig.PingUser
     };

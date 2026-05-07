@@ -47,7 +47,11 @@
       "Type": "String",
       "Label": "Welcome title",
       "Default": "Welcome %user%",
-      "Section": "Welcome content"
+      "Section": "Welcome content",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Embed" },
+        { "Key": "WelcomeMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "WelcomeMessage",
@@ -61,14 +65,16 @@
       "Type": "String",
       "Label": "Welcome color",
       "Default": "#2563eb",
-      "Section": "Welcome design"
+      "Section": "Welcome embed design",
+      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Embed" }
     },
     {
       "Key": "WelcomeEmbedAuthor",
       "Type": "Boolean",
       "Label": "Show member as embed author",
       "Default": true,
-      "Section": "Welcome design"
+      "Section": "Welcome embed design",
+      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Embed" }
     },
     {
       "Key": "LeaveEnabled",
@@ -122,63 +128,251 @@
       "Type": "String",
       "Label": "Leave color",
       "Default": "#ef4444",
-      "Section": "Leave design"
+      "Section": "Leave embed design",
+      "VisibleWhen": { "Key": "LeaveMode", "Value": "Embed" }
     },
     {
       "Key": "LeaveEmbedAuthor",
       "Type": "Boolean",
       "Label": "Show member as embed author",
       "Default": true,
-      "Section": "Leave design"
+      "Section": "Leave embed design",
+      "VisibleWhen": { "Key": "LeaveMode", "Value": "Embed" }
     },
     {
       "Key": "ImageBackground",
       "Type": "String",
-      "Label": "Image background",
+      "Label": "Fallback image background color",
       "Default": "#020617",
-      "Section": "Image design"
+      "Section": "Image background",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageBackgroundImage",
+      "Type": "String",
+      "Label": "Shared background image",
+      "Default": "",
+      "Section": "Image background",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "WelcomeImageBackgroundImage",
+      "Type": "String",
+      "Label": "Welcome background image override",
+      "Default": "",
+      "Section": "Image background",
+      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Image" }
+    },
+    {
+      "Key": "LeaveImageBackgroundImage",
+      "Type": "String",
+      "Label": "Leave background image override",
+      "Default": "",
+      "Section": "Image background",
+      "VisibleWhen": { "Key": "LeaveMode", "Value": "Image" }
+    },
+    {
+      "Key": "ImageBackgroundFit",
+      "Type": "Select",
+      "Label": "Background image fit",
+      "Default": "Cover",
+      "Section": "Image background",
+      "Options": [
+        { "Label": "Cover", "Value": "Cover" },
+        { "Label": "Contain", "Value": "Contain" },
+        { "Label": "Stretch", "Value": "Stretch" }
+      ],
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageBackgroundOpacity",
+      "Type": "Number",
+      "Label": "Background image opacity percent",
+      "Default": 100,
+      "Section": "Image background",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageOverlayOpacity",
+      "Type": "Number",
+      "Label": "Dark overlay opacity percent",
+      "Default": 55,
+      "Section": "Image background",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "ImageAccent",
       "Type": "String",
       "Label": "Image accent",
       "Default": "#38bdf8",
-      "Section": "Image design"
+      "Section": "Image design",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "ImageTextColor",
       "Type": "String",
       "Label": "Image text color",
       "Default": "#f8fafc",
-      "Section": "Image design"
+      "Section": "Image design",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "ImageMutedTextColor",
       "Type": "String",
       "Label": "Image muted text color",
       "Default": "#cbd5e1",
-      "Section": "Image design"
+      "Section": "Image design",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImagePanelEnabled",
+      "Type": "Boolean",
+      "Label": "Show translucent panel",
+      "Default": true,
+      "Section": "Image design",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImagePanelOpacity",
+      "Type": "Number",
+      "Label": "Panel opacity percent",
+      "Default": 86,
+      "Section": "Image design",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "ImageFooter",
       "Type": "String",
       "Label": "Image footer",
       "Default": "%server% • %memberCount% members",
-      "Section": "Image design"
+      "Section": "Image text",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageFooterEnabled",
+      "Type": "Boolean",
+      "Label": "Show image footer",
+      "Default": true,
+      "Section": "Image text",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "ImageBadgeText",
       "Type": "String",
       "Label": "Image badge text",
       "Default": "%type%",
-      "Section": "Image design"
+      "Section": "Image text",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageBadgeEnabled",
+      "Type": "Boolean",
+      "Label": "Show image badge",
+      "Default": true,
+      "Section": "Image text",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageTitleFontSize",
+      "Type": "Number",
+      "Label": "Title font size",
+      "Default": 40,
+      "Section": "Image text",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageDescriptionFontSize",
+      "Type": "Number",
+      "Label": "Description font size",
+      "Default": 15,
+      "Section": "Image text",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageAvatarStyle",
+      "Type": "Select",
+      "Label": "Avatar shape",
+      "Default": "Circle",
+      "Section": "Image avatar",
+      "Options": [
+        { "Label": "Circle", "Value": "Circle" },
+        { "Label": "Rounded square", "Value": "Rounded" },
+        { "Label": "Square", "Value": "Square" }
+      ],
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
+    },
+    {
+      "Key": "ImageAvatarSize",
+      "Type": "Number",
+      "Label": "Avatar size",
+      "Default": 140,
+      "Section": "Image avatar",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "ImageShowInitialsAvatar",
       "Type": "Boolean",
       "Label": "Show initials avatar",
       "Default": true,
-      "Section": "Image design"
+      "Section": "Image avatar",
+      "VisibleWhenAny": [
+        { "Key": "WelcomeMode", "Value": "Image" },
+        { "Key": "LeaveMode", "Value": "Image" }
+      ]
     },
     {
       "Key": "PingUser",

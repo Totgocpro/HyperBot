@@ -68,12 +68,20 @@ export type SettingsField = {
   ValidateAs?: "Regex";
   SupportedChannelTypes?: string[];
   RequireWritable?: boolean;
+  VisibleWhen?: SettingsFieldVisibilityRule | SettingsFieldVisibilityRule[];
+  VisibleWhenAny?: SettingsFieldVisibilityRule[];
   Options?: Array<{
     Label: string;
     Value: string | number | boolean;
     Disabled?: boolean;
     Description?: string;
   }>;
+};
+
+export type SettingsFieldVisibilityRule = {
+  Key: string;
+  Value: string | number | boolean;
+  Operator?: "Equals" | "NotEquals";
 };
 
 export enum DashboardElementType {
