@@ -234,6 +234,71 @@
       "Label": "Invite block log message",
       "Default": "Blocked invite from %user% in %channel%: %invite%",
       "Section": "Invite blocking"
+    },
+    {
+      "Key": "ReplaceWordEnabled",
+      "Type": "Boolean",
+      "Label": "Enable word replacement",
+      "Default": false,
+      "Section": "Message rewriting"
+    },
+    {
+      "Key": "ReplaceWordRules",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Word replacement rules",
+      "Default": [],
+      "Section": "Message rewriting"
+    },
+    {
+      "Key": "CensorWordEnabled",
+      "Type": "Boolean",
+      "Label": "Enable word censorship",
+      "Default": false,
+      "Section": "Message rewriting"
+    },
+    {
+      "Key": "CensorWords",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Words to censor",
+      "Default": [
+        "fuck",
+        "fucking",
+        "shit",
+        "bitch",
+        "bastard",
+        "asshole",
+        "kill",
+        "murder",
+        "suicide",
+        "terrorist",
+        "bomb",
+        "rape",
+        "violate"
+      ],
+      "Section": "Message rewriting"
+    },
+    {
+      "Key": "RewriteWarnUser",
+      "Type": "Boolean",
+      "Label": "Warn after message rewrite",
+      "Default": false,
+      "Section": "Message rewriting"
+    },
+    {
+      "Key": "RewriteWarnReason",
+      "Type": "String",
+      "Label": "Rewrite warn reason",
+      "Default": "Message cleaned by moderation: %words%",
+      "Section": "Message rewriting"
+    },
+    {
+      "Key": "RewriteLogMessage",
+      "Type": "String",
+      "Label": "Rewrite log message",
+      "Default": "Cleaned message from %user% in %channel%: `%old%` -> `%new%`",
+      "Section": "Message rewriting"
     }
   ],
   "EntryPoint": "./ModerationPlugin.ts"

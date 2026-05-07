@@ -3,6 +3,7 @@ import {
   EmbedBuilder,
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
+  type ChannelWebhookCreateOptions,
   type ForumChannel,
   type GuildBasedChannel,
   type GuildMember,
@@ -11,6 +12,7 @@ import {
   type PartialMessage,
   type NewsChannel,
   type TextChannel,
+  type Webhook,
   type VoiceChannel,
   type User
 } from "discord.js";
@@ -26,6 +28,10 @@ type ModerationSanction = {
   ModeratorTag: string;
   Reason: string;
   CreatedAt: string;
+};
+
+type WebhookWritableChannel = Message["channel"] & {
+  createWebhook(Options: ChannelWebhookCreateOptions): Promise<Webhook>;
 };
 
 type ModerationConfig = {
@@ -50,6 +56,13 @@ type ModerationConfig = {
   InviteBlockAction: "Delete" | "Warn" | "DeleteAndWarn";
   InviteBlockReason: string;
   InviteBlockLogMessage: string;
+  ReplaceWordEnabled: boolean;
+  ReplaceWordRules: string[];
+  CensorWordEnabled: boolean;
+  CensorWords: string[];
+  RewriteWarnUser: boolean;
+  RewriteWarnReason: string;
+  RewriteLogMessage: string;
 };
 
 const DefaultModerationConfig: ModerationConfig = {
@@ -73,13 +86,46 @@ const DefaultModerationConfig: ModerationConfig = {
   AllowedInviteCodes: [],
   InviteBlockAction: "DeleteAndWarn",
   InviteBlockReason: "Invite links to other servers are not allowed: %invite%",
-  InviteBlockLogMessage: "Blocked invite from %user% in %channel%: %invite%"
+  InviteBlockLogMessage: "Blocked invite from %user% in %channel%: %invite%",
+  ReplaceWordEnabled: false,
+  ReplaceWordRules: [],
+  CensorWordEnabled: false,
+  CensorWords: [
+    "fuck",
+    "fucking",
+    "shit",
+    "bitch",
+    "bastard",
+    "asshole",
+    "kill",
+    "murder",
+    "suicide",
+    "terrorist",
+    "bomb",
+    "rape",
+    "violate",
+    "merde",
+    "putain",
+    "salope",
+    "connard",
+    "encule",
+    "tuer",
+    "meurtre",
+    "suicide",
+    "terroriste",
+    "bombe",
+    "viol"
+  ],
+  RewriteWarnUser: false,
+  RewriteWarnReason: "Message cleaned by moderation: %words%",
+  RewriteLogMessage: "Cleaned message from %user% in %channel%: `%old%` -> `%new%`"
 };
 
 export default class ModerationPlugin extends BasePlugin {
   private readonly MessageCache = new Map<string, { AuthorTag: string; ChannelName: string; Content: string }>();
   private readonly MessageCacheLimit = 5000;
   private readonly RepeatedMessageCache = new Map<string, Array<{ Content: string; CreatedAt: number }>>();
+  private readonly RewriteDeletedMessageIds = new Set<string>();
 
   public async OnEnable(): Promise<void> {
     this.Logger.Info("Moderation plugin enabled.");
@@ -111,6 +157,12 @@ export default class ModerationPlugin extends BasePlugin {
     }
 
     this.RememberMessage(MessageValue);
+    const WasRewritten = await this.RunMessageRewrite(MessageValue);
+
+    if (WasRewritten) {
+      return;
+    }
+
     await this.RunAutoMod(MessageValue);
   }
 
@@ -120,6 +172,11 @@ export default class ModerationPlugin extends BasePlugin {
     }
 
     const Config = await this.GetConfig(MessageValue.guildId);
+
+    if (this.RewriteDeletedMessageIds.delete(MessageValue.id)) {
+      this.MessageCache.delete(MessageValue.id);
+      return;
+    }
 
     if (!Config.DeletedMessageLog.trim()) {
       return;
@@ -384,6 +441,223 @@ export default class ModerationPlugin extends BasePlugin {
     });
   }
 
+  private async RunMessageRewrite(MessageValue: Message): Promise<boolean> {
+    const GuildId = MessageValue.guildId;
+
+    if (!GuildId || !MessageValue.content) {
+      return false;
+    }
+
+    const Config = await this.GetConfig(GuildId);
+
+    if (!Config.ReplaceWordEnabled && !Config.CensorWordEnabled) {
+      return false;
+    }
+
+    const RewriteResult = this.BuildCleanContent(MessageValue.content, Config);
+
+    if (!RewriteResult.Changed) {
+      return false;
+    }
+
+    if (!this.CanCreateWebhookInChannel(MessageValue.channel)) {
+      this.Logger.Warn("Moderation rewrite matched a message but cannot create a webhook in this channel.", {
+        GuildId,
+        ChannelId: MessageValue.channelId,
+        MessageId: MessageValue.id
+      });
+      return false;
+    }
+
+    const CleanContent = RewriteResult.Content;
+
+    if (!CleanContent.trim() && MessageValue.attachments.size === 0) {
+      return false;
+    }
+
+    let Webhook: Webhook | null = null;
+
+    try {
+      Webhook = await MessageValue.channel.createWebhook({
+        name: MessageValue.member?.displayName || MessageValue.author.displayName || MessageValue.author.username,
+        avatar: MessageValue.member?.displayAvatarURL({ extension: "png", size: 256 }) ?? MessageValue.author.displayAvatarURL({ extension: "png", size: 256 }),
+        reason: "Moderation message rewrite"
+      });
+
+      this.RewriteDeletedMessageIds.add(MessageValue.id);
+      await MessageValue.delete();
+
+      await Webhook.send({
+        content: CleanContent.slice(0, 2000),
+        username: MessageValue.member?.displayName || MessageValue.author.displayName || MessageValue.author.username,
+        avatarURL: MessageValue.member?.displayAvatarURL({ extension: "png", size: 256 }) ?? MessageValue.author.displayAvatarURL({ extension: "png", size: 256 }),
+        allowedMentions: { parse: [] },
+        files: MessageValue.attachments.map((Attachment) => Attachment.url).slice(0, 10)
+      });
+    } catch (ErrorValue) {
+      this.RewriteDeletedMessageIds.delete(MessageValue.id);
+      this.Logger.Warn("Moderation rewrite could not repost a cleaned message.", ErrorValue);
+      return false;
+    } finally {
+      if (Webhook) {
+        await Webhook.delete("Moderation message rewrite completed").catch((ErrorValue: unknown) => {
+          this.Logger.Warn("Moderation rewrite could not delete its webhook.", ErrorValue);
+        });
+      }
+    }
+
+    const ChannelName = this.GetChannelName(MessageValue) ?? "Unknown channel";
+    const Words = [...RewriteResult.MatchedWords].join(", ");
+    const Reason = this.ApplyTemplate(Config.RewriteWarnReason, {
+      User: MessageValue.author.tag,
+      Moderator: "AutoMod",
+      Reason: "Message cleaned by moderation",
+      Type: "Rewrite",
+      Channel: ChannelName,
+      Content: MessageValue.content.slice(0, 900),
+      Old: MessageValue.content.slice(0, 900),
+      New: RewriteResult.Content.slice(0, 900),
+      Pattern: "",
+      Invite: "",
+      Words
+    });
+
+    if (Config.RewriteWarnUser) {
+      await this.AppendSanction(GuildId, MessageValue.author.id, {
+        Type: "Warn",
+        UserId: MessageValue.author.id,
+        UserTag: MessageValue.author.tag,
+        ModeratorId: this.DiscordClient.user?.id ?? "AutoMod",
+        ModeratorTag: this.DiscordClient.user?.tag ?? "AutoMod",
+        Reason,
+        CreatedAt: new Date().toISOString()
+      });
+    }
+
+    if (Config.RewriteLogMessage.trim()) {
+      await this.SendLogMessage(GuildId, Config, {
+        Title: "Message cleaned",
+        Description: this.ApplyTemplate(Config.RewriteLogMessage, {
+          User: MessageValue.author.tag,
+          Moderator: "AutoMod",
+          Reason,
+          Type: "Rewrite",
+          Channel: ChannelName,
+          Content: RewriteResult.Content.slice(0, 900),
+          Old: MessageValue.content.slice(0, 900),
+          New: RewriteResult.Content.slice(0, 900),
+          Pattern: "",
+          Invite: "",
+          Words
+        }),
+        Color: 0x06b6d4
+      });
+    }
+
+    return true;
+  }
+
+  private BuildCleanContent(Content: string, Config: ModerationConfig): { Changed: boolean; Content: string; MatchedWords: Set<string> } {
+    let CleanContent = Content;
+    const MatchedWords = new Set<string>();
+
+    if (Config.ReplaceWordEnabled) {
+      for (const Rule of Config.ReplaceWordRules) {
+        const ReplacementRule = this.ParseReplacementRule(Rule);
+
+        if (!ReplacementRule) {
+          continue;
+        }
+
+        CleanContent = this.ReplaceWord(CleanContent, ReplacementRule.Search, ReplacementRule.Replacement, MatchedWords);
+      }
+    }
+
+    if (Config.CensorWordEnabled) {
+      for (const Word of Config.CensorWords.map((Value) => Value.trim()).filter(Boolean)) {
+        CleanContent = this.ReplaceWord(CleanContent, Word, this.CensorWord(Word), MatchedWords);
+      }
+    }
+
+    return {
+      Changed: CleanContent !== Content,
+      Content: CleanContent,
+      MatchedWords
+    };
+  }
+
+  private ReplaceWord(Content: string, Search: string, Replacement: string, MatchedWords: Set<string>): string {
+    const TrimmedSearch = Search.trim();
+
+    if (!TrimmedSearch) {
+      return Content;
+    }
+
+    const Regex = TrimmedSearch.includes(" ")
+      ? new RegExp(this.EscapeRegExp(TrimmedSearch), "giu")
+      : new RegExp(`(^|[^\\p{L}\\p{N}_])(${this.EscapeRegExp(TrimmedSearch)})(?=$|[^\\p{L}\\p{N}_])`, "giu");
+
+    return Content.replace(Regex, (...Args: unknown[]) => {
+      const Match = String(Args[0]);
+      const Prefix = TrimmedSearch.includes(" ") ? "" : String(Args[1]);
+      const MatchedWord = TrimmedSearch.includes(" ") ? Match : String(Args[2]);
+
+      MatchedWords.add(MatchedWord.toLowerCase());
+      return `${Prefix}${this.MatchReplacementCasing(MatchedWord, Replacement)}`;
+    });
+  }
+
+  private ParseReplacementRule(Rule: string): { Search: string; Replacement: string } | null {
+    const SeparatorMatch = Rule.match(/\s*(?:=>|->|=)\s*/u);
+
+    if (!SeparatorMatch || SeparatorMatch.index === undefined) {
+      return null;
+    }
+
+    const Search = Rule.slice(0, SeparatorMatch.index).trim();
+    const Replacement = Rule.slice(SeparatorMatch.index + SeparatorMatch[0].length).trim();
+
+    if (!Search) {
+      return null;
+    }
+
+    return { Search, Replacement };
+  }
+
+  private CensorWord(Word: string): string {
+    const TrimmedWord = Word.trim();
+
+    if (TrimmedWord.length <= 1) {
+      return "*";
+    }
+
+    if (TrimmedWord.length === 2) {
+      return `${TrimmedWord[0]}*`;
+    }
+
+    return `${TrimmedWord[0]}${"*".repeat(Math.max(1, TrimmedWord.length - 2))}${TrimmedWord[TrimmedWord.length - 1]}`;
+  }
+
+  private MatchReplacementCasing(MatchedWord: string, Replacement: string): string {
+    if (MatchedWord.toUpperCase() === MatchedWord) {
+      return Replacement.toUpperCase();
+    }
+
+    if (MatchedWord[0]?.toUpperCase() === MatchedWord[0]) {
+      return `${Replacement[0]?.toUpperCase() ?? ""}${Replacement.slice(1)}`;
+    }
+
+    return Replacement;
+  }
+
+  private CanCreateWebhookInChannel(Channel: Message["channel"]): Channel is WebhookWritableChannel {
+    return "createWebhook" in Channel && typeof Channel.createWebhook === "function";
+  }
+
+  private EscapeRegExp(Value: string): string {
+    return Value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  }
+
   private async ApplyAutomodAction(
     MessageValue: Message,
     Config: ModerationConfig,
@@ -589,7 +863,14 @@ export default class ModerationPlugin extends BasePlugin {
       AllowedInviteCodes: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "AllowedInviteCodes")) ?? DefaultModerationConfig.AllowedInviteCodes,
       InviteBlockAction: (await this.Storage.GetGlobalConfig<ModerationConfig["InviteBlockAction"]>(GuildId, "InviteBlockAction")) ?? DefaultModerationConfig.InviteBlockAction,
       InviteBlockReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockReason")) ?? DefaultModerationConfig.InviteBlockReason,
-      InviteBlockLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockLogMessage")) ?? DefaultModerationConfig.InviteBlockLogMessage
+      InviteBlockLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockLogMessage")) ?? DefaultModerationConfig.InviteBlockLogMessage,
+      ReplaceWordEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ReplaceWordEnabled")) ?? DefaultModerationConfig.ReplaceWordEnabled,
+      ReplaceWordRules: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "ReplaceWordRules")) ?? DefaultModerationConfig.ReplaceWordRules,
+      CensorWordEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "CensorWordEnabled")) ?? DefaultModerationConfig.CensorWordEnabled,
+      CensorWords: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "CensorWords")) ?? DefaultModerationConfig.CensorWords,
+      RewriteWarnUser: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "RewriteWarnUser")) ?? DefaultModerationConfig.RewriteWarnUser,
+      RewriteWarnReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "RewriteWarnReason")) ?? DefaultModerationConfig.RewriteWarnReason,
+      RewriteLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "RewriteLogMessage")) ?? DefaultModerationConfig.RewriteLogMessage
     };
   }
 
@@ -615,7 +896,7 @@ export default class ModerationPlugin extends BasePlugin {
     return "name" in MessageValue.channel && MessageValue.channel?.name ? `#${MessageValue.channel.name}` : null;
   }
 
-  private ApplyTemplate(Template: string, Values: { User: string; Moderator: string; Reason: string; Type: string; Channel: string; Content: string; Old: string; New: string; Pattern?: string; Invite?: string }): string {
+  private ApplyTemplate(Template: string, Values: { User: string; Moderator: string; Reason: string; Type: string; Channel: string; Content: string; Old: string; New: string; Pattern?: string; Invite?: string; Words?: string }): string {
     return Template
       .replaceAll("%user%", Values.User)
       .replaceAll("%moderator%", Values.Moderator)
@@ -627,6 +908,7 @@ export default class ModerationPlugin extends BasePlugin {
       .replaceAll("%new%", Values.New)
       .replaceAll("%pattern%", Values.Pattern ?? "")
       .replaceAll("%invite%", Values.Invite ?? "")
+      .replaceAll("%words%", Values.Words ?? "")
       .slice(0, 4000);
   }
 }
