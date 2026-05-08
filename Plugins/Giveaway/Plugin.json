@@ -123,24 +123,62 @@
       "Section": "Entry rules"
     },
     {
-      "Key": "GiveawayTitle",
-      "Type": "String",
-      "Label": "Giveaway title",
-      "Default": "🎉 Giveaway: %prize%",
+      "Key": "GiveawayEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Active giveaway embed",
+      "Description": "Available tags: %prize%, %winnerCount%, %entries%, %host%, %hostTag%, %endsAt%, %messageId%.",
+      "Default": {
+        "Name": "Active giveaway",
+        "Title": "Giveaway: %prize%",
+        "Description": "Click the button below to enter. Ends %endsAt%.",
+        "Color": "#5865f2",
+        "Url": "",
+        "AuthorName": "",
+        "AuthorIconUrl": "",
+        "ThumbnailUrl": "",
+        "ImageUrl": "",
+        "FooterText": "Hosted by %hostTag%",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [
+          { "Name": "Prize", "Value": "%prize%", "Inline": true },
+          { "Name": "Winners", "Value": "%winnerCount%", "Inline": true },
+          { "Name": "Entries", "Value": "%entries%", "Inline": true },
+          { "Name": "Hosted by", "Value": "%host%", "Inline": true },
+          { "Name": "Ends", "Value": "%endsAt%", "Inline": true }
+        ],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
       "Section": "Messages"
     },
     {
-      "Key": "GiveawayDescription",
-      "Type": "String",
-      "Label": "Giveaway description",
-      "Default": "Click the button below to enter. Ends %endsAt%.",
-      "Section": "Messages"
-    },
-    {
-      "Key": "EndedDescription",
-      "Type": "String",
-      "Label": "Ended giveaway description",
-      "Default": "This giveaway has ended. Winners: %winners%.",
+      "Key": "EndedEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Ended giveaway embed",
+      "Description": "Available tags: %prize%, %winners%, %winnerCount%, %entries%, %host%, %hostTag%, %endsAt%, %messageId%.",
+      "Default": {
+        "Name": "Ended giveaway",
+        "Title": "Giveaway: %prize%",
+        "Description": "This giveaway has ended. Winners: %winners%.",
+        "Color": "#22c55e",
+        "Url": "",
+        "AuthorName": "",
+        "AuthorIconUrl": "",
+        "ThumbnailUrl": "",
+        "ImageUrl": "",
+        "FooterText": "Hosted by %hostTag%",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [
+          { "Name": "Prize", "Value": "%prize%", "Inline": true },
+          { "Name": "Winners", "Value": "%winnerCount%", "Inline": true },
+          { "Name": "Entries", "Value": "%entries%", "Inline": true },
+          { "Name": "Selected winner(s)", "Value": "%winners%", "Inline": false }
+        ],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
       "Section": "Messages"
     },
     {
@@ -198,20 +236,6 @@
       "Label": "Not eligible message",
       "Default": "You are not eligible for this giveaway.",
       "Section": "Button"
-    },
-    {
-      "Key": "GiveawayColor",
-      "Type": "String",
-      "Label": "Active embed color",
-      "Default": "#5865f2",
-      "Section": "Design"
-    },
-    {
-      "Key": "EndedColor",
-      "Type": "String",
-      "Label": "Ended embed color",
-      "Default": "#22c55e",
-      "Section": "Design"
     }
   ],
   "EntryPoint": "./GiveawayPlugin.ts"

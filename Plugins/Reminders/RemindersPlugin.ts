@@ -17,9 +17,13 @@ type Reminder = {
   Name: string;
   ChannelId: string;
   Mode: ReminderMode;
+  ScheduleMode?: "Interval" | "Weekly";
+  Weekdays?: number[];
+  TimeOfDay?: string;
   Message: string;
   Title: string;
   Color: string;
+  Embed?: EditableEmbed;
   IntervalMs: number;
   NextRunAt: string;
   Enabled: boolean;
@@ -27,6 +31,23 @@ type Reminder = {
   CreatedAt: string;
   LastRunAt: string | null;
   RunCount: number;
+};
+
+type EditableEmbed = {
+  Title?: string;
+  Description?: string;
+  Color?: string;
+  Url?: string;
+  AuthorName?: string;
+  AuthorIconUrl?: string;
+  ThumbnailUrl?: string;
+  ImageUrl?: string;
+  FooterText?: string;
+  FooterIconUrl?: string;
+  Timestamp?: boolean;
+  Fields?: Array<{ Name: string; Value: string; Inline: boolean }>;
+  ImageDataUrl?: string;
+  ImageName?: string;
 };
 
 type ReminderStore = Record<string, Reminder>;
@@ -103,7 +124,7 @@ export default class RemindersPlugin extends BasePlugin {
         }
 
         const Sent = await this.SendReminder(ReminderValue);
-        const NextRunAt = new Date(Now + ReminderValue.IntervalMs).toISOString();
+        const NextRunAt = this.ComputeNextRun(ReminderValue, Now);
         Reminders[ReminderValue.Id] = {
           ...ReminderValue,
           LastRunAt: Sent ? new Date(Now).toISOString() : ReminderValue.LastRunAt,
@@ -263,20 +284,50 @@ export default class RemindersPlugin extends BasePlugin {
     }
 
     const Config = await this.GetConfig(Channel.guild.id);
-    const Message = this.ApplyTemplate(ReminderValue.Message, ReminderValue, Channel.guild.name);
+    const EmbedSource = ReminderValue.Embed;
+    const Message = this.ApplyTemplate(EmbedSource?.Description || ReminderValue.Message, ReminderValue, Channel.guild.name);
 
     if (ReminderValue.Mode === "Embed") {
+      const UploadedImage = this.ParseDataImage(EmbedSource?.ImageDataUrl, EmbedSource?.ImageName || "embed-image.png");
       const Embed = new EmbedBuilder()
-        .setTitle(this.ApplyTemplate(ReminderValue.Title, ReminderValue, Channel.guild.name))
+        .setTitle(this.ApplyTemplate(EmbedSource?.Title || ReminderValue.Title, ReminderValue, Channel.guild.name).slice(0, 256))
         .setDescription(Message)
-        .setColor(this.ParseColor(ReminderValue.Color || Config.DefaultColor))
-        .setTimestamp(new Date());
+        .setColor(this.ParseColor(EmbedSource?.Color || ReminderValue.Color || Config.DefaultColor));
 
-      if (Config.FooterText) {
-        Embed.setFooter({ text: this.ApplyTemplate(Config.FooterText, ReminderValue, Channel.guild.name) });
+      if (EmbedSource?.Url?.trim()) {
+        Embed.setURL(EmbedSource.Url);
       }
 
-      await Channel.send({ embeds: [Embed] }).catch((ErrorValue: unknown) => {
+      if (EmbedSource?.AuthorName?.trim()) {
+        Embed.setAuthor({ name: this.ApplyTemplate(EmbedSource.AuthorName, ReminderValue, Channel.guild.name).slice(0, 256), iconURL: EmbedSource.AuthorIconUrl?.trim() || undefined });
+      }
+
+      if (EmbedSource?.ThumbnailUrl?.trim()) {
+        Embed.setThumbnail(EmbedSource.ThumbnailUrl);
+      }
+
+      if (UploadedImage) {
+        Embed.setImage(`attachment://${UploadedImage.name}`);
+      } else if (EmbedSource?.ImageUrl?.trim()) {
+        Embed.setImage(EmbedSource.ImageUrl);
+      }
+
+      const FooterText = EmbedSource?.FooterText || Config.FooterText;
+      if (FooterText) {
+        Embed.setFooter({ text: this.ApplyTemplate(FooterText, ReminderValue, Channel.guild.name).slice(0, 2048), iconURL: EmbedSource?.FooterIconUrl?.trim() || undefined });
+      }
+
+      if (EmbedSource?.Timestamp !== false) {
+        Embed.setTimestamp(new Date());
+      }
+
+      for (const Field of EmbedSource?.Fields ?? []) {
+        if (Field.Name.trim() && Field.Value.trim()) {
+          Embed.addFields({ name: this.ApplyTemplate(Field.Name, ReminderValue, Channel.guild.name).slice(0, 256), value: this.ApplyTemplate(Field.Value, ReminderValue, Channel.guild.name).slice(0, 1024), inline: Field.Inline });
+        }
+      }
+
+      await Channel.send({ embeds: [Embed], files: UploadedImage ? [UploadedImage] : [] }).catch((ErrorValue: unknown) => {
         this.Logger.Warn("Reminder embed send failed.", { Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue), ReminderId: ReminderValue.Id });
       });
       return true;
@@ -286,6 +337,41 @@ export default class RemindersPlugin extends BasePlugin {
       this.Logger.Warn("Reminder message send failed.", { Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue), ReminderId: ReminderValue.Id });
     });
     return true;
+  }
+
+  private ComputeNextRun(ReminderValue: Reminder, FromTimestamp: number): string {
+    if (ReminderValue.ScheduleMode !== "Weekly") {
+      return new Date(FromTimestamp + ReminderValue.IntervalMs).toISOString();
+    }
+
+    const [Hours, Minutes] = (ReminderValue.TimeOfDay || "13:00").split(":").map((Part) => Number.parseInt(Part, 10));
+    const Weekdays = ReminderValue.Weekdays?.length ? ReminderValue.Weekdays : [1];
+    const FromDate = new Date(FromTimestamp);
+
+    for (let Offset = 0; Offset <= 7; Offset += 1) {
+      const Candidate = new Date(FromDate);
+      Candidate.setDate(FromDate.getDate() + Offset);
+      Candidate.setHours(Number.isFinite(Hours) ? Hours : 13, Number.isFinite(Minutes) ? Minutes : 0, 0, 0);
+
+      if (Weekdays.includes(Candidate.getDay()) && Candidate.getTime() > FromTimestamp) {
+        return Candidate.toISOString();
+      }
+    }
+
+    return new Date(FromTimestamp + ReminderValue.IntervalMs).toISOString();
+  }
+
+  private ParseDataImage(Value: string | undefined, Name: string): { attachment: Buffer; name: string } | null {
+    const Match = Value?.match(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,(.+)$/iu);
+
+    if (!Match?.[1]) {
+      return null;
+    }
+
+    return {
+      attachment: Buffer.from(Match[1], "base64"),
+      name: Name.replace(/[^a-z0-9._-]/giu, "-") || "embed-image.png"
+    };
   }
 
   private async ResolveWritableChannel(GuildId: string, ChannelId: string): Promise<TextChannel | NewsChannel | VoiceChannel | null> {

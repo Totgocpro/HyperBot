@@ -1,5 +1,6 @@
 import {
   ChannelType,
+  EmbedBuilder,
   PermissionFlagsBits,
   type GuildMember,
   type Message,
@@ -10,15 +11,33 @@ import {
 import { randomUUID } from "node:crypto";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
-type CustomCommandActionType = "SendMessage" | "Reply" | "DM" | "AddRole" | "RemoveRole" | "ToggleRole" | "DeleteTrigger" | "React";
+type CustomCommandActionType = "SendMessage" | "Reply" | "DM" | "SendEmbed" | "ReplyEmbed" | "DMEmbed" | "AddRole" | "RemoveRole" | "ToggleRole" | "DeleteTrigger" | "React";
 type CustomCommandMatchMode = "Exact" | "StartsWith";
 
 type CustomCommandAction = {
   Id: string;
   Type: CustomCommandActionType;
   Message?: string;
+  Embed?: EditableEmbed;
   RoleId?: string;
   Emoji?: string;
+};
+
+type EditableEmbed = {
+  Title?: string;
+  Description?: string;
+  Color?: string;
+  Url?: string;
+  AuthorName?: string;
+  AuthorIconUrl?: string;
+  ThumbnailUrl?: string;
+  ImageUrl?: string;
+  FooterText?: string;
+  FooterIconUrl?: string;
+  Timestamp?: boolean;
+  Fields?: Array<{ Name: string; Value: string; Inline: boolean }>;
+  ImageDataUrl?: string;
+  ImageName?: string;
 };
 
 type CustomCommandChecks = {
@@ -184,6 +203,15 @@ export default class CustomCommandsPlugin extends BasePlugin {
       case "DM":
         await this.SendDirectMessage(MessageValue, Action.Message, Args);
         return;
+      case "SendEmbed":
+        await this.SendChannelEmbed(MessageValue, Action.Embed, Args);
+        return;
+      case "ReplyEmbed":
+        await this.ReplyWithEmbed(MessageValue, Action.Embed, Args);
+        return;
+      case "DMEmbed":
+        await this.SendDirectEmbed(MessageValue, Action.Embed, Args);
+        return;
       case "AddRole":
         await this.AddRole(Member, Action.RoleId);
         return;
@@ -237,6 +265,106 @@ export default class CustomCommandsPlugin extends BasePlugin {
       content: this.ApplyTemplate(Template, MessageValue, Args),
       allowedMentions: { parse: [] }
     }).catch((ErrorValue: unknown) => this.Logger.Warn("Custom command DM action failed.", ErrorValue));
+  }
+
+  private async SendChannelEmbed(MessageValue: Message, Source: EditableEmbed | undefined, Args: string): Promise<void> {
+    const Channel = MessageValue.channel;
+
+    if (!Source || !this.IsSendableChannel(Channel)) {
+      return;
+    }
+
+    const BuiltEmbed = this.BuildEmbed(Source, MessageValue, Args);
+    await Channel.send({
+      embeds: [BuiltEmbed.Embed],
+      files: BuiltEmbed.Files,
+      allowedMentions: { parse: [] }
+    }).catch((ErrorValue: unknown) => this.Logger.Warn("Custom command send embed action failed.", ErrorValue));
+  }
+
+  private async ReplyWithEmbed(MessageValue: Message, Source: EditableEmbed | undefined, Args: string): Promise<void> {
+    if (!Source) {
+      return;
+    }
+
+    const BuiltEmbed = this.BuildEmbed(Source, MessageValue, Args);
+    await MessageValue.reply({
+      embeds: [BuiltEmbed.Embed],
+      files: BuiltEmbed.Files,
+      allowedMentions: { parse: [] }
+    }).catch((ErrorValue: unknown) => this.Logger.Warn("Custom command reply embed action failed.", ErrorValue));
+  }
+
+  private async SendDirectEmbed(MessageValue: Message, Source: EditableEmbed | undefined, Args: string): Promise<void> {
+    if (!Source) {
+      return;
+    }
+
+    const BuiltEmbed = this.BuildEmbed(Source, MessageValue, Args);
+    await MessageValue.author.send({
+      embeds: [BuiltEmbed.Embed],
+      files: BuiltEmbed.Files,
+      allowedMentions: { parse: [] }
+    }).catch((ErrorValue: unknown) => this.Logger.Warn("Custom command DM embed action failed.", ErrorValue));
+  }
+
+  private BuildEmbed(Source: EditableEmbed, MessageValue: Message, Args: string): { Embed: EmbedBuilder; Files: Array<{ attachment: Buffer; name: string }> } {
+    const Files: Array<{ attachment: Buffer; name: string }> = [];
+    const Embed = new EmbedBuilder().setColor(this.ParseColor(Source.Color || "#5865f2"));
+
+    if (Source.Title?.trim()) {
+      Embed.setTitle(this.ApplyTemplate(Source.Title, MessageValue, Args).slice(0, 256));
+    }
+
+    if (Source.Description?.trim()) {
+      Embed.setDescription(this.ApplyTemplate(Source.Description, MessageValue, Args).slice(0, 4096));
+    }
+
+    if (Source.Url?.trim()) {
+      Embed.setURL(this.ApplyTemplate(Source.Url, MessageValue, Args));
+    }
+
+    if (Source.AuthorName?.trim()) {
+      Embed.setAuthor({
+        name: this.ApplyTemplate(Source.AuthorName, MessageValue, Args).slice(0, 256),
+        iconURL: Source.AuthorIconUrl?.trim() ? this.ApplyTemplate(Source.AuthorIconUrl, MessageValue, Args) : undefined
+      });
+    }
+
+    if (Source.ThumbnailUrl?.trim()) {
+      Embed.setThumbnail(this.ApplyTemplate(Source.ThumbnailUrl, MessageValue, Args));
+    }
+
+    const UploadedImage = this.ParseDataImage(Source.ImageDataUrl, Source.ImageName || "custom-command-image.png");
+    if (UploadedImage) {
+      Files.push(UploadedImage);
+      Embed.setImage(`attachment://${UploadedImage.name}`);
+    } else if (Source.ImageUrl?.trim()) {
+      Embed.setImage(this.ApplyTemplate(Source.ImageUrl, MessageValue, Args));
+    }
+
+    if (Source.FooterText?.trim()) {
+      Embed.setFooter({
+        text: this.ApplyTemplate(Source.FooterText, MessageValue, Args).slice(0, 2048),
+        iconURL: Source.FooterIconUrl?.trim() ? this.ApplyTemplate(Source.FooterIconUrl, MessageValue, Args) : undefined
+      });
+    }
+
+    if (Source.Timestamp) {
+      Embed.setTimestamp(new Date());
+    }
+
+    for (const Field of Source.Fields ?? []) {
+      if (Field.Name.trim() && Field.Value.trim()) {
+        Embed.addFields({
+          name: this.ApplyTemplate(Field.Name, MessageValue, Args).slice(0, 256),
+          value: this.ApplyTemplate(Field.Value, MessageValue, Args).slice(0, 1024),
+          inline: Field.Inline
+        });
+      }
+    }
+
+    return { Embed, Files };
   }
 
   private async AddRole(Member: GuildMember, RoleId: string | undefined): Promise<void> {
@@ -346,6 +474,7 @@ export default class CustomCommandsPlugin extends BasePlugin {
         Id: this.GetString(ActionValue.Id) || randomUUID(),
         Type: this.ParseActionType(ActionValue.Type),
         Message: this.GetString(ActionValue.Message),
+        Embed: this.ParseEditableEmbed(ActionValue.Embed),
         RoleId: this.GetString(ActionValue.RoleId),
         Emoji: this.GetString(ActionValue.Emoji)
       })) : []
@@ -354,8 +483,35 @@ export default class CustomCommandsPlugin extends BasePlugin {
 
   private ParseActionType(Value: unknown): CustomCommandActionType {
     const SafeValue = String(Value);
-    const AllowedTypes: CustomCommandActionType[] = ["SendMessage", "Reply", "DM", "AddRole", "RemoveRole", "ToggleRole", "DeleteTrigger", "React"];
+    const AllowedTypes: CustomCommandActionType[] = ["SendMessage", "Reply", "DM", "SendEmbed", "ReplyEmbed", "DMEmbed", "AddRole", "RemoveRole", "ToggleRole", "DeleteTrigger", "React"];
     return AllowedTypes.includes(SafeValue as CustomCommandActionType) ? SafeValue as CustomCommandActionType : "SendMessage";
+  }
+
+  private ParseEditableEmbed(Value: unknown): EditableEmbed | undefined {
+    if (!this.IsRecord(Value)) {
+      return undefined;
+    }
+
+    return {
+      Title: this.GetString(Value.Title),
+      Description: this.GetString(Value.Description),
+      Color: this.GetString(Value.Color),
+      Url: this.GetString(Value.Url),
+      AuthorName: this.GetString(Value.AuthorName),
+      AuthorIconUrl: this.GetString(Value.AuthorIconUrl),
+      ThumbnailUrl: this.GetString(Value.ThumbnailUrl),
+      ImageUrl: this.GetString(Value.ImageUrl),
+      FooterText: this.GetString(Value.FooterText),
+      FooterIconUrl: this.GetString(Value.FooterIconUrl),
+      Timestamp: Boolean(Value.Timestamp),
+      ImageDataUrl: this.GetString(Value.ImageDataUrl),
+      ImageName: this.GetString(Value.ImageName),
+      Fields: Array.isArray(Value.Fields) ? Value.Fields.filter(this.IsRecord).map((Field) => ({
+        Name: this.GetString(Field.Name),
+        Value: this.GetString(Field.Value),
+        Inline: Boolean(Field.Inline)
+      })) : []
+    };
   }
 
   private ParseMatchMode(Value: unknown): CustomCommandMatchMode {
@@ -372,6 +528,24 @@ export default class CustomCommandsPlugin extends BasePlugin {
 
   private GetString(Value: unknown): string {
     return typeof Value === "string" ? Value : "";
+  }
+
+  private ParseColor(ColorValue: string): number {
+    const SafeColor = /^#[0-9a-f]{6}$/iu.test(ColorValue) ? ColorValue : "#5865f2";
+    return Number.parseInt(SafeColor.slice(1), 16);
+  }
+
+  private ParseDataImage(Value: string | undefined, Name: string): { attachment: Buffer; name: string } | null {
+    const Match = Value?.match(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,(.+)$/iu);
+
+    if (!Match?.[1]) {
+      return null;
+    }
+
+    return {
+      attachment: Buffer.from(Match[1], "base64"),
+      name: Name.replace(/[^a-z0-9._-]/giu, "-") || "custom-command-image.png"
+    };
   }
 
   private SanitizeCommandName(Value: string): string {

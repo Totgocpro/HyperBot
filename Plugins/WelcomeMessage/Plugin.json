@@ -47,33 +47,40 @@
       "Type": "String",
       "Label": "Welcome title",
       "Default": "Welcome %user%",
-      "Section": "Welcome content",
-      "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Embed" },
-        { "Key": "WelcomeMode", "Value": "Image" }
-      ]
+      "Section": "Welcome image",
+      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Image" }
     },
     {
       "Key": "WelcomeMessage",
       "Type": "String",
       "Label": "Welcome message",
       "Default": "You are member #%memberCount% on %server%.",
-      "Section": "Welcome content"
+      "Section": "Welcome image",
+      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Image" }
     },
     {
-      "Key": "WelcomeColor",
-      "Type": "String",
-      "Label": "Welcome color",
-      "Default": "#2563eb",
-      "Section": "Welcome embed design",
-      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Embed" }
-    },
-    {
-      "Key": "WelcomeEmbedAuthor",
-      "Type": "Boolean",
-      "Label": "Show member as embed author",
-      "Default": true,
-      "Section": "Welcome embed design",
+      "Key": "WelcomeEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Welcome embed",
+      "Description": "Available tags: %user%, %mention%, %server%, %memberCount%.",
+      "Default": {
+        "Name": "Welcome embed",
+        "Title": "Welcome %user%",
+        "Description": "You are member #%memberCount% on %server%.",
+        "Color": "#2563eb",
+        "Url": "",
+        "AuthorName": "%user%",
+        "AuthorIconUrl": "%avatar%",
+        "ThumbnailUrl": "%avatar%",
+        "ImageUrl": "",
+        "FooterText": "%server% • %memberCount% members",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Welcome embed",
       "VisibleWhen": { "Key": "WelcomeMode", "Value": "Embed" }
     },
     {
@@ -114,29 +121,40 @@
       "Type": "String",
       "Label": "Leave title",
       "Default": "%user% left the server",
-      "Section": "Leave content"
+      "Section": "Leave image",
+      "VisibleWhen": { "Key": "LeaveMode", "Value": "Image" }
     },
     {
       "Key": "LeaveMessage",
       "Type": "String",
       "Label": "Leave message",
       "Default": "Goodbye from %server%.",
-      "Section": "Leave content"
+      "Section": "Leave image",
+      "VisibleWhen": { "Key": "LeaveMode", "Value": "Image" }
     },
     {
-      "Key": "LeaveColor",
-      "Type": "String",
-      "Label": "Leave color",
-      "Default": "#ef4444",
-      "Section": "Leave embed design",
-      "VisibleWhen": { "Key": "LeaveMode", "Value": "Embed" }
-    },
-    {
-      "Key": "LeaveEmbedAuthor",
-      "Type": "Boolean",
-      "Label": "Show member as embed author",
-      "Default": true,
-      "Section": "Leave embed design",
+      "Key": "LeaveEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Leave embed",
+      "Description": "Available tags: %user%, %mention%, %server%, %memberCount%.",
+      "Default": {
+        "Name": "Leave embed",
+        "Title": "%user% left the server",
+        "Description": "Goodbye from %server%.",
+        "Color": "#ef4444",
+        "Url": "",
+        "AuthorName": "%user%",
+        "AuthorIconUrl": "%avatar%",
+        "ThumbnailUrl": "%avatar%",
+        "ImageUrl": "",
+        "FooterText": "%server% • %memberCount% members",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Leave embed",
       "VisibleWhen": { "Key": "LeaveMode", "Value": "Embed" }
     },
     {
@@ -408,19 +426,28 @@
       "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
     },
     {
-      "Key": "CaptchaTitle",
-      "Type": "String",
-      "Label": "Captcha title",
-      "Default": "Server verification",
-      "Section": "Captcha content",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
-    },
-    {
-      "Key": "CaptchaMessage",
-      "Type": "String",
-      "Label": "Captcha message",
-      "Default": "Complete the captcha to unlock the server.",
-      "Section": "Captcha content",
+      "Key": "CaptchaEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Captcha embed",
+      "Description": "Public verification embed. Available tags: %user%, %mention%, %server%, %memberCount%, %id%, %avatar%.",
+      "Default": {
+        "Name": "Captcha embed",
+        "Title": "Server verification",
+        "Description": "Complete the captcha to unlock the server.",
+        "Color": "#2563eb",
+        "Url": "",
+        "AuthorName": "",
+        "AuthorIconUrl": "",
+        "ThumbnailUrl": "",
+        "ImageUrl": "",
+        "FooterText": "%server%",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Captcha embed",
       "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
     },
     {
@@ -428,7 +455,7 @@
       "Type": "String",
       "Label": "Captcha button label",
       "Default": "Verify",
-      "Section": "Captcha content",
+      "Section": "Captcha embed",
       "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
     },
     {
@@ -436,7 +463,7 @@
       "Type": "Number",
       "Label": "Verification levels",
       "Default": 2,
-      "Section": "Captcha content",
+      "Section": "Captcha embed",
       "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
     },
     {

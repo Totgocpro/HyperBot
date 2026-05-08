@@ -53,6 +53,8 @@ type EditableEmbed = {
   FooterIconUrl: string;
   Timestamp: boolean;
   Fields: EditableEmbedField[];
+  ImageDataUrl: string;
+  ImageName: string;
 };
 
 type BackupSummary = {
@@ -66,12 +68,13 @@ type BackupSummary = {
   PluginConfigs: number;
 };
 
-type CustomCommandActionType = "SendMessage" | "Reply" | "DM" | "AddRole" | "RemoveRole" | "ToggleRole" | "DeleteTrigger" | "React";
+type CustomCommandActionType = "SendMessage" | "Reply" | "DM" | "SendEmbed" | "ReplyEmbed" | "DMEmbed" | "AddRole" | "RemoveRole" | "ToggleRole" | "DeleteTrigger" | "React";
 
 type CustomCommandActionDraft = {
   Id: string;
   Type: CustomCommandActionType;
   Message: string;
+  Embed: EditableEmbed;
   RoleId: string;
   Emoji: string;
 };
@@ -104,9 +107,13 @@ type ReminderDraft = {
   Name: string;
   ChannelId: string;
   Mode: "Message" | "Embed";
+  ScheduleMode: "Interval" | "Weekly";
+  Weekdays: number[];
+  TimeOfDay: string;
   Message: string;
   Title: string;
   Color: string;
+  Embed: EditableEmbed;
   IntervalMs: number;
   NextRunAt: string;
   Enabled: boolean;
@@ -575,7 +582,7 @@ function CustomCommandsEditor(Properties: {
           BlockedRoleIds: [],
           DeniedMessage: ""
         },
-        Actions: [{ Id: CreateClientId(), Type: "Reply", Message: "Hello %mention%", RoleId: "", Emoji: "" }]
+        Actions: [{ Id: CreateClientId(), Type: "Reply", Message: "Hello %mention%", Embed: CreateDefaultEmbed(), RoleId: "", Emoji: "" }]
       }
     ]);
     Properties.SetStatus("Command added in draft. Use Save to persist it.");
@@ -609,7 +616,7 @@ function CustomCommandsEditor(Properties: {
     }
 
     UpdateCommand(CommandId, {
-      Actions: [...Command.Actions, { Id: CreateClientId(), Type: "SendMessage", Message: "", RoleId: "", Emoji: "" }]
+      Actions: [...Command.Actions, { Id: CreateClientId(), Type: "SendMessage", Message: "", Embed: CreateDefaultEmbed(), RoleId: "", Emoji: "" }]
     });
   }
 
@@ -702,7 +709,7 @@ function CustomCommandsEditor(Properties: {
                   </label>
                 </div>
 
-                <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                <div className="mt-4 grid gap-3">
                   <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
                     <p className="font-black text-white">Checks</p>
                     <div className="mt-3 grid gap-3">
@@ -734,6 +741,9 @@ function CustomCommandsEditor(Properties: {
                                 { Label: "Send message", Value: "SendMessage" },
                                 { Label: "Reply", Value: "Reply" },
                                 { Label: "DM user", Value: "DM" },
+                                { Label: "Send embed", Value: "SendEmbed" },
+                                { Label: "Reply embed", Value: "ReplyEmbed" },
+                                { Label: "DM embed", Value: "DMEmbed" },
                                 { Label: "Add role", Value: "AddRole" },
                                 { Label: "Remove role", Value: "RemoveRole" },
                                 { Label: "Toggle role", Value: "ToggleRole" },
@@ -749,6 +759,15 @@ function CustomCommandsEditor(Properties: {
                           </div>
                           {ActionNeedsMessage(Action.Type) ? (
                             <textarea className={`${EmbedInputClassName} min-h-24 resize-y`} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Message: Event.target.value })} placeholder="Use %mention%, %user%, %args%, %server%, %channel%" value={Action.Message} />
+                          ) : null}
+                          {ActionNeedsEmbed(Action.Type) ? (
+                            <div className="mt-3">
+                              <AdvancedEmbedEditor
+                                EmbedValue={Action.Embed}
+                                OnChange={(Embed) => UpdateAction(Command.Id, Action.Id, { Embed })}
+                                PlaceholderText="Use %mention%, %user%, %args%, %server%, %channel% in text fields."
+                              />
+                            </div>
                           ) : null}
                           {ActionNeedsRole(Action.Type) ? (
                             <CustomSelect
@@ -863,9 +882,19 @@ function RemindersEditor(Properties: {
         Name: "New reminder",
         ChannelId: DefaultChannelId,
         Mode: Boolean(Values.DefaultEmbed ?? true) ? "Embed" : "Message",
+        ScheduleMode: "Interval",
+        Weekdays: [1],
+        TimeOfDay: "13:00",
         Message: "Write your scheduled message here.",
         Title: "Scheduled reminder",
         Color: String(Values.DefaultColor ?? "#5865f2"),
+        Embed: {
+          ...CreateDefaultEmbed(),
+          Name: "Scheduled reminder",
+          Title: "Scheduled reminder",
+          Description: "Write your scheduled message here.",
+          Color: String(Values.DefaultColor ?? "#5865f2")
+        },
         IntervalMs: DefaultIntervalMs,
         NextRunAt: new Date(Now + DefaultIntervalMs).toISOString(),
         Enabled: true,
@@ -977,31 +1006,226 @@ function RemindersEditor(Properties: {
                   Value={ReminderValue.Mode}
                 />
               </div>
-              <label className="block text-sm font-bold text-slate-200">
-                Interval minutes
-                <input className={EmbedInputClassName} min={1} onChange={(Event) => UpdateReminder(ReminderValue.Id, { IntervalMs: Math.max(60_000, Number(Event.target.value) * 60_000) })} type="number" value={Math.max(1, Math.round(ReminderValue.IntervalMs / 60_000))} />
-              </label>
+              <div className="block text-sm font-bold text-slate-200">
+                Schedule
+                <CustomSelect
+                  ClassName="mt-2"
+                  OnChange={(Value) => UpdateReminder(ReminderValue.Id, { ScheduleMode: Value as ReminderDraft["ScheduleMode"], NextRunAt: ComputeReminderNextRun(Value as ReminderDraft["ScheduleMode"], ReminderValue) })}
+                  Options={[
+                    { Label: "Every interval", Value: "Interval" },
+                    { Label: "Weekly days and time", Value: "Weekly" }
+                  ]}
+                  Required={true}
+                  Value={ReminderValue.ScheduleMode}
+                />
+              </div>
+              {ReminderValue.ScheduleMode === "Interval" ? (
+                <label className="block text-sm font-bold text-slate-200">
+                  Interval minutes
+                  <input className={EmbedInputClassName} min={1} onChange={(Event) => UpdateReminder(ReminderValue.Id, { IntervalMs: Math.max(60_000, Number(Event.target.value) * 60_000) })} type="number" value={Math.max(1, Math.round(ReminderValue.IntervalMs / 60_000))} />
+                </label>
+              ) : (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3 lg:col-span-2">
+                  <p className="text-sm font-bold text-slate-200">Weekly schedule</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {ReminderWeekdays.map((Day) => (
+                      <label className={`rounded-xl px-3 py-2 text-sm font-bold ${ReminderValue.Weekdays.includes(Day.Value) ? "bg-blue-600 text-white" : "bg-slate-950 text-slate-300"}`} key={Day.Value}>
+                        <input className="sr-only" checked={ReminderValue.Weekdays.includes(Day.Value)} onChange={() => {
+                          const NextWeekdays = ReminderValue.Weekdays.includes(Day.Value) ? ReminderValue.Weekdays.filter((Value) => Value !== Day.Value) : [...ReminderValue.Weekdays, Day.Value].sort();
+                          UpdateReminder(ReminderValue.Id, { Weekdays: NextWeekdays.length ? NextWeekdays : [Day.Value], NextRunAt: ComputeReminderNextRun("Weekly", { ...ReminderValue, Weekdays: NextWeekdays.length ? NextWeekdays : [Day.Value] }) });
+                        }} type="checkbox" />
+                        {Day.Label}
+                      </label>
+                    ))}
+                  </div>
+                  <label className="mt-3 block text-sm font-bold text-slate-200">
+                    Time
+                    <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { TimeOfDay: Event.target.value, NextRunAt: ComputeReminderNextRun("Weekly", { ...ReminderValue, TimeOfDay: Event.target.value }) })} type="time" value={ReminderValue.TimeOfDay} />
+                  </label>
+                </div>
+              )}
               <label className="block text-sm font-bold text-slate-200">
                 Next run
                 <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { NextRunAt: LocalDateTimeToIso(Event.target.value) })} type="datetime-local" value={IsoToLocalDateTime(ReminderValue.NextRunAt)} />
               </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Embed color
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Color: Event.target.value })} type="color" value={NormalizeEmbedColor(ReminderValue.Color)} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
-                Embed title
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Title: Event.target.value })} value={ReminderValue.Title} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
-                Message
-                <textarea className={`${EmbedInputClassName} min-h-28 resize-y`} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Message: Event.target.value })} value={ReminderValue.Message} />
-              </label>
+              {ReminderValue.Mode === "Embed" ? (
+                <div className="lg:col-span-2">
+                  <AdvancedEmbedEditor
+                    EmbedValue={ReminderValue.Embed}
+                    OnChange={(NextEmbed) => UpdateReminder(ReminderValue.Id, { Embed: NextEmbed, Title: NextEmbed.Title, Message: NextEmbed.Description, Color: NextEmbed.Color })}
+                    PlaceholderText="Use placeholders like %server%, %name%, %runCount%, %interval%, %nextRun%."
+                  />
+                </div>
+              ) : (
+                <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                  Message
+                  <textarea className={`${EmbedInputClassName} min-h-28 resize-y`} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Message: Event.target.value })} value={ReminderValue.Message} />
+                </label>
+              )}
             </div>
           </section>
         ))}
       </div>
     </section>
+  );
+}
+
+function AdvancedEmbedEditor(Properties: {
+  EmbedValue: EditableEmbed;
+  OnChange: (EmbedValue: EditableEmbed) => void;
+  PlaceholderText?: string;
+}) {
+  const CurrentEmbed = Properties.EmbedValue;
+  const [SelectedPart, SetSelectedPart] = UseState<"Content" | "Author" | "Media" | "Footer" | "Fields">("Content");
+
+  function UpdateEmbed(Patch: Partial<EditableEmbed>): void {
+    Properties.OnChange({ ...CurrentEmbed, ...Patch });
+  }
+
+  function UpdateField(Index: number, Patch: Partial<EditableEmbedField>): void {
+    UpdateEmbed({
+      Fields: CurrentEmbed.Fields.map((Field, FieldIndex) => (FieldIndex === Index ? { ...Field, ...Patch } : Field))
+    });
+  }
+
+  function AddField(): void {
+    UpdateEmbed({
+      Fields: [...CurrentEmbed.Fields, { Name: "Field title", Value: "Field value", Inline: false }]
+    });
+  }
+
+  function RemoveField(Index: number): void {
+    UpdateEmbed({
+      Fields: CurrentEmbed.Fields.filter((_, FieldIndex) => FieldIndex !== Index)
+    });
+  }
+
+  function UploadEmbedImage(FileValue: File | undefined): void {
+    if (!FileValue) {
+      return;
+    }
+
+    if (!FileValue.type.startsWith("image/")) {
+      return;
+    }
+
+    const Reader = new FileReader();
+    Reader.onload = () => UpdateEmbed({ ImageDataUrl: String(Reader.result ?? ""), ImageName: FileValue.name || "embed-image.png", ImageUrl: "" });
+    Reader.readAsDataURL(FileValue);
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid content-start gap-3">
+        {Properties.PlaceholderText ? <p className="rounded-2xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400">{Properties.PlaceholderText}</p> : null}
+        <DiscordEmbedPreview Embed={CurrentEmbed} OnSelectPart={SetSelectedPart} SelectedPart={SelectedPart} />
+      </div>
+      <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+        <div className="mb-4 flex flex-wrap gap-2">
+          {(["Content", "Author", "Media", "Footer", "Fields"] as const).map((Part) => (
+            <button className={SelectedPart === Part ? "rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white" : "rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-slate-800"} key={Part} onClick={() => SetSelectedPart(Part)} type="button">
+              {Part}
+            </button>
+          ))}
+        </div>
+
+        {SelectedPart === "Content" ? (
+          <div className="grid gap-3">
+            <label className="block text-sm font-bold text-slate-200">
+              Title
+              <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ Title: Event.target.value })} value={CurrentEmbed.Title} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Description
+              <textarea className={`${EmbedInputClassName} min-h-40 resize-y`} maxLength={4096} onChange={(Event) => UpdateEmbed({ Description: Event.target.value })} value={CurrentEmbed.Description} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Title URL
+              <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Url: Event.target.value })} placeholder="https://example.com" value={CurrentEmbed.Url} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Accent color
+              <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Color: Event.target.value })} type="color" value={NormalizeEmbedColor(CurrentEmbed.Color)} />
+            </label>
+          </div>
+        ) : null}
+
+        {SelectedPart === "Author" ? (
+          <div className="grid gap-3">
+            <label className="block text-sm font-bold text-slate-200">
+              Author name
+              <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ AuthorName: Event.target.value })} value={CurrentEmbed.AuthorName} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Author icon URL
+              <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ AuthorIconUrl: Event.target.value })} value={CurrentEmbed.AuthorIconUrl} />
+            </label>
+          </div>
+        ) : null}
+
+        {SelectedPart === "Media" ? (
+          <div className="grid gap-3">
+            <label className="block text-sm font-bold text-slate-200">
+              Thumbnail URL
+              <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ ThumbnailUrl: Event.target.value })} value={CurrentEmbed.ThumbnailUrl} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Image URL
+              <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ ImageUrl: Event.target.value, ImageDataUrl: "" })} value={CurrentEmbed.ImageUrl} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Upload image
+              <span className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 hover:bg-slate-800">
+                {CurrentEmbed.ImageDataUrl ? CurrentEmbed.ImageName || "Uploaded image" : "Choose image"}
+                <input accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(Event) => UploadEmbedImage(Event.target.files?.[0])} type="file" />
+              </span>
+            </label>
+            {CurrentEmbed.ImageDataUrl ? <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => UpdateEmbed({ ImageDataUrl: "", ImageName: "" })} type="button">Remove uploaded image</button> : null}
+          </div>
+        ) : null}
+
+        {SelectedPart === "Footer" ? (
+          <div className="grid gap-3">
+            <label className="block text-sm font-bold text-slate-200">
+              Footer text
+              <input className={EmbedInputClassName} maxLength={2048} onChange={(Event) => UpdateEmbed({ FooterText: Event.target.value })} value={CurrentEmbed.FooterText} />
+            </label>
+            <label className="block text-sm font-bold text-slate-200">
+              Footer icon URL
+              <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ FooterIconUrl: Event.target.value })} value={CurrentEmbed.FooterIconUrl} />
+            </label>
+            <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 font-semibold text-slate-100">
+              Timestamp
+              <input checked={CurrentEmbed.Timestamp} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateEmbed({ Timestamp: Event.target.checked })} type="checkbox" />
+            </label>
+          </div>
+        ) : null}
+
+        {SelectedPart === "Fields" ? (
+          <div className="grid gap-3">
+            <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddField} type="button">
+              Add field
+            </button>
+            {CurrentEmbed.Fields.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No field configured.</p> : null}
+            {CurrentEmbed.Fields.map((Field, Index) => (
+              <div className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-3" key={Index}>
+                <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateField(Index, { Name: Event.target.value })} placeholder="Field name" value={Field.Name} />
+                <textarea className={`${EmbedInputClassName} min-h-20 resize-y`} maxLength={1024} onChange={(Event) => UpdateField(Index, { Value: Event.target.value })} placeholder="Field value" value={Field.Value} />
+                <div className="flex gap-2">
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-200">
+                    <input checked={Field.Inline} className="h-4 w-4 accent-blue-600" onChange={(Event) => UpdateField(Index, { Inline: Event.target.checked })} type="checkbox" />
+                    Inline
+                  </label>
+                  <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveField(Index)} type="button">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }
 
@@ -1017,15 +1241,19 @@ function SendEmbedEditor(Properties: {
   const Values = Properties.DraftValues[PluginId] ?? {};
   const ChannelField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "SendChannelId");
   const SavedEmbeds = ParseSavedEmbeds(Values.SavedEmbeds);
-  const [CurrentEmbed, SetCurrentEmbed] = UseState<EditableEmbed>(CreateDefaultEmbed());
+  const CurrentEmbed = ParseEditableEmbed(Values.CurrentEmbed);
   const [IsSending, SetIsSending] = UseState(false);
 
   function SetChannelId(ChannelId: string): void {
     Properties.UpdateDraftValue(PluginId, "SendChannelId", ChannelId);
   }
 
+  function SetCurrentEmbed(EmbedValue: EditableEmbed): void {
+    Properties.UpdateDraftValue(PluginId, "CurrentEmbed", EmbedValue);
+  }
+
   function UpdateEmbed(Patch: Partial<EditableEmbed>): void {
-    SetCurrentEmbed((PreviousEmbed) => ({ ...PreviousEmbed, ...Patch }));
+    SetCurrentEmbed({ ...CurrentEmbed, ...Patch });
   }
 
   function SaveCurrentEmbed(): void {
@@ -1051,24 +1279,6 @@ function SendEmbedEditor(Properties: {
   function DeleteEmbed(Name: string): void {
     Properties.UpdateDraftValue(PluginId, "SavedEmbeds", SavedEmbeds.filter((EmbedValue) => EmbedValue.Name !== Name));
     Properties.SetStatus(`${Name} removed from draft. Use the main Save button to persist it.`);
-  }
-
-  function UpdateField(Index: number, Patch: Partial<EditableEmbedField>): void {
-    UpdateEmbed({
-      Fields: CurrentEmbed.Fields.map((Field, FieldIndex) => (FieldIndex === Index ? { ...Field, ...Patch } : Field))
-    });
-  }
-
-  function AddField(): void {
-    UpdateEmbed({
-      Fields: [...CurrentEmbed.Fields, { Name: "Field title", Value: "Field value", Inline: false }]
-    });
-  }
-
-  function RemoveField(Index: number): void {
-    UpdateEmbed({
-      Fields: CurrentEmbed.Fields.filter((_, FieldIndex) => FieldIndex !== Index)
-    });
   }
 
   async function SendEmbed(): Promise<void> {
@@ -1112,8 +1322,8 @@ function SendEmbedEditor(Properties: {
         <h3 className="mt-2 text-2xl font-black text-white">Create, preview, save, and send embeds</h3>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
-        <div className="grid gap-5">
+      <div className="grid gap-5">
+        <div className="grid gap-4">
           <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block text-sm font-bold text-slate-200">
@@ -1137,89 +1347,29 @@ function SendEmbedEditor(Properties: {
                   Value={String(Values.SendChannelId ?? "")}
                 />
               </div>
-              <label className="block text-sm font-bold text-slate-200">
-                Title
-                <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ Title: Event.target.value })} value={CurrentEmbed.Title} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Color
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Color: Event.target.value })} type="color" value={NormalizeEmbedColor(CurrentEmbed.Color)} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200 md:col-span-2">
-                Description
-                <textarea className={`${EmbedInputClassName} min-h-32 resize-y`} maxLength={4096} onChange={(Event) => UpdateEmbed({ Description: Event.target.value })} value={CurrentEmbed.Description} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Title URL
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Url: Event.target.value })} placeholder="https://example.com" value={CurrentEmbed.Url} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Thumbnail URL
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ ThumbnailUrl: Event.target.value })} placeholder="https://example.com/image.png" value={CurrentEmbed.ThumbnailUrl} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Author name
-                <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ AuthorName: Event.target.value })} value={CurrentEmbed.AuthorName} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Author icon URL
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ AuthorIconUrl: Event.target.value })} value={CurrentEmbed.AuthorIconUrl} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Image URL
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ ImageUrl: Event.target.value })} value={CurrentEmbed.ImageUrl} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200">
-                Footer icon URL
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ FooterIconUrl: Event.target.value })} value={CurrentEmbed.FooterIconUrl} />
-              </label>
-              <label className="block text-sm font-bold text-slate-200 md:col-span-2">
-                Footer text
-                <input className={EmbedInputClassName} maxLength={2048} onChange={(Event) => UpdateEmbed({ FooterText: Event.target.value })} value={CurrentEmbed.FooterText} />
-              </label>
-              <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 font-semibold text-slate-100 md:col-span-2">
-                Add current timestamp
-                <input checked={CurrentEmbed.Timestamp} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateEmbed({ Timestamp: Event.target.checked })} type="checkbox" />
-              </label>
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h4 className="text-xl font-black text-white">Fields</h4>
-                <p className="mt-1 text-sm text-slate-500">Add Discord embed fields with optional inline layout.</p>
-              </div>
-              <button className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddField} type="button">
-                Add field
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {CurrentEmbed.Fields.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No field configured.</p> : null}
-              {CurrentEmbed.Fields.map((Field, Index) => (
-                <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3 md:grid-cols-[1fr_1fr_auto]" key={Index}>
-                  <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateField(Index, { Name: Event.target.value })} placeholder="Field name" value={Field.Name} />
-                  <input className={EmbedInputClassName} maxLength={1024} onChange={(Event) => UpdateField(Index, { Value: Event.target.value })} placeholder="Field value" value={Field.Value} />
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-300">
-                      <input checked={Field.Inline} className="h-4 w-4 accent-blue-600" onChange={(Event) => UpdateField(Index, { Inline: Event.target.checked })} type="checkbox" />
-                      Inline
-                    </label>
-                    <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveField(Index)} type="button">
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          <AdvancedEmbedEditor
+            EmbedValue={CurrentEmbed}
+            OnChange={SetCurrentEmbed}
+            PlaceholderText="Build the embed from the preview. Select a part of the Discord preview, then edit only that section."
+          />
         </div>
 
-        <aside className="grid content-start gap-5">
-          <DiscordEmbedPreview Embed={CurrentEmbed} />
-          <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <h4 className="text-xl font-black text-white">Saved embeds</h4>
-            <div className="mt-4 grid gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={SaveCurrentEmbed} type="button">
+                Save template
+              </button>
+              <button className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60" disabled={IsSending} onClick={() => void SendEmbed()} type="button">
+                {IsSending ? "Sending..." : "Send embed"}
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {SavedEmbeds.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No saved embed.</p> : null}
               {SavedEmbeds.map((EmbedValue) => (
                 <div className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-3" key={EmbedValue.Name}>
@@ -1235,23 +1385,16 @@ function SendEmbedEditor(Properties: {
                 </div>
               ))}
             </div>
-            <div className="mt-4 grid gap-2">
-              <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={SaveCurrentEmbed} type="button">
-                Save template
-              </button>
-              <button className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60" disabled={IsSending} onClick={() => void SendEmbed()} type="button">
-                {IsSending ? "Sending..." : "Send embed"}
-              </button>
-            </div>
-          </section>
-        </aside>
+        </section>
       </div>
     </section>
   );
 }
 
-function DiscordEmbedPreview(Properties: { Embed: EditableEmbed }) {
+function DiscordEmbedPreview(Properties: { Embed: EditableEmbed; OnSelectPart?: (Part: "Content" | "Author" | "Media" | "Footer" | "Fields") => void; SelectedPart?: string }) {
   const Color = NormalizeEmbedColor(Properties.Embed.Color);
+  const SelectClassName = "rounded-md outline outline-2 outline-transparent transition hover:outline-blue-400";
+  const ActiveClassName = "outline-blue-500";
 
   return (
     <section className="rounded-3xl border border-slate-800 bg-[#313338] p-4 shadow-xl shadow-black/20">
@@ -1265,38 +1408,38 @@ function DiscordEmbedPreview(Properties: { Embed: EditableEmbed }) {
           <div className="mt-2 max-w-[520px] overflow-hidden rounded bg-[#2b2d31]" style={{ borderLeft: `4px solid ${Color}` }}>
             <div className="p-4">
               {Properties.Embed.AuthorName ? (
-                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+                <button className={`mb-2 flex w-full items-center gap-2 text-left text-sm font-semibold text-white ${SelectClassName} ${Properties.SelectedPart === "Author" ? ActiveClassName : ""}`} onClick={() => Properties.OnSelectPart?.("Author")} type="button">
                   {Properties.Embed.AuthorIconUrl ? <img alt="" className="h-5 w-5 rounded-full object-cover" src={Properties.Embed.AuthorIconUrl} /> : null}
                   {Properties.Embed.AuthorName}
-                </div>
+                </button>
               ) : null}
               <div className="flex gap-4">
-                <div className="min-w-0 flex-1">
+                <button className={`min-w-0 flex-1 text-left ${SelectClassName} ${Properties.SelectedPart === "Content" ? ActiveClassName : ""}`} onClick={() => Properties.OnSelectPart?.("Content")} type="button">
                   {Properties.Embed.Title ? <p className="break-words text-base font-semibold text-[#00a8fc]">{Properties.Embed.Title}</p> : null}
                   {Properties.Embed.Description ? <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-5 text-[#dbdee1]">{Properties.Embed.Description}</p> : null}
-                  {Properties.Embed.Fields.length ? (
-                    <div className="mt-3 grid gap-3">
-                      {Properties.Embed.Fields.filter((Field) => Field.Name || Field.Value).map((Field, Index) => (
-                        <div className={Field.Inline ? "inline-block min-w-[30%] pr-3 align-top" : "block"} key={Index}>
-                          <p className="break-words text-sm font-semibold text-white">{Field.Name || "\u200b"}</p>
-                          <p className="whitespace-pre-wrap break-words text-sm text-[#dbdee1]">{Field.Value || "\u200b"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                {Properties.Embed.ThumbnailUrl ? <img alt="" className="h-20 w-20 shrink-0 rounded object-cover" src={Properties.Embed.ThumbnailUrl} /> : null}
+                  {Properties.Embed.ImageDataUrl || Properties.Embed.ImageUrl ? <img alt="" className="mt-3 max-h-56 rounded object-cover" src={Properties.Embed.ImageDataUrl || Properties.Embed.ImageUrl} /> : null}
+                </button>
+                {Properties.Embed.ThumbnailUrl ? <button className={`${SelectClassName} ${Properties.SelectedPart === "Media" ? ActiveClassName : ""}`} onClick={() => Properties.OnSelectPart?.("Media")} type="button"><img alt="" className="h-20 w-20 shrink-0 rounded object-cover" src={Properties.Embed.ThumbnailUrl} /></button> : null}
               </div>
-              {Properties.Embed.ImageUrl ? <img alt="" className="mt-4 max-h-72 w-full rounded object-cover" src={Properties.Embed.ImageUrl} /> : null}
+              {Properties.Embed.Fields.length ? (
+                <button className={`mt-3 grid w-full gap-3 text-left ${SelectClassName} ${Properties.SelectedPart === "Fields" ? ActiveClassName : ""}`} onClick={() => Properties.OnSelectPart?.("Fields")} type="button">
+                  {Properties.Embed.Fields.filter((Field) => Field.Name || Field.Value).map((Field, Index) => (
+                    <div className={Field.Inline ? "inline-block min-w-[30%] pr-3 align-top" : "block"} key={Index}>
+                      <p className="break-words text-sm font-semibold text-white">{Field.Name || "\u200b"}</p>
+                      <p className="whitespace-pre-wrap break-words text-sm text-[#dbdee1]">{Field.Value || "\u200b"}</p>
+                    </div>
+                  ))}
+                </button>
+              ) : null}
               {Properties.Embed.FooterText || Properties.Embed.Timestamp ? (
-                <div className="mt-3 flex items-center gap-2 text-xs text-[#b5bac1]">
+                <button className={`mt-3 flex w-full items-center gap-2 text-left text-xs text-[#b5bac1] ${SelectClassName} ${Properties.SelectedPart === "Footer" ? ActiveClassName : ""}`} onClick={() => Properties.OnSelectPart?.("Footer")} type="button">
                   {Properties.Embed.FooterIconUrl ? <img alt="" className="h-5 w-5 rounded-full object-cover" src={Properties.Embed.FooterIconUrl} /> : null}
                   <span>
                     {Properties.Embed.FooterText}
                     {Properties.Embed.FooterText && Properties.Embed.Timestamp ? " | " : ""}
                     {Properties.Embed.Timestamp ? "Today at preview time" : ""}
                   </span>
-                </div>
+                </button>
               ) : null}
             </div>
           </div>
@@ -1794,7 +1937,9 @@ function CreateDefaultEmbed(): EditableEmbed {
     FooterText: "",
     FooterIconUrl: "",
     Timestamp: false,
-    Fields: []
+    Fields: [],
+    ImageDataUrl: "",
+    ImageName: ""
   };
 }
 
@@ -1821,6 +1966,7 @@ function ParseCustomCommands(Value: unknown): CustomCommandDraft[] {
       Id: typeof ActionValue.Id === "string" ? ActionValue.Id : CreateClientId(),
       Type: ParseCustomActionType(ActionValue.Type),
       Message: typeof ActionValue.Message === "string" ? ActionValue.Message : "",
+      Embed: ParseEditableEmbed(ActionValue.Embed),
       RoleId: typeof ActionValue.RoleId === "string" ? ActionValue.RoleId : "",
       Emoji: typeof ActionValue.Emoji === "string" ? ActionValue.Emoji : ""
     })) : []
@@ -1828,7 +1974,7 @@ function ParseCustomCommands(Value: unknown): CustomCommandDraft[] {
 }
 
 function ParseCustomActionType(Value: unknown): CustomCommandActionType {
-  const AllowedTypes: CustomCommandActionType[] = ["SendMessage", "Reply", "DM", "AddRole", "RemoveRole", "ToggleRole", "DeleteTrigger", "React"];
+  const AllowedTypes: CustomCommandActionType[] = ["SendMessage", "Reply", "DM", "SendEmbed", "ReplyEmbed", "DMEmbed", "AddRole", "RemoveRole", "ToggleRole", "DeleteTrigger", "React"];
   return AllowedTypes.includes(String(Value) as CustomCommandActionType) ? String(Value) as CustomCommandActionType : "SendMessage";
 }
 
@@ -1858,6 +2004,10 @@ function ParseReminderDrafts(Value: unknown): Record<string, ReminderDraft> {
       Message: typeof ReminderValue.Message === "string" ? ReminderValue.Message : "",
       Title: typeof ReminderValue.Title === "string" ? ReminderValue.Title : "",
       Color: typeof ReminderValue.Color === "string" ? ReminderValue.Color : "#5865f2",
+      ScheduleMode: ReminderValue.ScheduleMode === "Weekly" ? "Weekly" : "Interval",
+      Weekdays: Array.isArray(ReminderValue.Weekdays) ? ReminderValue.Weekdays.map(Number).filter((Day) => Day >= 0 && Day <= 6) : [1],
+      TimeOfDay: typeof ReminderValue.TimeOfDay === "string" ? ReminderValue.TimeOfDay : "13:00",
+      Embed: ParseEditableEmbed(ReminderValue.Embed),
       IntervalMs,
       NextRunAt: typeof ReminderValue.NextRunAt === "string" ? ReminderValue.NextRunAt : new Date(Date.now() + IntervalMs).toISOString(),
       Enabled: typeof ReminderValue.Enabled === "boolean" ? ReminderValue.Enabled : true,
@@ -1869,6 +2019,73 @@ function ParseReminderDrafts(Value: unknown): Record<string, ReminderDraft> {
   }
 
   return Reminders;
+}
+
+const ReminderWeekdays = [
+  { Label: "Sun", Value: 0 },
+  { Label: "Mon", Value: 1 },
+  { Label: "Tue", Value: 2 },
+  { Label: "Wed", Value: 3 },
+  { Label: "Thu", Value: 4 },
+  { Label: "Fri", Value: 5 },
+  { Label: "Sat", Value: 6 }
+];
+
+function ComputeReminderNextRun(ScheduleMode: ReminderDraft["ScheduleMode"], ReminderValue: ReminderDraft): string {
+  if (ScheduleMode === "Interval") {
+    return new Date(Date.now() + ReminderValue.IntervalMs).toISOString();
+  }
+
+  const [Hours, Minutes] = ReminderValue.TimeOfDay.split(":").map((Part) => Number.parseInt(Part, 10));
+  const Weekdays = ReminderValue.Weekdays.length ? ReminderValue.Weekdays : [1];
+  const Now = new Date();
+  let BestDate: Date | null = null;
+
+  for (let Offset = 0; Offset <= 7; Offset += 1) {
+    const Candidate = new Date(Now);
+    Candidate.setDate(Now.getDate() + Offset);
+    Candidate.setHours(Number.isFinite(Hours) ? Hours : 13, Number.isFinite(Minutes) ? Minutes : 0, 0, 0);
+
+    if (!Weekdays.includes(Candidate.getDay()) || Candidate.getTime() <= Now.getTime()) {
+      continue;
+    }
+
+    if (!BestDate || Candidate.getTime() < BestDate.getTime()) {
+      BestDate = Candidate;
+    }
+  }
+
+  return (BestDate ?? new Date(Date.now() + ReminderValue.IntervalMs)).toISOString();
+}
+
+function ParseEditableEmbed(Value: unknown): EditableEmbed {
+  const DefaultEmbed = CreateDefaultEmbed();
+
+  if (!IsRecord(Value)) {
+    return DefaultEmbed;
+  }
+
+  return {
+    Name: typeof Value.Name === "string" ? Value.Name : DefaultEmbed.Name,
+    Title: typeof Value.Title === "string" ? Value.Title : DefaultEmbed.Title,
+    Description: typeof Value.Description === "string" ? Value.Description : DefaultEmbed.Description,
+    Color: typeof Value.Color === "string" ? Value.Color : DefaultEmbed.Color,
+    Url: typeof Value.Url === "string" ? Value.Url : "",
+    AuthorName: typeof Value.AuthorName === "string" ? Value.AuthorName : "",
+    AuthorIconUrl: typeof Value.AuthorIconUrl === "string" ? Value.AuthorIconUrl : "",
+    ThumbnailUrl: typeof Value.ThumbnailUrl === "string" ? Value.ThumbnailUrl : "",
+    ImageUrl: typeof Value.ImageUrl === "string" ? Value.ImageUrl : "",
+    FooterText: typeof Value.FooterText === "string" ? Value.FooterText : "",
+    FooterIconUrl: typeof Value.FooterIconUrl === "string" ? Value.FooterIconUrl : "",
+    Timestamp: Boolean(Value.Timestamp),
+    Fields: Array.isArray(Value.Fields) ? Value.Fields.filter(IsRecord).map((Field) => ({
+      Name: typeof Field.Name === "string" ? Field.Name : "",
+      Value: typeof Field.Value === "string" ? Field.Value : "",
+      Inline: Boolean(Field.Inline)
+    })) : [],
+    ImageDataUrl: typeof Value.ImageDataUrl === "string" ? Value.ImageDataUrl : "",
+    ImageName: typeof Value.ImageName === "string" ? Value.ImageName : ""
+  };
 }
 
 function ParseReminderDuration(Value: string): number | null {
@@ -1944,6 +2161,10 @@ function SanitizeCommandDraftName(Value: string): string {
 
 function ActionNeedsMessage(Type: CustomCommandActionType): boolean {
   return Type === "SendMessage" || Type === "Reply" || Type === "DM";
+}
+
+function ActionNeedsEmbed(Type: CustomCommandActionType): boolean {
+  return Type === "SendEmbed" || Type === "ReplyEmbed" || Type === "DMEmbed";
 }
 
 function ActionNeedsRole(Type: CustomCommandActionType): boolean {
@@ -2108,6 +2329,19 @@ function RenderField(
         UpdateDraftValue={UpdateDraftValue}
         Value={Array.isArray(Value) ? Value : []}
       />
+    );
+  }
+
+  if (Field.Type === "EmbedEditor") {
+    return (
+      <div>
+        <p className="mb-2 text-sm font-bold text-slate-200">{Field.Label}</p>
+        <AdvancedEmbedEditor
+          EmbedValue={ParseEditableEmbed(Value)}
+          OnChange={(NextEmbed) => UpdateDraftValue(PluginId, Field.Key, NextEmbed)}
+          PlaceholderText={Field.Description}
+        />
+      </div>
     );
   }
 

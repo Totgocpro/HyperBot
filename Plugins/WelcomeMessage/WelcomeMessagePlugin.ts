@@ -35,6 +35,7 @@ type WelcomeMessageConfig = {
   WelcomeMessage: string;
   WelcomeColor: string;
   WelcomeEmbedAuthor: boolean;
+  WelcomeEmbed: EditableEmbed;
   LeaveEnabled: boolean;
   LeaveChannelId: string;
   LeaveMode: MessageMode;
@@ -42,6 +43,7 @@ type WelcomeMessageConfig = {
   LeaveMessage: string;
   LeaveColor: string;
   LeaveEmbedAuthor: boolean;
+  LeaveEmbed: EditableEmbed;
   ImageBackground: string;
   ImageBackgroundImage: string;
   WelcomeImageBackgroundImage: string;
@@ -69,6 +71,7 @@ type WelcomeMessageConfig = {
   CaptchaRoleIds: string[];
   CaptchaTitle: string;
   CaptchaMessage: string;
+  CaptchaEmbed: EditableEmbed;
   CaptchaButtonLabel: string;
   CaptchaVerificationLevels: number;
   CaptchaDmMessage: string;
@@ -85,6 +88,23 @@ type WelcomeMessageConfig = {
   CaptchaSuccessMessage: string;
 };
 
+type EditableEmbed = {
+  Title?: string;
+  Description?: string;
+  Color?: string;
+  Url?: string;
+  AuthorName?: string;
+  AuthorIconUrl?: string;
+  ThumbnailUrl?: string;
+  ImageUrl?: string;
+  FooterText?: string;
+  FooterIconUrl?: string;
+  Timestamp?: boolean;
+  Fields?: Array<{ Name: string; Value: string; Inline: boolean }>;
+  ImageDataUrl?: string;
+  ImageName?: string;
+};
+
 const DefaultConfig: WelcomeMessageConfig = {
   WelcomeEnabled: true,
   WelcomeChannelId: "",
@@ -93,6 +113,17 @@ const DefaultConfig: WelcomeMessageConfig = {
   WelcomeMessage: "You are member #%memberCount% on %server%.",
   WelcomeColor: "#2563eb",
   WelcomeEmbedAuthor: true,
+  WelcomeEmbed: {
+    Title: "Welcome %user%",
+    Description: "You are member #%memberCount% on %server%.",
+    Color: "#2563eb",
+    AuthorName: "%user%",
+    AuthorIconUrl: "%avatar%",
+    ThumbnailUrl: "%avatar%",
+    FooterText: "%server% • %memberCount% members",
+    Timestamp: true,
+    Fields: []
+  },
   LeaveEnabled: true,
   LeaveChannelId: "",
   LeaveMode: "Embed",
@@ -100,6 +131,17 @@ const DefaultConfig: WelcomeMessageConfig = {
   LeaveMessage: "Goodbye from %server%.",
   LeaveColor: "#ef4444",
   LeaveEmbedAuthor: true,
+  LeaveEmbed: {
+    Title: "%user% left the server",
+    Description: "Goodbye from %server%.",
+    Color: "#ef4444",
+    AuthorName: "%user%",
+    AuthorIconUrl: "%avatar%",
+    ThumbnailUrl: "%avatar%",
+    FooterText: "%server% • %memberCount% members",
+    Timestamp: true,
+    Fields: []
+  },
   ImageBackground: "#020617",
   ImageBackgroundImage: "",
   WelcomeImageBackgroundImage: "",
@@ -127,6 +169,14 @@ const DefaultConfig: WelcomeMessageConfig = {
   CaptchaRoleIds: [],
   CaptchaTitle: "Server verification",
   CaptchaMessage: "Complete the captcha to unlock the server.",
+  CaptchaEmbed: {
+    Title: "Server verification",
+    Description: "Complete the captcha to unlock the server.",
+    Color: "#2563eb",
+    FooterText: "%server%",
+    Timestamp: true,
+    Fields: []
+  },
   CaptchaButtonLabel: "Verify",
   CaptchaVerificationLevels: 2,
   CaptchaDmMessage: "Verification level %level%/%levels%. Enter the code shown in the image.",
@@ -270,11 +320,13 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       return;
     }
 
-    const Embed = new EmbedBuilder()
-      .setTitle(this.ApplyTemplate(Config.CaptchaTitle, Member))
-      .setDescription(this.ApplyTemplate(Config.CaptchaMessage, Member))
-      .setColor(this.ParseColor(Config.WelcomeColor))
-      .setTimestamp(new Date());
+    const BuiltEmbed = this.BuildConfiguredEmbed(Config.CaptchaEmbed, Member, {
+      Title: Config.CaptchaTitle,
+      Description: Config.CaptchaMessage,
+      Color: Config.WelcomeColor,
+      Footer: "%server%",
+      ShowAuthor: false
+    });
     const CustomId = IsPersonalized ? `WelcomeCaptcha:Start:${Member.user.id}` : "WelcomeCaptcha:Start";
     const Components = [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -287,7 +339,8 @@ export default class WelcomeMessagePlugin extends BasePlugin {
 
     await Channel.send({
       content: IsPersonalized ? `<@${Member.user.id}>` : undefined,
-      embeds: [Embed],
+      embeds: [BuiltEmbed.Embed],
+      files: BuiltEmbed.Files,
       components: Components
     });
   }
@@ -666,20 +719,80 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       return;
     }
 
-    const Embed = new EmbedBuilder()
-      .setTitle(Title)
-      .setDescription(Description)
-      .setColor(this.ParseColor(Options.Color))
-      .setFooter({ text: this.ApplyTemplate(Options.Config.ImageFooter, Options.Member) })
-      .setTimestamp(new Date());
+    const EmbedSource = Options.Type === "Welcome" ? Options.Config.WelcomeEmbed : Options.Config.LeaveEmbed;
+    const BuiltEmbed = this.BuildConfiguredEmbed(EmbedSource, Options.Member, {
+      Title,
+      Description,
+      Color: Options.Color,
+      ShowAuthor: (Options.Type === "Welcome" && Options.Config.WelcomeEmbedAuthor) || (Options.Type === "Leave" && Options.Config.LeaveEmbedAuthor),
+      Footer: Options.Config.ImageFooter
+    });
 
-    if ((Options.Type === "Welcome" && Options.Config.WelcomeEmbedAuthor) || (Options.Type === "Leave" && Options.Config.LeaveEmbedAuthor)) {
-      Embed.setAuthor({ name: Options.Member.user.tag, iconURL: Options.Member.user.displayAvatarURL() });
+    await Channel.send({ content: Content, embeds: [BuiltEmbed.Embed], files: BuiltEmbed.Files });
+  }
+
+  private BuildConfiguredEmbed(Source: EditableEmbed, Member: GuildMember | PartialGuildMember, Fallback: { Title: string; Description: string; Color: string; Footer: string; ShowAuthor: boolean }): { Embed: EmbedBuilder; Files: Array<{ attachment: Buffer; name: string }> } {
+    const Files: Array<{ attachment: Buffer; name: string }> = [];
+    const Embed = new EmbedBuilder().setColor(this.ParseColor(Source.Color || Fallback.Color));
+    const Title = Source.Title ?? Fallback.Title;
+    const Description = Source.Description ?? Fallback.Description;
+
+    if (Title.trim()) {
+      Embed.setTitle(this.ApplyTemplate(Title, Member).slice(0, 256));
     }
 
-    Embed.setThumbnail(Options.Member.user.displayAvatarURL());
+    if (Description.trim()) {
+      Embed.setDescription(this.ApplyTemplate(Description, Member).slice(0, 4096));
+    }
 
-    await Channel.send({ content: Content, embeds: [Embed] });
+    if (Source.Url?.trim()) {
+      Embed.setURL(this.ApplyTemplate(Source.Url, Member));
+    }
+
+    const AuthorName = Source.AuthorName || (Fallback.ShowAuthor ? "%user%" : "");
+    if (AuthorName.trim()) {
+      Embed.setAuthor({
+        name: this.ApplyTemplate(AuthorName, Member).slice(0, 256),
+        iconURL: this.ApplyTemplate(Source.AuthorIconUrl || "%avatar%", Member) || undefined
+      });
+    }
+
+    const ThumbnailUrl = Source.ThumbnailUrl || "%avatar%";
+    if (ThumbnailUrl.trim()) {
+      Embed.setThumbnail(this.ApplyTemplate(ThumbnailUrl, Member));
+    }
+
+    const UploadedImage = this.ParseDataImage(Source.ImageDataUrl, Source.ImageName || "embed-image.png");
+    if (UploadedImage) {
+      Files.push(UploadedImage);
+      Embed.setImage(`attachment://${UploadedImage.name}`);
+    } else if (Source.ImageUrl?.trim()) {
+      Embed.setImage(this.ApplyTemplate(Source.ImageUrl, Member));
+    }
+
+    const FooterText = Source.FooterText || Fallback.Footer;
+    if (FooterText.trim()) {
+      Embed.setFooter({
+        text: this.ApplyTemplate(FooterText, Member).slice(0, 2048),
+        iconURL: Source.FooterIconUrl?.trim() ? this.ApplyTemplate(Source.FooterIconUrl, Member) : undefined
+      });
+    }
+
+    if (Source.Timestamp !== false) {
+      Embed.setTimestamp(new Date());
+    }
+
+    for (const Field of Source.Fields ?? []) {
+      if (Field.Name.trim() && Field.Value.trim()) {
+        Embed.addFields({
+          name: this.ApplyTemplate(Field.Name, Member).slice(0, 256),
+          value: this.ApplyTemplate(Field.Value, Member).slice(0, 1024),
+          inline: Field.Inline
+        });
+      }
+    }
+
+    return { Embed, Files };
   }
 
   private async BuildWelcomePng(Options: {
@@ -1165,6 +1278,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       WelcomeMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "WelcomeMessage")) ?? DefaultConfig.WelcomeMessage,
       WelcomeColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "WelcomeColor")) ?? DefaultConfig.WelcomeColor,
       WelcomeEmbedAuthor: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "WelcomeEmbedAuthor")) ?? DefaultConfig.WelcomeEmbedAuthor,
+      WelcomeEmbed: await this.GetEmbedConfig(GuildId, "WelcomeEmbed", DefaultConfig.WelcomeEmbed),
       LeaveEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "LeaveEnabled")) ?? DefaultConfig.LeaveEnabled,
       LeaveChannelId: (await this.Storage.GetGlobalConfig<string>(GuildId, "LeaveChannelId")) ?? DefaultConfig.LeaveChannelId,
       LeaveMode: (await this.Storage.GetGlobalConfig<MessageMode>(GuildId, "LeaveMode")) ?? DefaultConfig.LeaveMode,
@@ -1172,6 +1286,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       LeaveMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "LeaveMessage")) ?? DefaultConfig.LeaveMessage,
       LeaveColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "LeaveColor")) ?? DefaultConfig.LeaveColor,
       LeaveEmbedAuthor: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "LeaveEmbedAuthor")) ?? DefaultConfig.LeaveEmbedAuthor,
+      LeaveEmbed: await this.GetEmbedConfig(GuildId, "LeaveEmbed", DefaultConfig.LeaveEmbed),
       ImageBackground: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageBackground")) ?? DefaultConfig.ImageBackground,
       ImageBackgroundImage: (await this.Storage.GetGlobalConfig<string>(GuildId, "ImageBackgroundImage")) ?? DefaultConfig.ImageBackgroundImage,
       WelcomeImageBackgroundImage: (await this.Storage.GetGlobalConfig<string>(GuildId, "WelcomeImageBackgroundImage")) ?? DefaultConfig.WelcomeImageBackgroundImage,
@@ -1199,6 +1314,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       CaptchaRoleIds: await this.GetStringListConfig(GuildId, "CaptchaRoleIds", DefaultConfig.CaptchaRoleIds),
       CaptchaTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaTitle")) ?? DefaultConfig.CaptchaTitle,
       CaptchaMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaMessage")) ?? DefaultConfig.CaptchaMessage,
+      CaptchaEmbed: await this.GetEmbedConfig(GuildId, "CaptchaEmbed", DefaultConfig.CaptchaEmbed),
       CaptchaButtonLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaButtonLabel")) ?? DefaultConfig.CaptchaButtonLabel,
       CaptchaVerificationLevels: (await this.Storage.GetGlobalConfig<number>(GuildId, "CaptchaVerificationLevels")) ?? DefaultConfig.CaptchaVerificationLevels,
       CaptchaDmMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmMessage")) ?? DefaultConfig.CaptchaDmMessage,
@@ -1221,13 +1337,57 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     return Array.isArray(Value) ? Value.map((Item) => String(Item)).filter(Boolean) : Fallback;
   }
 
+  private async GetEmbedConfig(GuildId: string, Key: string, Fallback: EditableEmbed): Promise<EditableEmbed> {
+    const Value = await this.Storage.GetGlobalConfig<unknown>(GuildId, Key);
+
+    if (!Value || typeof Value !== "object" || Array.isArray(Value)) {
+      return Fallback;
+    }
+
+    const RecordValue = Value as Record<string, unknown>;
+    return {
+      Title: typeof RecordValue.Title === "string" ? RecordValue.Title : Fallback.Title,
+      Description: typeof RecordValue.Description === "string" ? RecordValue.Description : Fallback.Description,
+      Color: typeof RecordValue.Color === "string" ? RecordValue.Color : Fallback.Color,
+      Url: typeof RecordValue.Url === "string" ? RecordValue.Url : "",
+      AuthorName: typeof RecordValue.AuthorName === "string" ? RecordValue.AuthorName : Fallback.AuthorName,
+      AuthorIconUrl: typeof RecordValue.AuthorIconUrl === "string" ? RecordValue.AuthorIconUrl : Fallback.AuthorIconUrl,
+      ThumbnailUrl: typeof RecordValue.ThumbnailUrl === "string" ? RecordValue.ThumbnailUrl : Fallback.ThumbnailUrl,
+      ImageUrl: typeof RecordValue.ImageUrl === "string" ? RecordValue.ImageUrl : "",
+      FooterText: typeof RecordValue.FooterText === "string" ? RecordValue.FooterText : Fallback.FooterText,
+      FooterIconUrl: typeof RecordValue.FooterIconUrl === "string" ? RecordValue.FooterIconUrl : "",
+      Timestamp: typeof RecordValue.Timestamp === "boolean" ? RecordValue.Timestamp : Fallback.Timestamp,
+      ImageDataUrl: typeof RecordValue.ImageDataUrl === "string" ? RecordValue.ImageDataUrl : "",
+      ImageName: typeof RecordValue.ImageName === "string" ? RecordValue.ImageName : "",
+      Fields: Array.isArray(RecordValue.Fields) ? RecordValue.Fields.filter((Field): Field is Record<string, unknown> => typeof Field === "object" && Field !== null && !Array.isArray(Field)).map((Field) => ({
+        Name: typeof Field.Name === "string" ? Field.Name : "",
+        Value: typeof Field.Value === "string" ? Field.Value : "",
+        Inline: Boolean(Field.Inline)
+      })) : Fallback.Fields
+    };
+  }
+
   private ApplyTemplate(Template: string, Member: GuildMember | PartialGuildMember): string {
     return Template
       .replaceAll("%user%", Member.user.tag)
       .replaceAll("%mention%", `<@${Member.user.id}>`)
+      .replaceAll("%avatar%", Member.user.displayAvatarURL())
       .replaceAll("%server%", Member.guild.name)
       .replaceAll("%memberCount%", String(Member.guild.memberCount ?? "?"))
       .replaceAll("%id%", Member.user.id);
+  }
+
+  private ParseDataImage(Value: string | undefined, Name: string): { attachment: Buffer; name: string } | null {
+    const Match = Value?.match(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,(.+)$/iu);
+
+    if (!Match?.[1]) {
+      return null;
+    }
+
+    return {
+      attachment: Buffer.from(Match[1], "base64"),
+      name: Name.replace(/[^a-z0-9._-]/giu, "-") || "embed-image.png"
+    };
   }
 
   private ParseColor(ColorValue: string): number {

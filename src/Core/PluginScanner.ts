@@ -13,7 +13,8 @@ const SettingsFieldSchema = z.object({
   Key: z.string().min(1),
   Type: z.nativeEnum(SettingsFieldType),
   Label: z.string().min(1),
-  Default: z.union([z.string(), z.number(), z.boolean(), z.array(z.unknown()), z.null()]),
+  Default: z.union([z.string(), z.number(), z.boolean(), z.array(z.unknown()), z.record(z.unknown()), z.null()]),
+  Description: z.string().optional(),
   Section: z.string().min(1).optional(),
   Required: z.boolean().optional(),
   ButtonLabel: z.string().min(1).optional(),
@@ -30,7 +31,8 @@ const SettingsFieldSchema = z.object({
         Label: z.string(),
         Value: z.union([z.string(), z.number(), z.boolean()]),
         Disabled: z.boolean().optional(),
-        Description: z.string().optional()
+        Description: z.string().optional(),
+        Color: z.number().optional()
       })
     )
     .optional()

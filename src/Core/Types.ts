@@ -8,6 +8,7 @@ export enum SettingsFieldType {
   Select = "Select",
   ChannelPicker = "ChannelPicker",
   RolePicker = "RolePicker",
+  EmbedEditor = "EmbedEditor",
   List = "List",
   Button = "Button"
 }
@@ -59,7 +60,8 @@ export type SettingsField = {
   Key: string;
   Type: SettingsFieldType;
   Label: string;
-  Default: string | number | boolean | unknown[] | null;
+  Default: string | number | boolean | unknown[] | Record<string, unknown> | null;
+  Description?: string;
   Section?: string;
   Required?: boolean;
   ButtonLabel?: string;

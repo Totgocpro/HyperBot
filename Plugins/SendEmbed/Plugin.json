@@ -19,6 +19,30 @@
       "RequireWritable": true
     },
     {
+      "Key": "CurrentEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Embed",
+      "Description": "Build the embed from the preview. The same setting type can be reused by any plugin that needs a Discord embed editor.",
+      "Default": {
+        "Name": "New embed",
+        "Title": "Embed title",
+        "Description": "Write your Discord embed description here.",
+        "Color": "#5865f2",
+        "Url": "",
+        "AuthorName": "",
+        "AuthorIconUrl": "",
+        "ThumbnailUrl": "",
+        "ImageUrl": "",
+        "FooterText": "",
+        "FooterIconUrl": "",
+        "Timestamp": false,
+        "Fields": [],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Embed editor"
+    },
+    {
       "Key": "SavedEmbeds",
       "Type": "List",
       "Label": "Saved embeds",

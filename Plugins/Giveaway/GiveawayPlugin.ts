@@ -59,6 +59,8 @@ type GiveawayConfig = {
   GiveawayTitle: string;
   GiveawayDescription: string;
   EndedDescription: string;
+  GiveawayEmbed: EditableEmbed;
+  EndedEmbed: EditableEmbed;
   NoWinnerText: string;
   WinnerAnnouncement: string;
   RerollAnnouncement: string;
@@ -69,6 +71,23 @@ type GiveawayConfig = {
   NotEligibleMessage: string;
   GiveawayColor: string;
   EndedColor: string;
+};
+
+type EditableEmbed = {
+  Title?: string;
+  Description?: string;
+  Color?: string;
+  Url?: string;
+  AuthorName?: string;
+  AuthorIconUrl?: string;
+  ThumbnailUrl?: string;
+  ImageUrl?: string;
+  FooterText?: string;
+  FooterIconUrl?: string;
+  Timestamp?: boolean;
+  Fields?: Array<{ Name: string; Value: string; Inline: boolean }>;
+  ImageDataUrl?: string;
+  ImageName?: string;
 };
 
 const GiveawayStorageKey = "Giveaways";
@@ -84,6 +103,33 @@ const DefaultConfig: GiveawayConfig = {
   GiveawayTitle: "🎉 Giveaway: %prize%",
   GiveawayDescription: "Click the button below to enter. Ends %endsAt%.",
   EndedDescription: "This giveaway has ended. Winners: %winners%.",
+  GiveawayEmbed: {
+    Title: "Giveaway: %prize%",
+    Description: "Click the button below to enter. Ends %endsAt%.",
+    Color: "#5865f2",
+    FooterText: "Hosted by %hostTag%",
+    Timestamp: true,
+    Fields: [
+      { Name: "Prize", Value: "%prize%", Inline: true },
+      { Name: "Winners", Value: "%winnerCount%", Inline: true },
+      { Name: "Entries", Value: "%entries%", Inline: true },
+      { Name: "Hosted by", Value: "%host%", Inline: true },
+      { Name: "Ends", Value: "%endsAt%", Inline: true }
+    ]
+  },
+  EndedEmbed: {
+    Title: "Giveaway: %prize%",
+    Description: "This giveaway has ended. Winners: %winners%.",
+    Color: "#22c55e",
+    FooterText: "Hosted by %hostTag%",
+    Timestamp: true,
+    Fields: [
+      { Name: "Prize", Value: "%prize%", Inline: true },
+      { Name: "Winners", Value: "%winnerCount%", Inline: true },
+      { Name: "Entries", Value: "%entries%", Inline: true },
+      { Name: "Selected winner(s)", Value: "%winners%", Inline: false }
+    ]
+  },
   NoWinnerText: "No valid winner could be selected.",
   WinnerAnnouncement: "Congratulations %winners%! You won **%prize%**.",
   RerollAnnouncement: "New winner(s) for **%prize%**: %winners%.",
@@ -203,15 +249,19 @@ export default class GiveawayPlugin extends BasePlugin {
       EndedAt: null
     };
 
+    const InitialEmbed = this.BuildGiveawayEmbed(GiveawayValue, Config);
     const MessageValue = await Channel.send({
-      embeds: [this.BuildGiveawayEmbed(GiveawayValue, Config)],
+      embeds: [InitialEmbed.Embed],
+      files: InitialEmbed.Files,
       components: this.BuildGiveawayComponents(GiveawayValue, Config)
     });
 
     GiveawayValue.MessageId = MessageValue.id;
     await this.SaveGiveaway(GiveawayValue);
+    const SavedEmbed = this.BuildGiveawayEmbed(GiveawayValue, Config);
     await MessageValue.edit({
-      embeds: [this.BuildGiveawayEmbed(GiveawayValue, Config)],
+      embeds: [SavedEmbed.Embed],
+      files: SavedEmbed.Files,
       components: this.BuildGiveawayComponents(GiveawayValue, Config)
     });
 
@@ -316,8 +366,10 @@ export default class GiveawayPlugin extends BasePlugin {
     if (Action === "Leave") {
       delete GiveawayValue.Entries[InteractionValue.user.id];
       await this.SaveGiveaway(GiveawayValue);
+      const BuiltEmbed = this.BuildGiveawayEmbed(GiveawayValue, Config);
       await InteractionValue.update({
-        embeds: [this.BuildGiveawayEmbed(GiveawayValue, Config)],
+        embeds: [BuiltEmbed.Embed],
+        files: BuiltEmbed.Files,
         components: this.BuildGiveawayComponents(GiveawayValue, Config)
       });
       await InteractionValue.followUp({ content: Config.EntryRemovedMessage, ephemeral: true });
@@ -335,8 +387,10 @@ export default class GiveawayPlugin extends BasePlugin {
       EnteredAt: new Date().toISOString()
     };
     await this.SaveGiveaway(GiveawayValue);
+    const BuiltEmbed = this.BuildGiveawayEmbed(GiveawayValue, Config);
     await InteractionValue.update({
-      embeds: [this.BuildGiveawayEmbed(GiveawayValue, Config)],
+      embeds: [BuiltEmbed.Embed],
+      files: BuiltEmbed.Files,
       components: this.BuildGiveawayComponents(GiveawayValue, Config)
     });
     await InteractionValue.followUp({ content: Config.EntryAcceptedMessage, ephemeral: true });
@@ -387,30 +441,74 @@ export default class GiveawayPlugin extends BasePlugin {
     return WinnerIds;
   }
 
-  private BuildGiveawayEmbed(GiveawayValue: Giveaway, Config: GiveawayConfig): EmbedBuilder {
+  private BuildGiveawayEmbed(GiveawayValue: Giveaway, Config: GiveawayConfig): { Embed: EmbedBuilder; Files: Array<{ attachment: Buffer; name: string }> } {
     const IsEnded = GiveawayValue.Status === "Ended";
     const Winners = this.FormatWinners(GiveawayValue, Config);
-    const Description = this.ApplyTemplate(IsEnded ? Config.EndedDescription : Config.GiveawayDescription, GiveawayValue, {
-      Winners
-    });
-    const Embed = new EmbedBuilder()
-      .setTitle(this.ApplyTemplate(Config.GiveawayTitle, GiveawayValue, { Winners }))
-      .setDescription(Description)
-      .setColor(this.ParseEmbedColor(IsEnded ? Config.EndedColor : Config.GiveawayColor))
-      .addFields(
-        { name: "Prize", value: GiveawayValue.Prize, inline: true },
-        { name: "Winners", value: String(GiveawayValue.WinnerCount), inline: true },
-        { name: "Entries", value: String(this.GetEntryCount(GiveawayValue)), inline: true },
-        { name: "Hosted by", value: `<@${GiveawayValue.HostId}>`, inline: true },
-        { name: IsEnded ? "Ended" : "Ends", value: this.FormatTimestamp(GiveawayValue.EndsAt), inline: true }
-      )
-      .setTimestamp(new Date(IsEnded ? GiveawayValue.EndedAt ?? GiveawayValue.EndsAt : GiveawayValue.EndsAt));
+    const Source = IsEnded ? Config.EndedEmbed : Config.GiveawayEmbed;
+    const BuiltEmbed = this.BuildConfiguredEmbed(Source, GiveawayValue, Winners, IsEnded ? Config.EndedColor : Config.GiveawayColor);
 
-    if (IsEnded) {
-      Embed.addFields({ name: "Selected winner(s)", value: Winners, inline: false });
+    if (Source.Timestamp !== false) {
+      BuiltEmbed.Embed.setTimestamp(new Date(IsEnded ? GiveawayValue.EndedAt ?? GiveawayValue.EndsAt : GiveawayValue.EndsAt));
     }
 
-    return Embed;
+    return BuiltEmbed;
+  }
+
+  private BuildConfiguredEmbed(Source: EditableEmbed, GiveawayValue: Giveaway, Winners: string, FallbackColor: string): { Embed: EmbedBuilder; Files: Array<{ attachment: Buffer; name: string }> } {
+    const Files: Array<{ attachment: Buffer; name: string }> = [];
+    const Embed = new EmbedBuilder().setColor(this.ParseEmbedColor(Source.Color || FallbackColor));
+    const Title = Source.Title ?? DefaultConfig.GiveawayTitle;
+    const Description = Source.Description ?? DefaultConfig.GiveawayDescription;
+
+    if (Title.trim()) {
+      Embed.setTitle(this.ApplyTemplate(Title, GiveawayValue, { Winners }).slice(0, 256));
+    }
+
+    if (Description.trim()) {
+      Embed.setDescription(this.ApplyTemplate(Description, GiveawayValue, { Winners }).slice(0, 4096));
+    }
+
+    if (Source.Url?.trim()) {
+      Embed.setURL(this.ApplyTemplate(Source.Url, GiveawayValue, { Winners }));
+    }
+
+    if (Source.AuthorName?.trim()) {
+      Embed.setAuthor({
+        name: this.ApplyTemplate(Source.AuthorName, GiveawayValue, { Winners }).slice(0, 256),
+        iconURL: Source.AuthorIconUrl?.trim() ? this.ApplyTemplate(Source.AuthorIconUrl, GiveawayValue, { Winners }) : undefined
+      });
+    }
+
+    if (Source.ThumbnailUrl?.trim()) {
+      Embed.setThumbnail(this.ApplyTemplate(Source.ThumbnailUrl, GiveawayValue, { Winners }));
+    }
+
+    const UploadedImage = this.ParseDataImage(Source.ImageDataUrl, Source.ImageName || "giveaway-image.png");
+    if (UploadedImage) {
+      Files.push(UploadedImage);
+      Embed.setImage(`attachment://${UploadedImage.name}`);
+    } else if (Source.ImageUrl?.trim()) {
+      Embed.setImage(this.ApplyTemplate(Source.ImageUrl, GiveawayValue, { Winners }));
+    }
+
+    if (Source.FooterText?.trim()) {
+      Embed.setFooter({
+        text: this.ApplyTemplate(Source.FooterText, GiveawayValue, { Winners }).slice(0, 2048),
+        iconURL: Source.FooterIconUrl?.trim() ? this.ApplyTemplate(Source.FooterIconUrl, GiveawayValue, { Winners }) : undefined
+      });
+    }
+
+    for (const Field of Source.Fields ?? []) {
+      if (Field.Name.trim() && Field.Value.trim()) {
+        Embed.addFields({
+          name: this.ApplyTemplate(Field.Name, GiveawayValue, { Winners }).slice(0, 256),
+          value: this.ApplyTemplate(Field.Value, GiveawayValue, { Winners }).slice(0, 1024),
+          inline: Field.Inline
+        });
+      }
+    }
+
+    return { Embed, Files };
   }
 
   private BuildGiveawayComponents(GiveawayValue: Giveaway, Config: GiveawayConfig): ActionRowBuilder<ButtonBuilder>[] {
@@ -443,8 +541,10 @@ export default class GiveawayPlugin extends BasePlugin {
       return;
     }
 
+    const BuiltEmbed = this.BuildGiveawayEmbed(GiveawayValue, Config);
     await MessageValue.edit({
-      embeds: [this.BuildGiveawayEmbed(GiveawayValue, Config)],
+      embeds: [BuiltEmbed.Embed],
+      files: BuiltEmbed.Files,
       components: this.BuildGiveawayComponents(GiveawayValue, Config)
     }).catch((ErrorValue: unknown) => {
       this.Logger.Warn("Could not edit giveaway message.", ErrorValue);
@@ -634,6 +734,8 @@ export default class GiveawayPlugin extends BasePlugin {
       GiveawayTitle: await this.GetStringConfig(GuildId, "GiveawayTitle", DefaultConfig.GiveawayTitle),
       GiveawayDescription: await this.GetStringConfig(GuildId, "GiveawayDescription", DefaultConfig.GiveawayDescription),
       EndedDescription: await this.GetStringConfig(GuildId, "EndedDescription", DefaultConfig.EndedDescription),
+      GiveawayEmbed: await this.GetEmbedConfig(GuildId, "GiveawayEmbed", DefaultConfig.GiveawayEmbed),
+      EndedEmbed: await this.GetEmbedConfig(GuildId, "EndedEmbed", DefaultConfig.EndedEmbed),
       NoWinnerText: await this.GetStringConfig(GuildId, "NoWinnerText", DefaultConfig.NoWinnerText),
       WinnerAnnouncement: await this.GetStringConfig(GuildId, "WinnerAnnouncement", DefaultConfig.WinnerAnnouncement),
       RerollAnnouncement: await this.GetStringConfig(GuildId, "RerollAnnouncement", DefaultConfig.RerollAnnouncement),
@@ -661,8 +763,51 @@ export default class GiveawayPlugin extends BasePlugin {
     return Array.isArray(StoredValue) ? StoredValue.map((Value) => String(Value)) : DefaultValue;
   }
 
+  private async GetEmbedConfig(GuildId: string, Key: keyof GiveawayConfig, DefaultValue: EditableEmbed): Promise<EditableEmbed> {
+    const StoredValue = await this.Storage.GetGlobalConfig<unknown>(GuildId, Key);
+
+    if (!StoredValue || typeof StoredValue !== "object" || Array.isArray(StoredValue)) {
+      return DefaultValue;
+    }
+
+    const RecordValue = StoredValue as Record<string, unknown>;
+    return {
+      Title: typeof RecordValue.Title === "string" ? RecordValue.Title : DefaultValue.Title,
+      Description: typeof RecordValue.Description === "string" ? RecordValue.Description : DefaultValue.Description,
+      Color: typeof RecordValue.Color === "string" ? RecordValue.Color : DefaultValue.Color,
+      Url: typeof RecordValue.Url === "string" ? RecordValue.Url : "",
+      AuthorName: typeof RecordValue.AuthorName === "string" ? RecordValue.AuthorName : "",
+      AuthorIconUrl: typeof RecordValue.AuthorIconUrl === "string" ? RecordValue.AuthorIconUrl : "",
+      ThumbnailUrl: typeof RecordValue.ThumbnailUrl === "string" ? RecordValue.ThumbnailUrl : "",
+      ImageUrl: typeof RecordValue.ImageUrl === "string" ? RecordValue.ImageUrl : "",
+      FooterText: typeof RecordValue.FooterText === "string" ? RecordValue.FooterText : DefaultValue.FooterText,
+      FooterIconUrl: typeof RecordValue.FooterIconUrl === "string" ? RecordValue.FooterIconUrl : "",
+      Timestamp: typeof RecordValue.Timestamp === "boolean" ? RecordValue.Timestamp : DefaultValue.Timestamp,
+      ImageDataUrl: typeof RecordValue.ImageDataUrl === "string" ? RecordValue.ImageDataUrl : "",
+      ImageName: typeof RecordValue.ImageName === "string" ? RecordValue.ImageName : "",
+      Fields: Array.isArray(RecordValue.Fields) ? RecordValue.Fields.filter((Field): Field is Record<string, unknown> => typeof Field === "object" && Field !== null && !Array.isArray(Field)).map((Field) => ({
+        Name: typeof Field.Name === "string" ? Field.Name : "",
+        Value: typeof Field.Value === "string" ? Field.Value : "",
+        Inline: Boolean(Field.Inline)
+      })) : DefaultValue.Fields
+    };
+  }
+
   private ParseEmbedColor(ColorValue: string): number {
     const SafeColor = /^#[0-9a-f]{6}$/iu.test(ColorValue) ? ColorValue : DefaultConfig.GiveawayColor;
     return Number.parseInt(SafeColor.slice(1), 16);
+  }
+
+  private ParseDataImage(Value: string | undefined, Name: string): { attachment: Buffer; name: string } | null {
+    const Match = Value?.match(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,(.+)$/iu);
+
+    if (!Match?.[1]) {
+      return null;
+    }
+
+    return {
+      attachment: Buffer.from(Match[1], "base64"),
+      name: Name.replace(/[^a-z0-9._-]/giu, "-") || "giveaway-image.png"
+    };
   }
 }

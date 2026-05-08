@@ -26,6 +26,8 @@ type EditableEmbed = {
   FooterIconUrl?: string;
   Timestamp?: boolean;
   Fields?: EditableEmbedField[];
+  ImageDataUrl?: string;
+  ImageName?: string;
 };
 
 type EditableEmbedField = {
@@ -62,8 +64,8 @@ export default class SendEmbedPlugin extends BasePlugin {
       return;
     }
 
-    const Embed = this.BuildEmbed(ParsedPayload.Embed);
-    await Channel.send({ embeds: [Embed] });
+    const BuiltEmbed = this.BuildEmbed(ParsedPayload.Embed);
+    await Channel.send({ embeds: [BuiltEmbed.Embed], files: BuiltEmbed.Files });
   }
 
   private ParsePayload(Payload: unknown): SendEmbedPayload | null {
@@ -98,12 +100,15 @@ export default class SendEmbedPlugin extends BasePlugin {
       FooterText: this.GetString(Value.FooterText),
       FooterIconUrl: this.GetString(Value.FooterIconUrl),
       Timestamp: Boolean(Value.Timestamp),
-      Fields
+      Fields,
+      ImageDataUrl: this.GetString(Value.ImageDataUrl),
+      ImageName: this.GetString(Value.ImageName)
     };
   }
 
-  private BuildEmbed(Value: EditableEmbed): EmbedBuilder {
+  private BuildEmbed(Value: EditableEmbed): { Embed: EmbedBuilder; Files: Array<{ attachment: Buffer; name: string }> } {
     const Embed = new EmbedBuilder();
+    const Files: Array<{ attachment: Buffer; name: string }> = [];
     const Color = this.ParseColor(Value.Color ?? "#5865f2");
 
     Embed.setColor(Color);
@@ -131,7 +136,12 @@ export default class SendEmbedPlugin extends BasePlugin {
       Embed.setThumbnail(Value.ThumbnailUrl);
     }
 
-    if (Value.ImageUrl?.trim()) {
+    const UploadedImage = this.ParseDataImage(Value.ImageDataUrl, Value.ImageName || "embed-image.png");
+
+    if (UploadedImage) {
+      Files.push(UploadedImage);
+      Embed.setImage(`attachment://${UploadedImage.name}`);
+    } else if (Value.ImageUrl?.trim()) {
       Embed.setImage(Value.ImageUrl);
     }
 
@@ -158,7 +168,20 @@ export default class SendEmbedPlugin extends BasePlugin {
       });
     }
 
-    return Embed;
+    return { Embed, Files };
+  }
+
+  private ParseDataImage(Value: string | undefined, Name: string): { attachment: Buffer; name: string } | null {
+    const Match = Value?.match(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,(.+)$/iu);
+
+    if (!Match?.[1]) {
+      return null;
+    }
+
+    return {
+      attachment: Buffer.from(Match[1], "base64"),
+      name: Name.replace(/[^a-z0-9._-]/giu, "-") || "embed-image.png"
+    };
   }
 
   private async ResolveWritableChannel(GuildId: string, ChannelId: string): Promise<TextChannel | NewsChannel | VoiceChannel | null> {
