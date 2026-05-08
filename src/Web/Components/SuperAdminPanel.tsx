@@ -2,6 +2,7 @@
 
 import { useEffect as UseEffect, useState as UseState } from "react";
 import type { HealthReport, SettingsField } from "../../Core/Types";
+import { CustomSelect } from "./CustomSelect";
 
 type AdminSection = "GeneralStatus" | "GlobalPlugins" | "UserManagement" | "GuildBanlist";
 
@@ -749,18 +750,20 @@ function UserManagementPanel(Properties: {
                 <AdminInput Label="Discord ID" Disabled={true} Value={Properties.EditUserForm.DiscordId} OnChange={() => undefined} />
                 <AdminInput Label="Display name" Value={Properties.EditUserForm.DisplayName} OnChange={(Value) => Properties.SetEditUserForm({ ...Properties.EditUserForm, DisplayName: Value })} />
                 <AdminInput Label="New password" Placeholder="Leave empty to keep current password" Type="password" Value={Properties.EditUserForm.Password} OnChange={(Value) => Properties.SetEditUserForm({ ...Properties.EditUserForm, Password: Value })} />
-                <label className="block text-sm font-bold text-slate-200">
+                <div className="block text-sm font-bold text-slate-200">
                   Account type
-                  <select
-                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={IsEditingSelf}
-                    onChange={(Event) => Properties.SetEditUserForm({ ...Properties.EditUserForm, Role: Event.target.value as UserForm["Role"] })}
-                    value={Properties.EditUserForm.Role}
-                  >
-                    <option value="User">User</option>
-                    <option value="SuperAdmin">SuperAdmin</option>
-                  </select>
-                </label>
+                  <CustomSelect
+                    ClassName="mt-2"
+                    Disabled={IsEditingSelf}
+                    OnChange={(Value) => Properties.SetEditUserForm({ ...Properties.EditUserForm, Role: Value as UserForm["Role"] })}
+                    Options={[
+                      { Label: "User", Value: "User" },
+                      { Label: "SuperAdmin", Value: "SuperAdmin" }
+                    ]}
+                    Required={true}
+                    Value={Properties.EditUserForm.Role}
+                  />
+                </div>
                 <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 font-semibold text-slate-100">
                   Dashboard banned
                   <input
@@ -825,17 +828,19 @@ function UserManagementPanel(Properties: {
               <AdminInput Label="Password" Type="password" Value={Properties.CreateUserForm.Password} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, Password: Value })} />
               <AdminInput Label="Display name" Value={Properties.CreateUserForm.DisplayName} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, DisplayName: Value })} />
               <AdminInput Label="Discord ID" Value={Properties.CreateUserForm.DiscordId} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, DiscordId: Value })} />
-              <label className="block text-sm font-bold text-slate-200">
+              <div className="block text-sm font-bold text-slate-200">
                 Account type
-                <select
-                  className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
-                  onChange={(Event) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, Role: Event.target.value as UserForm["Role"] })}
-                  value={Properties.CreateUserForm.Role}
-                >
-                  <option value="User">User</option>
-                  <option value="SuperAdmin">SuperAdmin</option>
-                </select>
-              </label>
+                <CustomSelect
+                  ClassName="mt-2"
+                  OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, Role: Value as UserForm["Role"] })}
+                  Options={[
+                    { Label: "User", Value: "User" },
+                    { Label: "SuperAdmin", Value: "SuperAdmin" }
+                  ]}
+                  Required={true}
+                  Value={Properties.CreateUserForm.Role}
+                />
+              </div>
               <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 font-semibold text-slate-100">
                 Dashboard banned
                 <input
@@ -1039,21 +1044,19 @@ function CommandAliasesEditor(Properties: {
                   />
                   {AliasError ? <span className="mt-1 block text-xs font-semibold text-red-300">{AliasError}</span> : null}
                 </label>
-                <label className="block text-sm font-bold text-slate-200">
+                <div className="block text-sm font-bold text-slate-200">
                   Target command
-                  <select
-                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
-                    onChange={(Event) => UpdateAlias(Index, { TargetCommandName: Event.target.value })}
-                    value={Alias.TargetCommandName}
-                  >
-                    <option value="">Select command</option>
-                    {Properties.AvailableCommands.map((Command) => (
-                      <option key={`${Command.PluginId}:${Command.Name}`} value={Command.Name}>
-                        /{Command.Name} - {Command.PluginName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <CustomSelect
+                    ClassName="mt-2"
+                    EmptyLabel="Select command"
+                    OnChange={(Value) => UpdateAlias(Index, { TargetCommandName: Value })}
+                    Options={Properties.AvailableCommands.map((Command) => ({
+                      Label: `/${Command.Name} - ${Command.PluginName}`,
+                      Value: Command.Name
+                    }))}
+                    Value={Alias.TargetCommandName}
+                  />
+                </div>
               </div>
               <label className="block text-sm font-bold text-slate-200">
                 Alias description
@@ -1194,17 +1197,16 @@ function RenderPluginField(
 
   if (Field.Type === "Select" || Field.Type === "ChannelPicker" || Field.Type === "RolePicker") {
     return (
-      <label className="block text-sm font-bold text-slate-200">
+      <div className="block text-sm font-bold text-slate-200">
         {Field.Label}
-        <select className={BaseClassName} onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.value)} value={String(Value ?? "")}>
-          <option value="">Select</option>
-          {Field.Options?.map((Option) => (
-            <option key={String(Option.Value)} value={String(Option.Value)}>
-              {Option.Label}
-            </option>
-          ))}
-        </select>
-      </label>
+        <CustomSelect
+          ClassName="mt-2"
+          EmptyLabel="Select"
+          OnChange={(NextValue) => UpdateDraftValue(PluginId, Field.Key, NextValue)}
+          Options={Field.Options ?? []}
+          Value={String(Value ?? "")}
+        />
+      </div>
     );
   }
 
@@ -1280,14 +1282,12 @@ function AdminListField(Properties: {
         {Properties.Value.map((ItemValue, Index) => (
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]" key={Index}>
             {Properties.Field.ItemType === "ChannelPicker" || Properties.Field.ItemType === "RolePicker" ? (
-              <select className={BaseClassName} onChange={(Event) => UpdateItem(Index, Event.target.value)} value={String(ItemValue ?? "")}>
-                <option value="">Select</option>
-                {Properties.Field.Options?.map((Option) => (
-                  <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
-                    {Option.Label}
-                  </option>
-                ))}
-              </select>
+              <CustomSelect
+                EmptyLabel="Select"
+                OnChange={(Value) => UpdateItem(Index, Value)}
+                Options={Properties.Field.Options ?? []}
+                Value={String(ItemValue ?? "")}
+              />
             ) : (
               <AdminValidatedListInput
                 BaseClassName={BaseClassName}

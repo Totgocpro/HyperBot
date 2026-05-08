@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect as UseEffect, useRef as UseRef, useState as UseState } from "react";
 import type { BotGuildSummary, DashboardElement, SettingsField } from "../../Core/Types";
+import { CustomSelect } from "./CustomSelect";
 
 type DashboardPlugin = {
   Metadata: {
@@ -96,6 +97,23 @@ type SaveFeedback = {
   Message: string;
   Tone: "Success" | "Error";
   Key: number;
+};
+
+type ReminderDraft = {
+  Id: string;
+  Name: string;
+  ChannelId: string;
+  Mode: "Message" | "Embed";
+  Message: string;
+  Title: string;
+  Color: string;
+  IntervalMs: number;
+  NextRunAt: string;
+  Enabled: boolean;
+  CreatedBy: string;
+  CreatedAt: string;
+  LastRunAt: string | null;
+  RunCount: number;
 };
 
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
@@ -205,6 +223,46 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     } finally {
       SetSavingPluginId("");
     }
+  }
+
+  async function CreateRole(Name: string, Color: string): Promise<string | null> {
+    const Response = await fetch(`/api/plugins/${Properties.GuildId}/roles`, {
+      method: "POST",
+      headers: {
+        ...BuildGuildHeaders(),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ Name, Color })
+    });
+
+    if (!Response.ok) {
+      throw new Error(await Response.text());
+    }
+
+    const Payload = (await Response.json()) as { Role: { Id: string } };
+    await LoadPlugins(true);
+    SetStatus(`Role ${Name} created.`);
+    return Payload.Role.Id;
+  }
+
+  async function CreateChannel(Name: string): Promise<string | null> {
+    const Response = await fetch(`/api/plugins/${Properties.GuildId}/channels`, {
+      method: "POST",
+      headers: {
+        ...BuildGuildHeaders(),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ Name })
+    });
+
+    if (!Response.ok) {
+      throw new Error(await Response.text());
+    }
+
+    const Payload = (await Response.json()) as { Channel: { Id: string } };
+    await LoadPlugins(true);
+    SetStatus(`Channel ${Name} created.`);
+    return Payload.Channel.Id;
   }
 
   function ShowSaveFeedback(Message: string, Tone: SaveFeedback["Tone"]): void {
@@ -362,6 +420,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     <SendEmbedEditor
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
+                      OnCreateChannel={CreateChannel}
                       Plugin={SelectedPlugin}
                       SetStatus={SetStatus}
                       UpdateDraftValue={UpdateDraftValue}
@@ -377,6 +436,17 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   ) : SelectedPlugin.Metadata.Id === "CustomCommands" ? (
                     <CustomCommandsEditor
                       DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
+                      OnCreateChannel={CreateChannel}
+                      OnCreateRole={CreateRole}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : SelectedPlugin.Metadata.Id === "Reminders" ? (
+                    <RemindersEditor
+                      DraftValues={DraftValues}
+                      OnCreateChannel={CreateChannel}
                       Plugin={SelectedPlugin}
                       SetStatus={SetStatus}
                       UpdateDraftValue={UpdateDraftValue}
@@ -404,7 +474,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       </div>
                       <div className="grid gap-4">
                         {Section.Fields.map((Field) => (
-                          <div key={Field.Key}>{RenderField(Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus)}</div>
+                          <div key={Field.Key}>{RenderField(Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus, CreateRole, CreateChannel)}</div>
                         ))}
                       </div>
                     </section>
@@ -466,6 +536,9 @@ function SaveErrorIcon() {
 
 function CustomCommandsEditor(Properties: {
   DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
+  OnCreateChannel: (Name: string) => Promise<string | null>;
+  OnCreateRole: (Name: string, Color: string) => Promise<string | null>;
   Plugin: DashboardPlugin;
   SetStatus: (Status: string) => void;
   UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
@@ -572,8 +645,8 @@ function CustomCommandsEditor(Properties: {
             </label>
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <MultiSelectField Label="Default allowed channels" OnChange={(Value) => SetValue("DefaultAllowedChannelIds", Value)} Options={ChannelOptions} Value={StringArray(Values.DefaultAllowedChannelIds)} />
-            <MultiSelectField Label="Default required roles" OnChange={(Value) => SetValue("DefaultRequiredRoleIds", Value)} Options={RoleOptions} Value={StringArray(Values.DefaultRequiredRoleIds)} />
+            <MultiSelectField CreateKind="Channel" Label="Default allowed channels" OnChange={(Value) => SetValue("DefaultAllowedChannelIds", Value)} OnCreate={Properties.OnCreateChannel} Options={ChannelOptions} Value={StringArray(Values.DefaultAllowedChannelIds)} />
+            <MultiSelectField Label="Default required roles" OnChange={(Value) => SetValue("DefaultRequiredRoleIds", Value)} OnCreate={Properties.OnCreateRole} Options={RoleOptions} Value={StringArray(Values.DefaultRequiredRoleIds)} />
           </div>
           <label className="mt-4 block text-sm font-bold text-slate-200">
             Default denied message
@@ -600,13 +673,19 @@ function CustomCommandsEditor(Properties: {
                     Command name
                     <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Name: SanitizeCommandDraftName(Event.target.value) })} value={Command.Name} />
                   </label>
-                  <label className="block text-sm font-bold text-slate-200">
+                  <div className="block text-sm font-bold text-slate-200">
                     Match mode
-                    <select className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { MatchMode: Event.target.value as CustomCommandDraft["MatchMode"] })} value={Command.MatchMode}>
-                      <option value="Exact">Exact</option>
-                      <option value="StartsWith">Starts with</option>
-                    </select>
-                  </label>
+                    <CustomSelect
+                      ClassName="mt-2"
+                      OnChange={(Value) => UpdateCommand(Command.Id, { MatchMode: Value as CustomCommandDraft["MatchMode"] })}
+                      Options={[
+                        { Label: "Exact", Value: "Exact" },
+                        { Label: "Starts with", Value: "StartsWith" }
+                      ]}
+                      Required={true}
+                      Value={Command.MatchMode}
+                    />
+                  </div>
                   <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 font-semibold text-slate-100">
                     Enabled
                     <input checked={Command.Enabled} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateCommand(Command.Id, { Enabled: Event.target.checked })} type="checkbox" />
@@ -627,10 +706,10 @@ function CustomCommandsEditor(Properties: {
                   <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
                     <p className="font-black text-white">Checks</p>
                     <div className="mt-3 grid gap-3">
-                      <MultiSelectField Label="Allowed channels" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, AllowedChannelIds: Value } })} Options={ChannelOptions} Value={Command.Checks.AllowedChannelIds} />
-                      <MultiSelectField Label="Blocked channels" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, BlockedChannelIds: Value } })} Options={ChannelOptions} Value={Command.Checks.BlockedChannelIds} />
-                      <MultiSelectField Label="Required roles" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, RequiredRoleIds: Value } })} Options={RoleOptions} Value={Command.Checks.RequiredRoleIds} />
-                      <MultiSelectField Label="Blocked roles" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, BlockedRoleIds: Value } })} Options={RoleOptions} Value={Command.Checks.BlockedRoleIds} />
+                      <MultiSelectField CreateKind="Channel" Label="Allowed channels" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, AllowedChannelIds: Value } })} OnCreate={Properties.OnCreateChannel} Options={ChannelOptions} Value={Command.Checks.AllowedChannelIds} />
+                      <MultiSelectField CreateKind="Channel" Label="Blocked channels" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, BlockedChannelIds: Value } })} OnCreate={Properties.OnCreateChannel} Options={ChannelOptions} Value={Command.Checks.BlockedChannelIds} />
+                      <MultiSelectField Label="Required roles" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, RequiredRoleIds: Value } })} OnCreate={Properties.OnCreateRole} Options={RoleOptions} Value={Command.Checks.RequiredRoleIds} />
+                      <MultiSelectField Label="Blocked roles" OnChange={(Value) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, BlockedRoleIds: Value } })} OnCreate={Properties.OnCreateRole} Options={RoleOptions} Value={Command.Checks.BlockedRoleIds} />
                       <label className="block text-sm font-bold text-slate-200">
                         Denied message
                         <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Checks: { ...Command.Checks, DeniedMessage: Event.target.value } })} value={Command.Checks.DeniedMessage} />
@@ -649,16 +728,21 @@ function CustomCommandsEditor(Properties: {
                       {Command.Actions.map((Action) => (
                         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3" key={Action.Id}>
                           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                            <select className={EmbedInputClassName} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Type: Event.target.value as CustomCommandActionType })} value={Action.Type}>
-                              <option value="SendMessage">Send message</option>
-                              <option value="Reply">Reply</option>
-                              <option value="DM">DM user</option>
-                              <option value="AddRole">Add role</option>
-                              <option value="RemoveRole">Remove role</option>
-                              <option value="ToggleRole">Toggle role</option>
-                              <option value="DeleteTrigger">Delete trigger</option>
-                              <option value="React">React</option>
-                            </select>
+                            <CustomSelect
+                              OnChange={(Value) => UpdateAction(Command.Id, Action.Id, { Type: Value as CustomCommandActionType })}
+                              Options={[
+                                { Label: "Send message", Value: "SendMessage" },
+                                { Label: "Reply", Value: "Reply" },
+                                { Label: "DM user", Value: "DM" },
+                                { Label: "Add role", Value: "AddRole" },
+                                { Label: "Remove role", Value: "RemoveRole" },
+                                { Label: "Toggle role", Value: "ToggleRole" },
+                                { Label: "Delete trigger", Value: "DeleteTrigger" },
+                                { Label: "React", Value: "React" }
+                              ]}
+                              Required={true}
+                              Value={Action.Type}
+                            />
                             <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveAction(Command.Id, Action.Id)} type="button">
                               Remove
                             </button>
@@ -667,10 +751,18 @@ function CustomCommandsEditor(Properties: {
                             <textarea className={`${EmbedInputClassName} min-h-24 resize-y`} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Message: Event.target.value })} placeholder="Use %mention%, %user%, %args%, %server%, %channel%" value={Action.Message} />
                           ) : null}
                           {ActionNeedsRole(Action.Type) ? (
-                            <select className={EmbedInputClassName} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { RoleId: Event.target.value })} value={Action.RoleId}>
-                              <option value="">Select a role</option>
-                              {RoleOptions.map((Option) => <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>{Option.Label}</option>)}
-                            </select>
+                            <CustomSelect
+                              ClassName="mt-2"
+                              CreateButtonLabel="Create role"
+                              CreateInputPlaceholder="Role name"
+                              CreateLabel="Create role"
+                              EmptyCreateError="Role name is required."
+                              EmptyLabel="Select a role"
+                              OnChange={(Value) => UpdateAction(Command.Id, Action.Id, { RoleId: Value })}
+                              OnCreate={Properties.OnCreateRole}
+                              Options={RoleOptions}
+                              Value={Action.RoleId}
+                            />
                           ) : null}
                           {Action.Type === "React" ? (
                             <input className={EmbedInputClassName} onChange={(Event) => UpdateAction(Command.Id, Action.Id, { Emoji: Event.target.value })} placeholder="Emoji, for example ✅" value={Action.Emoji} />
@@ -730,9 +822,193 @@ function DashboardElementRenderer(Properties: { Element: DashboardElement & { Va
   );
 }
 
+function RemindersEditor(Properties: {
+  DraftValues: Record<string, Record<string, unknown>>;
+  OnCreateChannel: (Name: string) => Promise<string | null>;
+  Plugin: DashboardPlugin;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const PluginId = Properties.Plugin.Metadata.Id;
+  const Values = Properties.DraftValues[PluginId] ?? {};
+  const Reminders = ParseReminderDrafts(Values.Reminders);
+  const ReminderList = Object.values(Reminders).sort((First, Second) => new Date(First.NextRunAt).getTime() - new Date(Second.NextRunAt).getTime());
+  const ChannelField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId");
+  const ChannelOptions = ChannelField?.Options ?? [];
+  const DefaultChannelId = String(Values.DefaultChannelId ?? "");
+  const DefaultIntervalText = String(Values.DefaultInterval ?? "1d");
+  const DefaultIntervalMs = ParseReminderDuration(DefaultIntervalText) ?? 86_400_000;
+  const MaxReminders = Number(Values.MaxReminders ?? 25);
+
+  function SetValue(Key: string, Value: unknown): void {
+    Properties.UpdateDraftValue(PluginId, Key, Value);
+  }
+
+  function SetReminders(NextReminders: Record<string, ReminderDraft>): void {
+    SetValue("Reminders", NextReminders);
+  }
+
+  function AddReminder(): void {
+    if (ReminderList.length >= Math.max(1, MaxReminders)) {
+      Properties.SetStatus(`Reminder limit reached (${MaxReminders}).`);
+      return;
+    }
+
+    const Id = BuildReminderDraftId("new-reminder", Reminders);
+    const Now = Date.now();
+    SetReminders({
+      ...Reminders,
+      [Id]: {
+        Id,
+        Name: "New reminder",
+        ChannelId: DefaultChannelId,
+        Mode: Boolean(Values.DefaultEmbed ?? true) ? "Embed" : "Message",
+        Message: "Write your scheduled message here.",
+        Title: "Scheduled reminder",
+        Color: String(Values.DefaultColor ?? "#5865f2"),
+        IntervalMs: DefaultIntervalMs,
+        NextRunAt: new Date(Now + DefaultIntervalMs).toISOString(),
+        Enabled: true,
+        CreatedBy: "Dashboard",
+        CreatedAt: new Date(Now).toISOString(),
+        LastRunAt: null,
+        RunCount: 0
+      }
+    });
+    Properties.SetStatus("Reminder added in draft. Use Save to persist it.");
+  }
+
+  function UpdateReminder(ReminderId: string, Patch: Partial<ReminderDraft>): void {
+    const ReminderValue = Reminders[ReminderId];
+
+    if (!ReminderValue) {
+      return;
+    }
+
+    SetReminders({
+      ...Reminders,
+      [ReminderId]: {
+        ...ReminderValue,
+        ...Patch
+      }
+    });
+  }
+
+  function DeleteReminder(ReminderId: string): void {
+    const NextReminders = { ...Reminders };
+    delete NextReminders[ReminderId];
+    SetReminders(NextReminders);
+  }
+
+  return (
+    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-reminders">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Scheduler</p>
+          <h3 className="mt-2 text-2xl font-black text-white">Scheduled reminders</h3>
+        </div>
+        <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={AddReminder} type="button">
+          Add reminder
+        </button>
+      </div>
+
+      <div className="grid gap-5">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultEmbed") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultInterval") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultColor") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "FooterText") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "MaxReminders") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+          </div>
+        </section>
+
+        {ReminderList.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No reminder configured.</p> : null}
+        {ReminderList.map((ReminderValue) => (
+          <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4" key={ReminderValue.Id}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h4 className="text-xl font-black text-white">{ReminderValue.Name || ReminderValue.Id}</h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  ID: {ReminderValue.Id} | Runs: {ReminderValue.RunCount} | Next: {FormatReminderDate(ReminderValue.NextRunAt)}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button className={ReminderValue.Enabled ? "rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-500" : "rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800"} onClick={() => UpdateReminder(ReminderValue.Id, { Enabled: !ReminderValue.Enabled })} type="button">
+                  {ReminderValue.Enabled ? "Enabled" : "Disabled"}
+                </button>
+                <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => DeleteReminder(ReminderValue.Id)} type="button">
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <label className="block text-sm font-bold text-slate-200">
+                Name
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Name: Event.target.value })} value={ReminderValue.Name} />
+              </label>
+              <div className="block text-sm font-bold text-slate-200">
+                Channel
+                <CustomSelect
+                  ClassName="mt-2"
+                  CreateButtonLabel="Create channel"
+                  CreateColorEnabled={false}
+                  CreateInputPlaceholder="channel-name"
+                  CreateLabel="Create channel"
+                  EmptyLabel="Select a channel"
+                  OnChange={(Value) => UpdateReminder(ReminderValue.Id, { ChannelId: Value })}
+                  OnCreate={Properties.OnCreateChannel}
+                  Options={ChannelOptions}
+                  Value={ReminderValue.ChannelId}
+                />
+              </div>
+              <div className="block text-sm font-bold text-slate-200">
+                Mode
+                <CustomSelect
+                  ClassName="mt-2"
+                  OnChange={(Value) => UpdateReminder(ReminderValue.Id, { Mode: Value as ReminderDraft["Mode"] })}
+                  Options={[
+                    { Label: "Embed", Value: "Embed" },
+                    { Label: "Message", Value: "Message" }
+                  ]}
+                  Required={true}
+                  Value={ReminderValue.Mode}
+                />
+              </div>
+              <label className="block text-sm font-bold text-slate-200">
+                Interval minutes
+                <input className={EmbedInputClassName} min={1} onChange={(Event) => UpdateReminder(ReminderValue.Id, { IntervalMs: Math.max(60_000, Number(Event.target.value) * 60_000) })} type="number" value={Math.max(1, Math.round(ReminderValue.IntervalMs / 60_000))} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Next run
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { NextRunAt: LocalDateTimeToIso(Event.target.value) })} type="datetime-local" value={IsoToLocalDateTime(ReminderValue.NextRunAt)} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200">
+                Embed color
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Color: Event.target.value })} type="color" value={NormalizeEmbedColor(ReminderValue.Color)} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                Embed title
+                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Title: Event.target.value })} value={ReminderValue.Title} />
+              </label>
+              <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                Message
+                <textarea className={`${EmbedInputClassName} min-h-28 resize-y`} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Message: Event.target.value })} value={ReminderValue.Message} />
+              </label>
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SendEmbedEditor(Properties: {
   DraftValues: Record<string, Record<string, unknown>>;
   GuildId: string;
+  OnCreateChannel: (Name: string) => Promise<string | null>;
   Plugin: DashboardPlugin;
   SetStatus: (Status: string) => void;
   UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
@@ -844,17 +1120,23 @@ function SendEmbedEditor(Properties: {
                 Template name
                 <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Name: Event.target.value })} value={CurrentEmbed.Name} />
               </label>
-              <label className="block text-sm font-bold text-slate-200">
+              <div className="block text-sm font-bold text-slate-200">
                 Target channel
-                <select className={EmbedInputClassName} onChange={(Event) => SetChannelId(Event.target.value)} value={String(Values.SendChannelId ?? "")}>
-                  <option value="">Select a writable channel</option>
-                  {ChannelField?.Options?.map((Option) => (
-                    <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
-                      {Option.Label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <CustomSelect
+                  ClassName="mt-2"
+                  CreateButtonLabel="Create channel"
+                  CreateColorEnabled={false}
+                  CreateErrorMessage="Channel creation failed."
+                  CreateInputPlaceholder="channel-name"
+                  CreateLabel="Create channel"
+                  EmptyCreateError="Channel name is required."
+                  EmptyLabel="Select a writable channel"
+                  OnChange={SetChannelId}
+                  OnCreate={Properties.OnCreateChannel}
+                  Options={ChannelField?.Options ?? []}
+                  Value={String(Values.SendChannelId ?? "")}
+                />
+              </div>
               <label className="block text-sm font-bold text-slate-200">
                 Title
                 <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ Title: Event.target.value })} value={CurrentEmbed.Title} />
@@ -1554,6 +1836,92 @@ function ParseCustomMatchMode(Value: unknown): CustomCommandDraft["MatchMode"] {
   return Value === "StartsWith" ? "StartsWith" : "Exact";
 }
 
+function ParseReminderDrafts(Value: unknown): Record<string, ReminderDraft> {
+  if (!IsRecord(Value)) {
+    return {};
+  }
+
+  const Reminders: Record<string, ReminderDraft> = {};
+
+  for (const [ReminderId, ReminderValue] of Object.entries(Value)) {
+    if (!IsRecord(ReminderValue)) {
+      continue;
+    }
+
+    const Id = typeof ReminderValue.Id === "string" ? ReminderValue.Id : ReminderId;
+    const IntervalMs = typeof ReminderValue.IntervalMs === "number" && Number.isFinite(ReminderValue.IntervalMs) ? ReminderValue.IntervalMs : 86_400_000;
+    Reminders[Id] = {
+      Id,
+      Name: typeof ReminderValue.Name === "string" ? ReminderValue.Name : Id,
+      ChannelId: typeof ReminderValue.ChannelId === "string" ? ReminderValue.ChannelId : "",
+      Mode: ReminderValue.Mode === "Message" ? "Message" : "Embed",
+      Message: typeof ReminderValue.Message === "string" ? ReminderValue.Message : "",
+      Title: typeof ReminderValue.Title === "string" ? ReminderValue.Title : "",
+      Color: typeof ReminderValue.Color === "string" ? ReminderValue.Color : "#5865f2",
+      IntervalMs,
+      NextRunAt: typeof ReminderValue.NextRunAt === "string" ? ReminderValue.NextRunAt : new Date(Date.now() + IntervalMs).toISOString(),
+      Enabled: typeof ReminderValue.Enabled === "boolean" ? ReminderValue.Enabled : true,
+      CreatedBy: typeof ReminderValue.CreatedBy === "string" ? ReminderValue.CreatedBy : "Dashboard",
+      CreatedAt: typeof ReminderValue.CreatedAt === "string" ? ReminderValue.CreatedAt : new Date().toISOString(),
+      LastRunAt: typeof ReminderValue.LastRunAt === "string" ? ReminderValue.LastRunAt : null,
+      RunCount: typeof ReminderValue.RunCount === "number" ? ReminderValue.RunCount : 0
+    };
+  }
+
+  return Reminders;
+}
+
+function ParseReminderDuration(Value: string): number | null {
+  const Match = Value.trim().toLowerCase().match(/^(\d+)\s*([mhdw])$/u);
+
+  if (!Match) {
+    return null;
+  }
+
+  const Multipliers: Record<string, number> = {
+    m: 60_000,
+    h: 3_600_000,
+    d: 86_400_000,
+    w: 604_800_000
+  };
+
+  return Math.max(60_000, Number.parseInt(Match[1], 10) * Multipliers[Match[2]]);
+}
+
+function BuildReminderDraftId(Name: string, Reminders: Record<string, ReminderDraft>): string {
+  const BaseId = Name.toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "").slice(0, 24) || "reminder";
+  let CandidateId = BaseId;
+  let Index = 2;
+
+  while (Reminders[CandidateId]) {
+    CandidateId = `${BaseId}-${Index}`;
+    Index += 1;
+  }
+
+  return CandidateId;
+}
+
+function FormatReminderDate(Value: string): string {
+  const DateValue = new Date(Value);
+  return Number.isNaN(DateValue.getTime()) ? "Invalid date" : DateValue.toLocaleString();
+}
+
+function IsoToLocalDateTime(Value: string): string {
+  const DateValue = new Date(Value);
+
+  if (Number.isNaN(DateValue.getTime())) {
+    return "";
+  }
+
+  const LocalDate = new Date(DateValue.getTime() - DateValue.getTimezoneOffset() * 60_000);
+  return LocalDate.toISOString().slice(0, 16);
+}
+
+function LocalDateTimeToIso(Value: string): string {
+  const DateValue = new Date(Value);
+  return Number.isNaN(DateValue.getTime()) ? new Date().toISOString() : DateValue.toISOString();
+}
+
 function ReadNestedStringArray(Value: unknown, Key: string): string[] {
   if (!IsRecord(Value) || !Array.isArray(Value[Key])) {
     return [];
@@ -1587,13 +1955,51 @@ function CreateClientId(): string {
 }
 
 function MultiSelectField(Properties: {
+  CreateKind?: "Channel" | "Role";
   Label: string;
   OnChange: (Value: string[]) => void;
+  OnCreate?: (Name: string, Color: string) => Promise<string | null>;
   Options: NonNullable<SettingsField["Options"]>;
   Value: string[];
 }) {
+  const [NewName, SetNewName] = UseState("");
+  const [NewColor, SetNewColor] = UseState("#5865f2");
+  const [IsCreating, SetIsCreating] = UseState(false);
+  const [CreateError, SetCreateError] = UseState("");
+  const IsChannelCreate = Properties.CreateKind === "Channel";
+
   function Toggle(Value: string): void {
     Properties.OnChange(Properties.Value.includes(Value) ? Properties.Value.filter((Item) => Item !== Value) : [...Properties.Value, Value]);
+  }
+
+  async function CreateRole(): Promise<void> {
+    if (!Properties.OnCreate || IsCreating) {
+      return;
+    }
+
+    const TrimmedName = NewName.trim();
+
+    if (!TrimmedName) {
+      SetCreateError(IsChannelCreate ? "Channel name is required." : "Role name is required.");
+      return;
+    }
+
+    SetIsCreating(true);
+    SetCreateError("");
+
+    try {
+      const CreatedValue = await Properties.OnCreate(TrimmedName, NewColor);
+
+      if (CreatedValue) {
+        Properties.OnChange([...Properties.Value, CreatedValue]);
+        SetNewName("");
+        SetNewColor("#5865f2");
+      }
+    } catch (ErrorValue) {
+      SetCreateError(ErrorValue instanceof Error ? ErrorValue.message : IsChannelCreate ? "Channel creation failed." : "Role creation failed.");
+    } finally {
+      SetIsCreating(false);
+    }
   }
 
   return (
@@ -1608,6 +2014,19 @@ function MultiSelectField(Properties: {
           </label>
         ))}
       </div>
+      {Properties.OnCreate ? (
+        <div className="mt-3 border-t border-slate-800 pt-3">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">{IsChannelCreate ? "Create channel" : "Create role"}</p>
+          <div className={`mt-2 grid gap-2 ${IsChannelCreate ? "" : "sm:grid-cols-[1fr_auto]"}`}>
+            <input className="min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500" maxLength={100} onChange={(Event) => SetNewName(Event.target.value)} placeholder={IsChannelCreate ? "channel-name" : "Role name"} value={NewName} />
+            {IsChannelCreate ? null : <input aria-label="Role color" className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 p-1 sm:w-14" onChange={(Event) => SetNewColor(Event.target.value)} type="color" value={NewColor} />}
+          </div>
+          {CreateError ? <p className="mt-2 text-xs font-semibold text-red-300">{CreateError}</p> : null}
+          <button className="mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60" disabled={IsCreating} onClick={() => void CreateRole()} type="button">
+            {IsCreating ? "Creating..." : IsChannelCreate ? "Create channel" : "Create role"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1638,7 +2057,9 @@ function RenderField(
   Field: SettingsField & { Value: unknown },
   DraftValues: Record<string, Record<string, unknown>>,
   UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void,
-  SetStatus: (Status: string) => void
+  SetStatus: (Status: string) => void,
+  OnCreateRole: (Name: string, Color: string) => Promise<string | null>,
+  OnCreateChannel: (Name: string) => Promise<string | null>
 ) {
   const Value = DraftValues[PluginId]?.[Field.Key] ?? Field.Default;
   const BaseClassName = "mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
@@ -1654,19 +2075,26 @@ function RenderField(
 
   if (Field.Type === "Select" || Field.Type === "ChannelPicker" || Field.Type === "RolePicker") {
     return (
-      <label className="block text-sm font-bold text-slate-200">
+      <div className="block text-sm font-bold text-slate-200">
         {Field.Label}
-        <select className={BaseClassName} required={Field.Required} onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.value)} value={String(Value ?? "")}>
-          <option value="">{Field.Required ? "Select a required value" : "Select"}</option>
-          {Field.Options?.map((Option) => (
-            <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
-              {Option.Label}
-            </option>
-          ))}
-        </select>
+        <CustomSelect
+          ClassName="mt-2"
+          CreateButtonLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
+          CreateColorEnabled={Field.Type !== "ChannelPicker"}
+          CreateErrorMessage={Field.Type === "ChannelPicker" ? "Channel creation failed." : "Role creation failed."}
+          CreateInputPlaceholder={Field.Type === "ChannelPicker" ? "channel-name" : "Role name"}
+          CreateLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
+          EmptyCreateError={Field.Type === "ChannelPicker" ? "Channel name is required." : "Role name is required."}
+          EmptyLabel={Field.Required ? "Select a required value" : "Select"}
+          OnChange={(NextValue) => UpdateDraftValue(PluginId, Field.Key, NextValue)}
+          OnCreate={Field.Type === "RolePicker" ? OnCreateRole : Field.Type === "ChannelPicker" ? OnCreateChannel : undefined}
+          Options={Field.Options ?? []}
+          Required={Field.Required}
+          Value={String(Value ?? "")}
+        />
         {Field.Type === "ChannelPicker" ? <p className="mt-2 text-xs text-slate-500">Only supported writable channels can be selected.</p> : null}
         {Field.Type === "RolePicker" ? <p className="mt-2 text-xs text-slate-500">Only selectable server roles are listed.</p> : null}
-      </label>
+      </div>
     );
   }
 
@@ -1674,6 +2102,8 @@ function RenderField(
     return (
       <ListField
         Field={Field}
+        OnCreateChannel={OnCreateChannel}
+        OnCreateRole={OnCreateRole}
         PluginId={PluginId}
         UpdateDraftValue={UpdateDraftValue}
         Value={Array.isArray(Value) ? Value : []}
@@ -1826,6 +2256,8 @@ function ActionButton(Properties: {
 
 function ListField(Properties: {
   Field: SettingsField & { Value: unknown };
+  OnCreateChannel: (Name: string) => Promise<string | null>;
+  OnCreateRole: (Name: string, Color: string) => Promise<string | null>;
   PluginId: string;
   UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
   Value: unknown[];
@@ -1863,14 +2295,19 @@ function ListField(Properties: {
         {Properties.Value.map((ItemValue, Index) => (
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]" key={Index}>
             {Properties.Field.ItemType === "ChannelPicker" || Properties.Field.ItemType === "RolePicker" ? (
-              <select className={BaseClassName} onChange={(Event) => UpdateItem(Index, Event.target.value)} value={String(ItemValue ?? "")}>
-                <option value="">Select</option>
-                {Properties.Field.Options?.map((Option) => (
-                  <option disabled={Option.Disabled} key={String(Option.Value)} value={String(Option.Value)}>
-                    {Option.Label}
-                  </option>
-                ))}
-              </select>
+              <CustomSelect
+                CreateButtonLabel={Properties.Field.ItemType === "ChannelPicker" ? "Create channel" : "Create role"}
+                CreateColorEnabled={Properties.Field.ItemType !== "ChannelPicker"}
+                CreateErrorMessage={Properties.Field.ItemType === "ChannelPicker" ? "Channel creation failed." : "Role creation failed."}
+                CreateInputPlaceholder={Properties.Field.ItemType === "ChannelPicker" ? "channel-name" : "Role name"}
+                CreateLabel={Properties.Field.ItemType === "ChannelPicker" ? "Create channel" : "Create role"}
+                EmptyCreateError={Properties.Field.ItemType === "ChannelPicker" ? "Channel name is required." : "Role name is required."}
+                EmptyLabel="Select"
+                OnChange={(Value) => UpdateItem(Index, Value)}
+                OnCreate={Properties.Field.ItemType === "RolePicker" ? Properties.OnCreateRole : Properties.Field.ItemType === "ChannelPicker" ? Properties.OnCreateChannel : undefined}
+                Options={Properties.Field.Options ?? []}
+                Value={String(ItemValue ?? "")}
+              />
             ) : (
               <ValidatedListInput
                 BaseClassName={BaseClassName}

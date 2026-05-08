@@ -1,0 +1,119 @@
+{
+  "Metadata": {
+    "Id": "Reminders",
+    "DisplayName": "Reminders",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "RM"
+  },
+  "Scope": "Guild",
+  "Commands": [
+    {
+      "Name": "reminder-list",
+      "Description": "List scheduled reminders for this server."
+    },
+    {
+      "Name": "reminder-enable",
+      "Description": "Enable a scheduled reminder.",
+      "Options": [
+        {
+          "Name": "id",
+          "Description": "Reminder ID.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "reminder-disable",
+      "Description": "Disable a scheduled reminder without deleting it.",
+      "Options": [
+        {
+          "Name": "id",
+          "Description": "Reminder ID.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "reminder-delete",
+      "Description": "Delete a scheduled reminder.",
+      "Options": [
+        {
+          "Name": "id",
+          "Description": "Reminder ID.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    },
+    {
+      "Name": "reminder-run",
+      "Description": "Send a reminder immediately without changing its schedule.",
+      "Options": [
+        {
+          "Name": "id",
+          "Description": "Reminder ID.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "DefaultChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Default reminder channel",
+      "Default": "",
+      "Section": "Defaults",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "DefaultEmbed",
+      "Type": "Boolean",
+      "Label": "Create reminders as embeds by default",
+      "Default": true,
+      "Section": "Defaults"
+    },
+    {
+      "Key": "DefaultInterval",
+      "Type": "String",
+      "Label": "Default interval",
+      "Default": "1d",
+      "Section": "Defaults"
+    },
+    {
+      "Key": "DefaultColor",
+      "Type": "String",
+      "Label": "Default embed color",
+      "Default": "#5865f2",
+      "Section": "Design"
+    },
+    {
+      "Key": "FooterText",
+      "Type": "String",
+      "Label": "Embed footer",
+      "Default": "Scheduled by HyperBot",
+      "Section": "Design"
+    },
+    {
+      "Key": "MaxReminders",
+      "Type": "Number",
+      "Label": "Maximum reminders per server",
+      "Default": 25,
+      "Section": "Limits"
+    },
+    {
+      "Key": "Reminders",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Scheduled reminders",
+      "Default": [],
+      "Section": "Reminders"
+    }
+  ],
+  "EntryPoint": "./RemindersPlugin.ts"
+}

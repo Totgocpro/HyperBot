@@ -75,6 +75,7 @@ export type SettingsField = {
     Value: string | number | boolean;
     Disabled?: boolean;
     Description?: string;
+    Color?: number;
   }>;
 };
 

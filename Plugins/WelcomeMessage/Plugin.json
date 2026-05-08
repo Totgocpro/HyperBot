@@ -382,6 +382,160 @@
       "Section": "Behavior"
     },
     {
+      "Key": "CaptchaEnabled",
+      "Type": "Boolean",
+      "Label": "Enable captcha verification",
+      "Default": false,
+      "Section": "Captcha"
+    },
+    {
+      "Key": "CaptchaChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Captcha channel",
+      "Default": "",
+      "Section": "Captcha",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true,
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaRoleIds",
+      "Type": "List",
+      "Label": "Roles granted after captcha",
+      "Default": [],
+      "Section": "Captcha",
+      "ItemType": "RolePicker",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaTitle",
+      "Type": "String",
+      "Label": "Captcha title",
+      "Default": "Server verification",
+      "Section": "Captcha content",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaMessage",
+      "Type": "String",
+      "Label": "Captcha message",
+      "Default": "Complete the captcha to unlock the server.",
+      "Section": "Captcha content",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaButtonLabel",
+      "Type": "String",
+      "Label": "Captcha button label",
+      "Default": "Verify",
+      "Section": "Captcha content",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaVerificationLevels",
+      "Type": "Number",
+      "Label": "Verification levels",
+      "Default": 2,
+      "Section": "Captcha content",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaDmMessage",
+      "Type": "String",
+      "Label": "Captcha DM message",
+      "Default": "Verification level %level%/%levels%. Enter the code shown in the image.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaDmSentMessage",
+      "Type": "String",
+      "Label": "DM sent response",
+      "Default": "I sent your captcha in DM. Complete every level there to unlock the server.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaDmFailedMessage",
+      "Type": "String",
+      "Label": "DM failed response",
+      "Default": "I could not send you a DM. Enable direct messages for this server and try again.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaAlreadyVerifiedMessage",
+      "Type": "String",
+      "Label": "Already verified response",
+      "Default": "You are already verified.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaExpiredMessage",
+      "Type": "String",
+      "Label": "Expired session response",
+      "Default": "This captcha session expired. Start verification again from the server.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaFailedMessage",
+      "Type": "String",
+      "Label": "Wrong code response",
+      "Default": "Captcha failed. Use the latest DM image and try again.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaNextLevelMessage",
+      "Type": "String",
+      "Label": "Next level message",
+      "Default": "Level %level%/%levels% passed. Here is the next captcha.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaNoRoleGrantedMessage",
+      "Type": "String",
+      "Label": "No new role response",
+      "Default": "Captcha complete. No new role was granted.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaAnswerButtonLabel",
+      "Type": "String",
+      "Label": "DM answer button label",
+      "Default": "Enter captcha code",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaModalTitle",
+      "Type": "String",
+      "Label": "Answer modal title",
+      "Default": "Captcha verification",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaModalInputLabel",
+      "Type": "String",
+      "Label": "Answer input label",
+      "Default": "Enter the code from image %level%/%levels%",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
+      "Key": "CaptchaSuccessMessage",
+      "Type": "String",
+      "Label": "Captcha success message",
+      "Default": "Verification complete. Roles granted.",
+      "Section": "Captcha messages",
+      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+    },
+    {
       "Key": "TestWelcomeButton",
       "Type": "Button",
       "Label": "Send a test welcome message",
@@ -398,6 +552,15 @@
       "Section": "Test actions",
       "ButtonLabel": "Send leave test",
       "ActionKey": "TestLeave"
+    },
+    {
+      "Key": "PublishCaptchaPanelButton",
+      "Type": "Button",
+      "Label": "Publish reusable captcha panel",
+      "Default": null,
+      "Section": "Test actions",
+      "ButtonLabel": "Publish captcha panel",
+      "ActionKey": "PublishCaptchaPanel"
     }
   ],
   "EntryPoint": "./WelcomeMessagePlugin.ts"

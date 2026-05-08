@@ -159,7 +159,8 @@ async function HydrateSettingsField(GuildId: string, Field: SettingsField): Prom
       Options: Roles.map((Role) => ({
         Label: `@${Role.Name}`,
         Value: Role.Id,
-        Description: `Position ${Role.Position}`
+        Description: `Position ${Role.Position}`,
+        Color: Role.Color
       }))
     };
   }

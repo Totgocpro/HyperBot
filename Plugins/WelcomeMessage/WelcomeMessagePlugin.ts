@@ -1,15 +1,25 @@
 import {
+  ActionRowBuilder,
   AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  type ButtonInteraction,
   type GuildBasedChannel,
   type GuildMember,
+  type Interaction,
+  type ModalSubmitInteraction,
   type NewsChannel,
   type PartialGuildMember,
   type TextChannel,
   type VoiceChannel
 } from "discord.js";
 import { createCanvas, GlobalFonts, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
+import { randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
@@ -54,6 +64,25 @@ type WelcomeMessageConfig = {
   ImageDescriptionFontSize: number;
   ImageShowInitialsAvatar: boolean;
   PingUser: boolean;
+  CaptchaEnabled: boolean;
+  CaptchaChannelId: string;
+  CaptchaRoleIds: string[];
+  CaptchaTitle: string;
+  CaptchaMessage: string;
+  CaptchaButtonLabel: string;
+  CaptchaVerificationLevels: number;
+  CaptchaDmMessage: string;
+  CaptchaDmSentMessage: string;
+  CaptchaDmFailedMessage: string;
+  CaptchaAlreadyVerifiedMessage: string;
+  CaptchaExpiredMessage: string;
+  CaptchaFailedMessage: string;
+  CaptchaNextLevelMessage: string;
+  CaptchaNoRoleGrantedMessage: string;
+  CaptchaAnswerButtonLabel: string;
+  CaptchaModalTitle: string;
+  CaptchaModalInputLabel: string;
+  CaptchaSuccessMessage: string;
 };
 
 const DefaultConfig: WelcomeMessageConfig = {
@@ -92,8 +121,39 @@ const DefaultConfig: WelcomeMessageConfig = {
   ImageTitleFontSize: 40,
   ImageDescriptionFontSize: 15,
   ImageShowInitialsAvatar: true,
-  PingUser: false
+  PingUser: false,
+  CaptchaEnabled: false,
+  CaptchaChannelId: "",
+  CaptchaRoleIds: [],
+  CaptchaTitle: "Server verification",
+  CaptchaMessage: "Complete the captcha to unlock the server.",
+  CaptchaButtonLabel: "Verify",
+  CaptchaVerificationLevels: 2,
+  CaptchaDmMessage: "Verification level %level%/%levels%. Enter the code shown in the image.",
+  CaptchaDmSentMessage: "I sent your captcha in DM. Complete every level there to unlock the server.",
+  CaptchaDmFailedMessage: "I could not send you a DM. Enable direct messages for this server and try again.",
+  CaptchaAlreadyVerifiedMessage: "You are already verified.",
+  CaptchaExpiredMessage: "This captcha session expired. Start verification again from the server.",
+  CaptchaFailedMessage: "Captcha failed. Use the latest DM image and try again.",
+  CaptchaNextLevelMessage: "Level %level%/%levels% passed. Here is the next captcha.",
+  CaptchaNoRoleGrantedMessage: "Captcha complete. No new role was granted.",
+  CaptchaAnswerButtonLabel: "Enter captcha code",
+  CaptchaModalTitle: "Captcha verification",
+  CaptchaModalInputLabel: "Enter the code from image %level%/%levels%",
+  CaptchaSuccessMessage: "Verification complete. Roles granted."
 };
+
+type CaptchaSession = {
+  GuildId: string;
+  UserId: string;
+  CurrentCode: string;
+  CurrentLevel: number;
+  TotalLevels: number;
+  CreatedAt: number;
+};
+
+const CaptchaSessions = new Map<string, CaptchaSession>();
+const CaptchaSessionTtlMilliseconds = 10 * 60 * 1000;
 
 export default class WelcomeMessagePlugin extends BasePlugin {
   public async OnEnable(): Promise<void> {
@@ -108,20 +168,22 @@ export default class WelcomeMessagePlugin extends BasePlugin {
   public async OnGuildMemberAdd(Member: GuildMember): Promise<void> {
     const Config = await this.GetConfig(Member.guild.id);
 
-    if (!Config.WelcomeEnabled || !Config.WelcomeChannelId) {
-      return;
+    if (Config.WelcomeEnabled && Config.WelcomeChannelId) {
+      await this.SendMemberMessage({
+        ChannelId: Config.WelcomeChannelId,
+        Color: Config.WelcomeColor,
+        Config,
+        Member,
+        Mode: Config.WelcomeMode,
+        Title: Config.WelcomeTitle,
+        Message: Config.WelcomeMessage,
+        Type: "Welcome"
+      });
     }
 
-    await this.SendMemberMessage({
-      ChannelId: Config.WelcomeChannelId,
-      Color: Config.WelcomeColor,
-      Config,
-      Member,
-      Mode: Config.WelcomeMode,
-      Title: Config.WelcomeTitle,
-      Message: Config.WelcomeMessage,
-      Type: "Welcome"
-    });
+    if (Config.CaptchaEnabled && Config.CaptchaChannelId && Config.CaptchaRoleIds.length > 0) {
+      await this.SendCaptchaMessage(Member, Config, true);
+    }
   }
 
   public async OnGuildMemberRemove(Member: GuildMember | PartialGuildMember): Promise<void> {
@@ -144,7 +206,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
   }
 
   public async OnDashboardAction(GuildId: string, ActionKey: string, ActorId: string): Promise<void> {
-    if (ActionKey !== "TestWelcome" && ActionKey !== "TestLeave") {
+    if (ActionKey !== "TestWelcome" && ActionKey !== "TestLeave" && ActionKey !== "PublishCaptchaPanel") {
       return;
     }
 
@@ -157,6 +219,11 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     }
 
     const Config = await this.GetConfig(GuildId);
+
+    if (ActionKey === "PublishCaptchaPanel") {
+      await this.SendCaptchaMessage(Member, Config, false);
+      return;
+    }
 
     if (ActionKey === "TestWelcome") {
       await this.SendMemberMessage({
@@ -182,6 +249,370 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       Message: Config.LeaveMessage,
       Type: "Leave"
     });
+  }
+
+  public async OnInteraction(InteractionValue: Interaction): Promise<void> {
+    if (InteractionValue.isButton() && InteractionValue.customId.startsWith("WelcomeCaptcha:")) {
+      await this.HandleCaptchaButton(InteractionValue);
+      return;
+    }
+
+    if (InteractionValue.isModalSubmit() && InteractionValue.customId.startsWith("WelcomeCaptchaModal:")) {
+      await this.HandleCaptchaSubmit(InteractionValue);
+    }
+  }
+
+  private async SendCaptchaMessage(Member: GuildMember, Config: WelcomeMessageConfig, IsPersonalized: boolean): Promise<void> {
+    const Channel = await this.ResolveWritableChannel(Member.guild.id, Config.CaptchaChannelId);
+
+    if (!Channel) {
+      this.Logger.Warn("Captcha channel is missing or not writable.", { GuildId: Member.guild.id, ChannelId: Config.CaptchaChannelId });
+      return;
+    }
+
+    const Embed = new EmbedBuilder()
+      .setTitle(this.ApplyTemplate(Config.CaptchaTitle, Member))
+      .setDescription(this.ApplyTemplate(Config.CaptchaMessage, Member))
+      .setColor(this.ParseColor(Config.WelcomeColor))
+      .setTimestamp(new Date());
+    const CustomId = IsPersonalized ? `WelcomeCaptcha:Start:${Member.user.id}` : "WelcomeCaptcha:Start";
+    const Components = [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(CustomId)
+          .setLabel(Config.CaptchaButtonLabel || DefaultConfig.CaptchaButtonLabel)
+          .setStyle(ButtonStyle.Primary)
+      )
+    ];
+
+    await Channel.send({
+      content: IsPersonalized ? `<@${Member.user.id}>` : undefined,
+      embeds: [Embed],
+      components: Components
+    });
+  }
+
+  private async HandleCaptchaButton(InteractionValue: ButtonInteraction): Promise<void> {
+    const [, Action, TargetValue] = InteractionValue.customId.split(":");
+
+    if (Action === "Answer") {
+      await this.ShowCaptchaAnswerModal(InteractionValue, TargetValue);
+      return;
+    }
+
+    if (Action !== "Start") {
+      return;
+    }
+
+    if (!InteractionValue.guildId) {
+      await InteractionValue.reply({ content: "Start verification from the server verification channel.", ephemeral: true });
+      return;
+    }
+
+    if (TargetValue && TargetValue !== InteractionValue.user.id) {
+      await InteractionValue.reply({ content: "This captcha is not for your account.", ephemeral: true });
+      return;
+    }
+
+    const Config = await this.GetConfig(InteractionValue.guildId);
+
+    if (!Config.CaptchaEnabled || Config.CaptchaRoleIds.length === 0) {
+      await InteractionValue.reply({ content: "Captcha verification is not configured.", ephemeral: true });
+      return;
+    }
+
+    const Guild = await this.DiscordClient.guilds.fetch(InteractionValue.guildId).catch(() => null);
+    const Member = await Guild?.members.fetch(InteractionValue.user.id).catch(() => null);
+
+    if (Member && this.HasAllCaptchaRoles(Member, Config)) {
+      await InteractionValue.reply({ content: Config.CaptchaAlreadyVerifiedMessage, ephemeral: true });
+      return;
+    }
+
+    const SessionId = this.CreateCaptchaSession(InteractionValue.guildId, InteractionValue.user.id, Config);
+    const Session = CaptchaSessions.get(SessionId);
+
+    if (!Session) {
+      await InteractionValue.reply({ content: "Captcha session could not be created.", ephemeral: true });
+      return;
+    }
+
+    try {
+      await InteractionValue.user.send(this.BuildCaptchaDmMessage(Session, Config));
+      await InteractionValue.reply({ content: Config.CaptchaDmSentMessage, ephemeral: true });
+    } catch (ErrorValue) {
+      CaptchaSessions.delete(SessionId);
+      this.Logger.Warn("Captcha DM could not be sent.", {
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        GuildId: InteractionValue.guildId,
+        UserId: InteractionValue.user.id
+      });
+      await InteractionValue.reply({ content: Config.CaptchaDmFailedMessage, ephemeral: true });
+    }
+  }
+
+  private async ShowCaptchaAnswerModal(InteractionValue: ButtonInteraction, SessionId: string | undefined): Promise<void> {
+    this.PruneCaptchaSessions();
+    const Session = SessionId ? CaptchaSessions.get(SessionId) : null;
+
+    if (!Session || Session.UserId !== InteractionValue.user.id) {
+      await InteractionValue.reply({ content: DefaultConfig.CaptchaExpiredMessage, ephemeral: Boolean(InteractionValue.guildId) });
+      return;
+    }
+
+    const Config = await this.GetConfig(Session.GuildId);
+
+    const Modal = new ModalBuilder()
+      .setCustomId(`WelcomeCaptchaModal:${SessionId}`)
+      .setTitle(Config.CaptchaModalTitle.slice(0, 45) || DefaultConfig.CaptchaModalTitle)
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId("Answer")
+            .setLabel(this.ApplyCaptchaSessionTemplate(Config.CaptchaModalInputLabel, Session).slice(0, 45))
+            .setMaxLength(12)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short)
+        )
+      );
+
+    await InteractionValue.showModal(Modal);
+  }
+
+  private async HandleCaptchaSubmit(InteractionValue: ModalSubmitInteraction): Promise<void> {
+    this.PruneCaptchaSessions();
+    const [, SessionId] = InteractionValue.customId.split(":");
+    const Session = CaptchaSessions.get(SessionId);
+
+    if (!Session || Session.UserId !== InteractionValue.user.id) {
+      await InteractionValue.reply({ content: DefaultConfig.CaptchaExpiredMessage });
+      return;
+    }
+
+    const Config = await this.GetConfig(Session.GuildId);
+
+    const SubmittedAnswer = InteractionValue.fields.getTextInputValue("Answer").trim().toUpperCase();
+
+    if (SubmittedAnswer !== Session.CurrentCode) {
+      await InteractionValue.reply({ content: Config.CaptchaFailedMessage });
+      return;
+    }
+
+    if (!Config.CaptchaEnabled || Config.CaptchaRoleIds.length === 0) {
+      CaptchaSessions.delete(SessionId);
+      await InteractionValue.reply({ content: "Captcha verification is not configured anymore." });
+      return;
+    }
+
+    if (Session.CurrentLevel < Session.TotalLevels) {
+      Session.CurrentLevel += 1;
+      Session.CurrentCode = this.GenerateCaptchaCode(Session.CurrentLevel);
+      Session.CreatedAt = Date.now();
+      await InteractionValue.reply(this.BuildCaptchaDmMessage(Session, Config, Config.CaptchaNextLevelMessage));
+      return;
+    }
+
+    const Guild = await this.DiscordClient.guilds.fetch(Session.GuildId).catch(() => null);
+    const Member = await Guild?.members.fetch(Session.UserId).catch(() => null);
+
+    if (!Member) {
+      CaptchaSessions.delete(SessionId);
+      await InteractionValue.reply({ content: "Member not found in the server." });
+      return;
+    }
+
+    if (this.HasAllCaptchaRoles(Member, Config)) {
+      CaptchaSessions.delete(SessionId);
+      await InteractionValue.reply({ content: Config.CaptchaAlreadyVerifiedMessage });
+      return;
+    }
+
+    const GrantedRoleIds: string[] = [];
+
+    for (const RoleId of Config.CaptchaRoleIds) {
+      if (!RoleId || Member.roles.cache.has(RoleId)) {
+        continue;
+      }
+
+      await Member.roles.add(RoleId, "Welcome captcha completed").then(() => {
+        GrantedRoleIds.push(RoleId);
+      }).catch((ErrorValue: unknown) => {
+        this.Logger.Warn("Captcha role could not be granted.", {
+          Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+          GuildId: Session.GuildId,
+          RoleId,
+          UserId: Session.UserId
+        });
+      });
+    }
+
+    CaptchaSessions.delete(SessionId);
+    await InteractionValue.reply({
+      content: GrantedRoleIds.length > 0 ? Config.CaptchaSuccessMessage : Config.CaptchaNoRoleGrantedMessage
+    });
+  }
+
+  private CreateCaptchaSession(GuildId: string, UserId: string, Config: WelcomeMessageConfig): string {
+    this.PruneCaptchaSessions();
+    const SessionId = randomBytes(8).toString("hex");
+    const TotalLevels = this.ClampNumber(Config.CaptchaVerificationLevels, 1, 5, DefaultConfig.CaptchaVerificationLevels);
+
+    CaptchaSessions.set(SessionId, {
+      GuildId,
+      UserId,
+      CurrentCode: this.GenerateCaptchaCode(1),
+      CurrentLevel: 1,
+      TotalLevels,
+      CreatedAt: Date.now()
+    });
+
+    return SessionId;
+  }
+
+  private BuildCaptchaDmMessage(Session: CaptchaSession, Config: WelcomeMessageConfig, HeaderMessage?: string) {
+    const Attachment = new AttachmentBuilder(this.BuildCaptchaImage(Session.CurrentCode, Session.CurrentLevel, Session.TotalLevels), {
+      name: `captcha-${Session.CurrentLevel}.png`
+    });
+
+    return {
+      content: [
+        this.ApplyCaptchaSessionTemplate(HeaderMessage ?? Config.CaptchaDmMessage, Session)
+      ].join("\n"),
+      files: [Attachment],
+      components: [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`WelcomeCaptcha:Answer:${this.FindCaptchaSessionId(Session)}`)
+            .setLabel(Config.CaptchaAnswerButtonLabel.slice(0, 80) || DefaultConfig.CaptchaAnswerButtonLabel)
+            .setStyle(ButtonStyle.Primary)
+        )
+      ]
+    };
+  }
+
+  private FindCaptchaSessionId(Session: CaptchaSession): string {
+    for (const [SessionId, SessionValue] of CaptchaSessions.entries()) {
+      if (SessionValue === Session) {
+        return SessionId;
+      }
+    }
+
+    return "";
+  }
+
+  private GenerateCaptchaCode(Level: number): string {
+    const Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const Length = this.ClampNumber(4 + Level, 5, 8, 5);
+    let Code = "";
+
+    for (let Index = 0; Index < Length; Index += 1) {
+      Code += Alphabet[Math.floor(Math.random() * Alphabet.length)];
+    }
+
+    return Code;
+  }
+
+  private BuildCaptchaImage(Code: string, Level: number, TotalLevels: number): Buffer {
+    const Width = 360;
+    const Height = 140;
+    const Canvas = createCanvas(Width, Height);
+    const Context = Canvas.getContext("2d");
+    const Background = Context.createLinearGradient(0, 0, Width, Height);
+    Background.addColorStop(0, "#0f172a");
+    Background.addColorStop(1, "#1e293b");
+    Context.fillStyle = Background;
+    Context.fillRect(0, 0, Width, Height);
+
+    for (let Index = 0; Index < 76 + Level * 26; Index += 1) {
+      Context.fillStyle = `rgba(${80 + Math.random() * 120}, ${120 + Math.random() * 90}, ${180 + Math.random() * 60}, ${0.18 + Math.random() * 0.28})`;
+      Context.beginPath();
+      Context.arc(Math.random() * Width, Math.random() * Height, 1 + Math.random() * (2 + Level), 0, Math.PI * 2);
+      Context.fill();
+    }
+
+    for (let Index = 0; Index < 9 + Level * 5; Index += 1) {
+      Context.strokeStyle = `rgba(${90 + Math.random() * 130}, ${120 + Math.random() * 90}, ${170 + Math.random() * 70}, ${0.2 + Math.random() * 0.28})`;
+      Context.lineWidth = 1 + Math.random() * 2;
+      Context.beginPath();
+      Context.moveTo(Math.random() * Width, Math.random() * Height);
+      Context.bezierCurveTo(Math.random() * Width, Math.random() * Height, Math.random() * Width, Math.random() * Height, Math.random() * Width, Math.random() * Height);
+      Context.stroke();
+    }
+
+    Context.globalAlpha = 0.18;
+    Context.strokeStyle = "#e2e8f0";
+    Context.lineWidth = 1;
+    for (let X = -Height; X < Width; X += 18) {
+      Context.beginPath();
+      Context.moveTo(X, 0);
+      Context.lineTo(X + Height, Height);
+      Context.stroke();
+    }
+    Context.globalAlpha = 1;
+
+    Context.textAlign = "center";
+    Context.textBaseline = "middle";
+    const Spacing = Width / (Code.length + 1);
+
+    for (let Index = 0; Index < Code.length; Index += 1) {
+      const Character = Code[Index];
+      const X = Spacing * (Index + 1);
+      const Y = Height / 2 + (Math.random() * 20 - 10);
+      Context.save();
+      Context.translate(X, Y);
+      Context.rotate((Math.random() - 0.5) * (0.42 + Level * 0.12));
+      Context.transform(1, (Math.random() - 0.5) * 0.34, (Math.random() - 0.5) * 0.26, 1, 0, 0);
+      Context.font = `bold ${36 + Math.random() * 11}px "DejaVu Sans", "Noto Sans", "Liberation Sans", sans-serif`;
+      const CharacterOpacity = Math.max(0.42, 0.92 - Level * 0.08 - Math.random() * 0.38);
+      Context.globalAlpha = CharacterOpacity;
+      Context.fillStyle = Index % 2 === 0 ? "#f8fafc" : "#bfdbfe";
+      Context.shadowColor = "rgba(0, 0, 0, 0.45)";
+      Context.shadowBlur = 8;
+      Context.fillText(Character, 0, 0);
+      Context.globalAlpha = Math.max(0.18, CharacterOpacity - 0.22);
+      Context.strokeStyle = Index % 2 === 0 ? "#93c5fd" : "#e2e8f0";
+      Context.lineWidth = 1 + Math.random() * 1.2;
+      Context.strokeText(Character, 0, 0);
+      Context.restore();
+    }
+
+    Context.globalAlpha = 1;
+
+    const Decoys = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    Context.font = "bold 18px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
+    for (let Index = 0; Index < 8 + Level * 3; Index += 1) {
+      Context.fillStyle = `rgba(226, 232, 240, ${0.1 + Math.random() * 0.16})`;
+      Context.fillText(Decoys[Math.floor(Math.random() * Decoys.length)], 18 + Math.random() * (Width - 36), 22 + Math.random() * (Height - 34));
+    }
+
+    Context.font = "600 12px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
+    Context.fillStyle = "rgba(226, 232, 240, 0.82)";
+    Context.textAlign = "left";
+    Context.fillText(`Level ${Level}/${TotalLevels}`, 22, 32);
+    return Canvas.encodeSync("png");
+  }
+
+  private HasAllCaptchaRoles(Member: GuildMember, Config: WelcomeMessageConfig): boolean {
+    const RoleIds = Config.CaptchaRoleIds.filter(Boolean);
+    return RoleIds.length > 0 && RoleIds.every((RoleId) => Member.roles.cache.has(RoleId));
+  }
+
+  private ApplyCaptchaSessionTemplate(Template: string, Session: CaptchaSession): string {
+    return Template
+      .replaceAll("%level%", String(Session.CurrentLevel))
+      .replaceAll("%levels%", String(Session.TotalLevels))
+      .replaceAll("%serverId%", Session.GuildId)
+      .replaceAll("%userId%", Session.UserId);
+  }
+
+  private PruneCaptchaSessions(): void {
+    const Now = Date.now();
+
+    for (const [SessionId, Session] of CaptchaSessions.entries()) {
+      if (Now - Session.CreatedAt > CaptchaSessionTtlMilliseconds) {
+        CaptchaSessions.delete(SessionId);
+      }
+    }
   }
 
   private async SendMemberMessage(Options: {
@@ -762,8 +1193,32 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       ImageTitleFontSize: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageTitleFontSize")) ?? DefaultConfig.ImageTitleFontSize,
       ImageDescriptionFontSize: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageDescriptionFontSize")) ?? DefaultConfig.ImageDescriptionFontSize,
       ImageShowInitialsAvatar: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ImageShowInitialsAvatar")) ?? DefaultConfig.ImageShowInitialsAvatar,
-      PingUser: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "PingUser")) ?? DefaultConfig.PingUser
+      PingUser: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "PingUser")) ?? DefaultConfig.PingUser,
+      CaptchaEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "CaptchaEnabled")) ?? DefaultConfig.CaptchaEnabled,
+      CaptchaChannelId: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaChannelId")) ?? DefaultConfig.CaptchaChannelId,
+      CaptchaRoleIds: await this.GetStringListConfig(GuildId, "CaptchaRoleIds", DefaultConfig.CaptchaRoleIds),
+      CaptchaTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaTitle")) ?? DefaultConfig.CaptchaTitle,
+      CaptchaMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaMessage")) ?? DefaultConfig.CaptchaMessage,
+      CaptchaButtonLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaButtonLabel")) ?? DefaultConfig.CaptchaButtonLabel,
+      CaptchaVerificationLevels: (await this.Storage.GetGlobalConfig<number>(GuildId, "CaptchaVerificationLevels")) ?? DefaultConfig.CaptchaVerificationLevels,
+      CaptchaDmMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmMessage")) ?? DefaultConfig.CaptchaDmMessage,
+      CaptchaDmSentMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmSentMessage")) ?? DefaultConfig.CaptchaDmSentMessage,
+      CaptchaDmFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmFailedMessage")) ?? DefaultConfig.CaptchaDmFailedMessage,
+      CaptchaAlreadyVerifiedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaAlreadyVerifiedMessage")) ?? DefaultConfig.CaptchaAlreadyVerifiedMessage,
+      CaptchaExpiredMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaExpiredMessage")) ?? DefaultConfig.CaptchaExpiredMessage,
+      CaptchaFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaFailedMessage")) ?? DefaultConfig.CaptchaFailedMessage,
+      CaptchaNextLevelMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaNextLevelMessage")) ?? DefaultConfig.CaptchaNextLevelMessage,
+      CaptchaNoRoleGrantedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaNoRoleGrantedMessage")) ?? DefaultConfig.CaptchaNoRoleGrantedMessage,
+      CaptchaAnswerButtonLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaAnswerButtonLabel")) ?? DefaultConfig.CaptchaAnswerButtonLabel,
+      CaptchaModalTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaModalTitle")) ?? DefaultConfig.CaptchaModalTitle,
+      CaptchaModalInputLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaModalInputLabel")) ?? DefaultConfig.CaptchaModalInputLabel,
+      CaptchaSuccessMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaSuccessMessage")) ?? DefaultConfig.CaptchaSuccessMessage
     };
+  }
+
+  private async GetStringListConfig(GuildId: string, Key: string, Fallback: string[]): Promise<string[]> {
+    const Value = await this.Storage.GetGlobalConfig<unknown>(GuildId, Key);
+    return Array.isArray(Value) ? Value.map((Item) => String(Item)).filter(Boolean) : Fallback;
   }
 
   private ApplyTemplate(Template: string, Member: GuildMember | PartialGuildMember): string {

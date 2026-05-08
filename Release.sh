@@ -5,6 +5,8 @@ set -o pipefail 2>/dev/null || true
 ProjectRoot="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 BackupDirectory="${ProjectRoot}/Backups/PostgreSQL"
 Timestamp="$(date +%Y%m%d-%H%M%S)"
+StopCommandWatcherPid=""
+LogsPid=""
 
 cd "${ProjectRoot}"
 
@@ -34,6 +36,43 @@ RequireCommand() {
     echo "Missing required command: ${CommandName}" >&2
     exit 1
   fi
+}
+
+StopRelease() {
+  trap - INT TERM HUP
+
+  if [ -n "${StopCommandWatcherPid}" ]; then
+    kill "${StopCommandWatcherPid}" >/dev/null 2>&1 || true
+  fi
+
+  if [ -n "${LogsPid}" ]; then
+    kill "${LogsPid}" >/dev/null 2>&1 || true
+  fi
+
+  echo
+  echo "Stopping HyperBot containers..."
+  docker compose stop application redis postgresql
+  echo "HyperBot containers stopped."
+  exit 0
+}
+
+WatchStopCommand() {
+  MainPid="$1"
+
+  while IFS= read -r Command; do
+    case "${Command}" in
+      STOP|stop|Stop)
+        echo "STOP command received."
+        kill -TERM "${MainPid}" >/dev/null 2>&1 || true
+        return
+        ;;
+    esac
+  done
+}
+
+StartStopCommandWatcher() {
+  WatchStopCommand "$$" &
+  StopCommandWatcherPid="$!"
 }
 
 WaitForPostgreSQL() {
@@ -112,13 +151,18 @@ FollowApplicationLogs() {
   fi
 
   echo
-  echo "Following application logs. Stop this process to stop the MCSManager instance console."
-  docker compose logs -f application
+  echo "Following application logs. Send STOP, SIGTERM, or Ctrl+C to stop the containers."
+  docker compose logs -f application &
+  LogsPid="$!"
+  wait "${LogsPid}"
+  LogsPid=""
 }
 
 RequireCommand docker
 RequireCommand npm
 RequireCommand npx
+
+trap StopRelease INT TERM HUP
 
 echo "Starting HyperBot release deployment..."
 docker compose up -d --remove-orphans postgresql redis
@@ -130,4 +174,9 @@ BuildApplication
 SyncDatabaseSchema
 StartReleaseContainers
 PrintStatus
+StartStopCommandWatcher
 FollowApplicationLogs
+
+if [ -n "${StopCommandWatcherPid}" ]; then
+  kill "${StopCommandWatcherPid}" >/dev/null 2>&1 || true
+fi

@@ -42,6 +42,16 @@ The `Giveaway` plugin provides Mee6-style giveaway messages with Discord buttons
 
 Dashboard settings include default channel and duration, maximum winners, required roles, blocked roles, custom messages, embed colors, and role-based bonus entries. Bonus entries use the format `ROLE_ID=ENTRIES`, for example `123456789012345678=3` gives members with that role three total entries.
 
+The `Reminders` plugin provides Mee6-style scheduled messages for server announcements, recurring rules, bump prompts, event notices, or automated embed posts. Reminders are created and edited from the dashboard panel so scheduled content stays controlled by guild managers.
+
+- `/reminder-list`: lists configured reminders, their status, channel, interval, and next run.
+- `/reminder-enable id`: re-enables a disabled reminder.
+- `/reminder-disable id`: pauses a reminder without deleting it.
+- `/reminder-delete id`: removes a reminder permanently.
+- `/reminder-run id`: sends a reminder immediately without changing its next scheduled run.
+
+Dashboard settings include reminder creation/editing, target channel, message/embed mode, schedule interval, next run time, default reminder channel, default embed mode, default interval, embed color, footer text, and maximum reminders per server. Reminder text supports placeholders like `%name%`, `%id%`, `%server%`, `%runCount%`, `%interval%`, and `%nextRun%`.
+
 ## Requirements
 
 - Node.js 22 or newer
