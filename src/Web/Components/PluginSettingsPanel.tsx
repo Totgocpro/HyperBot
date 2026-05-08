@@ -159,6 +159,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Status, SetStatus] = UseState("Loading plugins...");
   const [SavingPluginId, SetSavingPluginId] = UseState("");
   const [SaveFeedbackValue, SetSaveFeedbackValue] = UseState<SaveFeedback | null>(null);
+  const [BlockedPluginId, SetBlockedPluginId] = UseState("");
   const SaveFeedbackTimeout = UseRef<number | null>(null);
 
   const SelectedPlugin = Plugins.find((Plugin) => Plugin.Metadata.Id === SelectedPluginId) ?? Plugins[0];
@@ -166,6 +167,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin) : [];
   const VisibleConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin, SelectedPluginDraftValues, true) : [];
   const HasDashboardOverview = Boolean(SelectedPlugin?.DashboardElements?.length);
+  const SelectedPluginHasUnsavedChanges = SelectedPlugin ? HasPluginUnsavedChanges(SelectedPlugin, DraftValues) : false;
 
   UseEffect(() => {
     void LoadPlugins();
@@ -229,6 +231,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     }
 
     SetSavingPluginId(Plugin.Metadata.Id);
+    const PersistableValues = BuildPersistablePluginValues(Plugin, PluginDraftValues);
 
     try {
       const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
@@ -239,13 +242,15 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
         },
         body: JSON.stringify({
           PluginId: Plugin.Metadata.Id,
-          Values: BuildPersistablePluginValues(Plugin, DraftValues[Plugin.Metadata.Id] ?? {})
+          Values: PersistableValues
         })
       });
 
       if (Response.ok) {
         const Message = "Settings saved successfully.";
 
+        SetPlugins((PreviousPlugins) => UpdatePluginSavedValues(PreviousPlugins, Plugin.Metadata.Id, PersistableValues));
+        SetBlockedPluginId("");
         SetStatus(`${Plugin.Metadata.DisplayName} saved.`);
         ShowSaveFeedback(Message, "Success");
         return;
@@ -326,8 +331,41 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     }));
   }
 
+  function SelectPlugin(PluginId: string): void {
+    if (PluginId === SelectedPlugin?.Metadata.Id) {
+      SetPluginMenuOpen(false);
+      SetSectionMenuOpen(true);
+      return;
+    }
+
+    if (SelectedPlugin && HasPluginUnsavedChanges(SelectedPlugin, DraftValues)) {
+      SetBlockedPluginId(PluginId);
+      SetStatus("Save or cancel your changes before changing plugin.");
+      ShowSaveFeedback("Save or cancel your changes before changing plugin.", "Error");
+      return;
+    }
+
+    SetBlockedPluginId("");
+    SetSelectedPluginId(PluginId);
+    SetPluginMenuOpen(false);
+    SetSectionMenuOpen(true);
+  }
+
+  function ResetSelectedPluginDraft(): void {
+    if (!SelectedPlugin) {
+      return;
+    }
+
+    SetDraftValues((PreviousValues) => ({
+      ...PreviousValues,
+      [SelectedPlugin.Metadata.Id]: BuildPluginDraftValues(SelectedPlugin)
+    }));
+    SetBlockedPluginId("");
+    SetStatus(`${SelectedPlugin.Metadata.DisplayName} changes cancelled.`);
+  }
+
   return (
-    <main className="min-h-screen bg-slate-950 px-3 py-5 text-slate-100 sm:px-6 sm:py-8">
+    <main className={`min-h-screen bg-slate-950 px-3 py-5 text-slate-100 sm:px-6 sm:py-8 ${SelectedPluginHasUnsavedChanges ? "pb-32 sm:pb-28" : ""}`}>
       {SaveFeedbackValue ? <SaveFeedbackToast Feedback={SaveFeedbackValue} /> : null}
       <div className="mx-auto max-w-7xl">
         <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-5 md:flex-row md:items-center md:justify-between">
@@ -367,14 +405,16 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
               {Plugins.map((Plugin) => (
                 <button
                   className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
-                    SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
+                    BlockedPluginId === Plugin.Metadata.Id
+                      ? "border border-red-500/70 bg-red-950/60 text-red-100 shadow-lg shadow-red-950/30"
+                      : SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id
+                        ? SelectedPluginHasUnsavedChanges
+                          ? "border border-red-500/70 bg-red-950/50 text-white"
+                          : "bg-blue-600 text-white"
+                        : "text-slate-300 hover:bg-slate-800"
                   }`}
                   key={Plugin.Metadata.Id}
-                  onClick={() => {
-                    SetSelectedPluginId(Plugin.Metadata.Id);
-                    SetPluginMenuOpen(false);
-                    SetSectionMenuOpen(true);
-                  }}
+                  onClick={() => SelectPlugin(Plugin.Metadata.Id)}
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
                     {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
@@ -555,6 +595,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
           </section>
         </div>
       </div>
+      {SelectedPlugin && SelectedPluginHasUnsavedChanges ? (
+        <UnsavedChangesBar
+          IsSaving={SavingPluginId === SelectedPlugin.Metadata.Id}
+          OnCancel={ResetSelectedPluginDraft}
+          OnSave={() => void SavePlugin(SelectedPlugin)}
+          PluginName={SelectedPlugin.Metadata.DisplayName}
+        />
+      ) : null}
     </main>
   );
 }
@@ -578,6 +626,44 @@ function SaveFeedbackToast(Properties: { Feedback: SaveFeedback }) {
         <span className="block text-sm font-black">{IsSuccess ? "Settings saved" : "Save failed"}</span>
         <span className={IsSuccess ? "mt-0.5 block text-sm text-emerald-100" : "mt-0.5 block text-sm text-red-100"}>{Properties.Feedback.Message}</span>
       </span>
+    </div>
+  );
+}
+
+function UnsavedChangesBar(Properties: {
+  IsSaving: boolean;
+  OnCancel: () => void;
+  OnSave: () => void;
+  PluginName: string;
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 sm:px-6 sm:pb-5">
+      <div className="mx-auto flex max-w-5xl flex-col gap-3 rounded-2xl border border-red-500/60 bg-slate-950 p-3 shadow-2xl shadow-black/60 ring-1 ring-red-500/20 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <div className="min-w-0">
+          <p className="text-sm font-black text-white">Unsaved changes</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Save or cancel your changes in {Properties.PluginName} before changing plugin.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+          <button
+            className="rounded-xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={Properties.IsSaving}
+            onClick={Properties.OnCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={Properties.IsSaving}
+            onClick={Properties.OnSave}
+            type="button"
+          >
+            {Properties.IsSaving ? "Saving..." : "Save changes"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2407,15 +2493,59 @@ function BuildDraftValues(Plugins: DashboardPlugin[]): Record<string, Record<str
   return Object.fromEntries(
     Plugins.map((Plugin) => [
       Plugin.Metadata.Id,
-      Object.fromEntries(Plugin.WebInterface.map((Field) => [Field.Key, Field.Value ?? Field.Default]))
+      BuildPluginDraftValues(Plugin)
     ])
   );
+}
+
+function BuildPluginDraftValues(Plugin: DashboardPlugin): Record<string, unknown> {
+  return Object.fromEntries(Plugin.WebInterface.map((Field) => [Field.Key, Field.Value ?? Field.Default]));
 }
 
 function BuildPersistablePluginValues(Plugin: DashboardPlugin, Values: Record<string, unknown>): Record<string, unknown> {
   const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button").map((Field) => Field.Key));
 
   return Object.fromEntries(Object.entries(Values).filter(([Key]) => PersistableKeys.has(Key)));
+}
+
+function HasPluginUnsavedChanges(Plugin: DashboardPlugin, DraftValues: Record<string, Record<string, unknown>>): boolean {
+  const PluginSavedDraftValues = BuildPluginDraftValues(Plugin);
+  const SavedValues = BuildPersistablePluginValues(Plugin, PluginSavedDraftValues);
+  const CurrentValues = BuildPersistablePluginValues(Plugin, {
+    ...PluginSavedDraftValues,
+    ...(DraftValues[Plugin.Metadata.Id] ?? {})
+  });
+
+  return StableStringify(SavedValues) !== StableStringify(CurrentValues);
+}
+
+function UpdatePluginSavedValues(Plugins: DashboardPlugin[], PluginId: string, SavedValues: Record<string, unknown>): DashboardPlugin[] {
+  return Plugins.map((Plugin) => {
+    if (Plugin.Metadata.Id !== PluginId) {
+      return Plugin;
+    }
+
+    return {
+      ...Plugin,
+      WebInterface: Plugin.WebInterface.map((Field) => ({
+        ...Field,
+        Value: Object.prototype.hasOwnProperty.call(SavedValues, Field.Key) ? SavedValues[Field.Key] : Field.Value
+      }))
+    };
+  });
+}
+
+function StableStringify(Value: unknown): string {
+  if (Array.isArray(Value)) {
+    return `[${Value.map((Item) => StableStringify(Item)).join(",")}]`;
+  }
+
+  if (Value && typeof Value === "object") {
+    const Entries = Object.entries(Value).sort(([LeftKey], [RightKey]) => LeftKey.localeCompare(RightKey));
+    return `{${Entries.map(([Key, EntryValue]) => `${JSON.stringify(Key)}:${StableStringify(EntryValue)}`).join(",")}}`;
+  }
+
+  return JSON.stringify(Value);
 }
 
 const EmbedInputClassName = "mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
