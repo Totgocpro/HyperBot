@@ -28,6 +28,11 @@ until docker compose exec -T postgresql pg_isready -U hyperbot -d postgres >/dev
   sleep 1
 done
 
+echo "Synchronizing PostgreSQL password with .env..."
+docker compose exec -T postgresql psql -U hyperbot -d postgres -v ON_ERROR_STOP=1 -v password="${POSTGRES_PASSWORD}" <<'SQL'
+ALTER USER hyperbot WITH PASSWORD :'password';
+SQL
+
 if [ "${RESET_DATABASE:-false}" = "true" ]; then
   echo "Recreating development database..."
   docker compose exec -T postgresql psql -U hyperbot -d postgres -v ON_ERROR_STOP=1 <<'SQL'

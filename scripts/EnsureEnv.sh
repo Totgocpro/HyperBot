@@ -28,6 +28,18 @@ UrlEncode() {
   printf '%s' "${Value}"
 }
 
+GenerateComposeProjectName() {
+  ProjectPath="$(CDPATH= cd -- "$(dirname -- "${EnvFile}")" && pwd -P)"
+  BaseName="$(basename "${ProjectPath}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g;s/^-*//;s/-*$//;s/--*/-/g')"
+  HashValue="$(printf '%s' "${ProjectPath}" | cksum | awk '{ print $1 }')"
+
+  if [ -z "${BaseName}" ]; then
+    BaseName="hyperbot"
+  fi
+
+  printf 'hyperbot-%s-%s' "${BaseName}" "${HashValue}"
+}
+
 ReadEnvValue() {
   Key="$1"
 
@@ -38,16 +50,37 @@ ReadEnvValue() {
   grep -E "^${Key}=" "${EnvFile}" | tail -n 1 | cut -d "=" -f 2- | sed 's/^"//;s/"$//'
 }
 
+SetEnvKey() {
+  Key="$1"
+  Value="$2"
+
+  if grep -q -E "^${Key}=" "${EnvFile}"; then
+    TempFile="${EnvFile}.tmp"
+    awk -v Key="${Key}" -v Value="${Value}" '
+      BEGIN { Updated = 0 }
+      $0 ~ "^" Key "=" {
+        if (Updated == 0) {
+          print Key "=\"" Value "\""
+          Updated = 1
+        }
+        next
+      }
+      { print }
+    ' "${EnvFile}" > "${TempFile}"
+    mv "${TempFile}" "${EnvFile}"
+  else
+    printf '%s="%s"\n' "${Key}" "${Value}" >> "${EnvFile}"
+  fi
+}
+
 EnsureEnvKey() {
   Key="$1"
   Value="$2"
   CurrentValue="$(ReadEnvValue "${Key}")"
 
-  if [ -n "${CurrentValue}" ]; then
-    return
+  if [ -z "${CurrentValue}" ]; then
+    SetEnvKey "${Key}" "${Value}"
   fi
-
-  printf '%s="%s"\n' "${Key}" "${Value}" >> "${EnvFile}"
 }
 
 if [ ! -f "${EnvFile}" ]; then
@@ -59,6 +92,7 @@ fi
 
 PostgresPassword="$(ReadEnvValue POSTGRES_PASSWORD)"
 RedisPassword="$(ReadEnvValue REDIS_PASSWORD)"
+ComposeProjectName="$(ReadEnvValue COMPOSE_PROJECT_NAME)"
 
 if [ -z "${PostgresPassword}" ] || [ "${PostgresPassword}" = "change-me" ]; then
   PostgresPassword="$(GenerateSecret)"
@@ -68,10 +102,15 @@ if [ -z "${RedisPassword}" ] || [ "${RedisPassword}" = "change-me" ]; then
   RedisPassword="$(GenerateSecret)"
 fi
 
-EnsureEnvKey POSTGRES_PASSWORD "${PostgresPassword}"
-EnsureEnvKey REDIS_PASSWORD "${RedisPassword}"
-EnsureEnvKey POSTGRES_PASSWORD_URL_ENCODED "$(UrlEncode "${PostgresPassword}")"
-EnsureEnvKey REDIS_PASSWORD_URL_ENCODED "$(UrlEncode "${RedisPassword}")"
+if [ -z "${ComposeProjectName}" ]; then
+  ComposeProjectName="$(GenerateComposeProjectName)"
+fi
+
+SetEnvKey COMPOSE_PROJECT_NAME "${ComposeProjectName}"
+SetEnvKey POSTGRES_PASSWORD "${PostgresPassword}"
+SetEnvKey REDIS_PASSWORD "${RedisPassword}"
+SetEnvKey POSTGRES_PASSWORD_URL_ENCODED "$(UrlEncode "${PostgresPassword}")"
+SetEnvKey REDIS_PASSWORD_URL_ENCODED "$(UrlEncode "${RedisPassword}")"
 EnsureEnvKey DISCORD_TOKEN ""
 EnsureEnvKey DISCORD_CLIENT_ID ""
 EnsureEnvKey DISCORD_GUILD_ID ""
@@ -81,3 +120,4 @@ EnsureEnvKey PLUGIN_DIRECTORY "Plugins"
 EnsureEnvKey NEXT_PUBLIC_APP_URL "http://localhost:3000"
 EnsureEnvKey ENABLE_MESSAGE_EVENTS "false"
 EnsureEnvKey FOLLOW_LOGS "true"
+EnsureEnvKey APP_HOST_PORT ""

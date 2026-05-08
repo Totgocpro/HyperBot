@@ -44,7 +44,7 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NODE_ENV: production
     ports:
-      - "127.0.0.1:${APP_HOST_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_HOST_PORT:-}:3000"
     depends_on:
       postgresql:
         condition: service_healthy

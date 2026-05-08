@@ -24,25 +24,67 @@ function Get-HyperBotEnvValue {
   return ($Line.Substring($Key.Length + 1)).Trim('"')
 }
 
+function Set-HyperBotEnvValue {
+  param(
+    [string]$Key,
+    [string]$Value
+  )
+
+  if (Test-Path $EnvFile) {
+    $Lines = Get-Content $EnvFile
+    $Updated = $false
+    $NextLines = foreach ($Line in $Lines) {
+      if ($Line -match "^$([regex]::Escape($Key))=") {
+        if (-not $Updated) {
+          "$Key=`"$Value`""
+          $Updated = $true
+        }
+      } else {
+        $Line
+      }
+    }
+
+    if ($Updated) {
+      Set-Content -Path $EnvFile -Value $NextLines
+      return
+    }
+  }
+
+  Add-Content -Path $EnvFile -Value "$Key=`"$Value`""
+}
+
 function Add-HyperBotEnvValue {
   param(
     [string]$Key,
     [string]$Value
   )
 
-  $CurrentValue = Get-HyperBotEnvValue $Key
-
-  if ($CurrentValue) {
+  if (Get-HyperBotEnvValue $Key) {
     return
   }
 
-  Add-Content -Path $EnvFile -Value "$Key=`"$Value`""
+  Set-HyperBotEnvValue $Key $Value
 }
 
 function ConvertTo-HyperBotUrlEncoded {
   param([string]$Value)
 
   return [System.Uri]::EscapeDataString($Value)
+}
+
+function New-HyperBotComposeProjectName {
+  $ProjectPath = (Resolve-Path (Split-Path -Parent $EnvFile)).Path
+  $BaseName = (Split-Path -Leaf $ProjectPath).ToLowerInvariant() -replace "[^a-z0-9]", "-"
+  $BaseName = ($BaseName -replace "-+", "-").Trim("-")
+
+  if (-not $BaseName) {
+    $BaseName = "hyperbot"
+  }
+
+  $Bytes = [System.Text.Encoding]::UTF8.GetBytes($ProjectPath)
+  $HashBytes = [System.Security.Cryptography.SHA256]::HashData($Bytes)
+  $Hash = (($HashBytes | Select-Object -First 4) | ForEach-Object { $_.ToString("x2") }) -join ""
+  return "hyperbot-$BaseName-$Hash"
 }
 
 if (-not (Test-Path $EnvFile)) {
@@ -54,6 +96,7 @@ if (-not (Test-Path $EnvFile)) {
 
 $PostgresPassword = Get-HyperBotEnvValue "POSTGRES_PASSWORD"
 $RedisPassword = Get-HyperBotEnvValue "REDIS_PASSWORD"
+$ComposeProjectName = Get-HyperBotEnvValue "COMPOSE_PROJECT_NAME"
 
 if (-not $PostgresPassword -or $PostgresPassword -eq "change-me") {
   $PostgresPassword = New-HyperBotSecret
@@ -63,10 +106,15 @@ if (-not $RedisPassword -or $RedisPassword -eq "change-me") {
   $RedisPassword = New-HyperBotSecret
 }
 
-Add-HyperBotEnvValue "POSTGRES_PASSWORD" $PostgresPassword
-Add-HyperBotEnvValue "REDIS_PASSWORD" $RedisPassword
-Add-HyperBotEnvValue "POSTGRES_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $PostgresPassword)
-Add-HyperBotEnvValue "REDIS_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $RedisPassword)
+if (-not $ComposeProjectName) {
+  $ComposeProjectName = New-HyperBotComposeProjectName
+}
+
+Set-HyperBotEnvValue "COMPOSE_PROJECT_NAME" $ComposeProjectName
+Set-HyperBotEnvValue "POSTGRES_PASSWORD" $PostgresPassword
+Set-HyperBotEnvValue "REDIS_PASSWORD" $RedisPassword
+Set-HyperBotEnvValue "POSTGRES_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $PostgresPassword)
+Set-HyperBotEnvValue "REDIS_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $RedisPassword)
 Add-HyperBotEnvValue "DISCORD_TOKEN" ""
 Add-HyperBotEnvValue "DISCORD_CLIENT_ID" ""
 Add-HyperBotEnvValue "DISCORD_GUILD_ID" ""
@@ -76,3 +124,4 @@ Add-HyperBotEnvValue "PLUGIN_DIRECTORY" "Plugins"
 Add-HyperBotEnvValue "NEXT_PUBLIC_APP_URL" "http://localhost:3000"
 Add-HyperBotEnvValue "ENABLE_MESSAGE_EVENTS" "false"
 Add-HyperBotEnvValue "FOLLOW_LOGS" "true"
+Add-HyperBotEnvValue "APP_HOST_PORT" ""

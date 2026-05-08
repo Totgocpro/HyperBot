@@ -83,6 +83,14 @@ WaitForPostgreSQL() {
   done
 }
 
+SyncPostgreSQLPassword() {
+  echo "Synchronizing PostgreSQL password with .env..."
+
+  docker compose exec -T postgresql psql -U hyperbot -d postgres -v ON_ERROR_STOP=1 -v password="${POSTGRES_PASSWORD}" <<'SQL'
+ALTER USER hyperbot WITH PASSWORD :'password';
+SQL
+}
+
 EnsureDatabaseExists() {
   echo "Ensuring PostgreSQL database exists..."
 
@@ -175,6 +183,7 @@ export REDIS_URL="redis://:${REDIS_PASSWORD_URL_ENCODED}@127.0.0.1:${RedisHostPo
 echo "PostgreSQL local port: ${PostgresHostPort}"
 echo "Redis local port: ${RedisHostPort}"
 WaitForPostgreSQL
+SyncPostgreSQLPassword
 BackupDatabase
 EnsureDatabaseExists
 InstallDependencies

@@ -44,6 +44,7 @@ docker compose up -d --remove-orphans postgresql redis || exit /b 1
 
 call :SetDockerHostUrls || exit /b 1
 call :WaitForPostgreSQL || exit /b 1
+call :SyncPostgreSQLPassword || exit /b 1
 call :BackupDatabase || exit /b 1
 call :EnsureDatabaseExists || exit /b 1
 call :InstallDependencies || exit /b 1
@@ -82,6 +83,11 @@ if errorlevel 1 (
   timeout /t 1 /nobreak >nul
   goto WaitForPostgreSQLLoop
 )
+exit /b 0
+
+:SyncPostgreSQLPassword
+echo Synchronizing PostgreSQL password with .env...
+docker compose exec -T postgresql psql -U hyperbot -d postgres -v ON_ERROR_STOP=1 -c "ALTER USER hyperbot WITH PASSWORD '%POSTGRES_PASSWORD%';" || exit /b 1
 exit /b 0
 
 :EnsureDatabaseExists
