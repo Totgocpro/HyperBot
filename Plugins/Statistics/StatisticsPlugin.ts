@@ -1,4 +1,4 @@
-import { EmbedBuilder, type ChatInputCommandInteraction, type GuildMember, type Message, type PartialGuildMember, type PartialMessage, type VoiceState } from "discord.js";
+import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, type ChatInputCommandInteraction, type Guild, type GuildMember, type Message, type PartialGuildMember, type PartialMessage, type VoiceChannel, type VoiceState } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
 type DailyCounters = Record<string, number>;
@@ -27,11 +27,47 @@ type StatsTextConfig = {
   StatsEmbedColor: string;
 };
 
+type EditableEmbedField = {
+  Name: string;
+  Value: string;
+  Inline: boolean;
+};
+
+type EditableEmbed = {
+  Title: string;
+  Description: string;
+  Color: string;
+  Url: string;
+  AuthorName: string;
+  AuthorIconUrl: string;
+  ThumbnailUrl: string;
+  ImageUrl: string;
+  FooterText: string;
+  FooterIconUrl: string;
+  Timestamp: boolean;
+  Fields: EditableEmbedField[];
+  ImageDataUrl: string;
+  ImageName: string;
+};
+
+type BuiltStatsEmbed = {
+  Embed: EmbedBuilder;
+  Files: AttachmentBuilder[];
+};
+
+type ChannelCounter = {
+  Id: string;
+  Enabled: boolean;
+  ChannelId: string;
+  Template: string;
+};
+
 const MessagesDailyKey = "MessagesDaily";
 const VoiceSecondsDailyKey = "VoiceSecondsDaily";
 const JoinsDailyKey = "JoinsDaily";
 const LeavesDailyKey = "LeavesDaily";
 const MessageLedgerKey = "MessageLedger";
+const ChannelCountersKey = "ChannelCounters";
 
 const DefaultStatsTextConfig: StatsTextConfig = {
   StatsEmbedTitle: "%user%'s statistics",
@@ -44,6 +80,34 @@ const DefaultStatsTextConfig: StatsTextConfig = {
   AllTimeLabel: "All-time",
   StatsFooterText: "Statistics are tracked from the moment the plugin version with user stats is active.",
   StatsEmbedColor: "#3b82f6"
+};
+
+const DefaultStatsEmbed: EditableEmbed = {
+  Title: "%user%'s statistics",
+  Description: "",
+  Color: "#3b82f6",
+  Url: "",
+  AuthorName: "",
+  AuthorIconUrl: "",
+  ThumbnailUrl: "%avatar%",
+  ImageUrl: "",
+  FooterText: "Statistics are tracked from the moment the plugin version with user stats is active.",
+  FooterIconUrl: "",
+  Timestamp: true,
+  Fields: [
+    {
+      Name: "Messages",
+      Value: "Today: **%messages_today%**\nThis week: **%messages_week%**\nThis month: **%messages_month%**\nAll-time: **%messages_all%**",
+      Inline: true
+    },
+    {
+      Name: "Voice time",
+      Value: "Today: **%voice_today%**\nThis week: **%voice_week%**\nThis month: **%voice_month%**\nThis year: **%voice_year%**\nAll-time: **%voice_all%**",
+      Inline: true
+    }
+  ],
+  ImageDataUrl: "",
+  ImageName: ""
 };
 
 export default class StatisticsPlugin extends BasePlugin {
@@ -116,6 +180,7 @@ export default class StatisticsPlugin extends BasePlugin {
 
   public async OnTick(): Promise<void> {
     await this.FlushAllVoiceSessions();
+    await this.UpdateChannelCounters();
   }
 
   public async OnSlashCommand(CommandName: string, Interaction: ChatInputCommandInteraction): Promise<void> {
@@ -136,40 +201,11 @@ export default class StatisticsPlugin extends BasePlugin {
     const Now = new Date();
     const DisplayName = await this.GetInteractionDisplayName(Interaction);
     const TextConfig = await this.GetStatsTextConfig(Interaction.guildId);
-    const Embed = new EmbedBuilder()
-      .setColor(this.ParseEmbedColor(TextConfig.StatsEmbedColor))
-      .setTitle(this.ReplaceStatsTags(TextConfig.StatsEmbedTitle, DisplayName))
-      .setThumbnail(Interaction.user.displayAvatarURL())
-      .addFields(
-        {
-          name: this.ReplaceStatsTags(TextConfig.MessagesFieldTitle, DisplayName),
-          value: [
-            `${TextConfig.TodayLabel}: **${this.SumRange(MessageCounters, this.GetStartOfDay(Now), Now).toLocaleString()}**`,
-            `${TextConfig.ThisWeekLabel}: **${this.SumRange(MessageCounters, this.GetStartOfWeek(Now), Now).toLocaleString()}**`,
-            `${TextConfig.ThisMonthLabel}: **${this.SumRange(MessageCounters, this.GetStartOfMonth(Now), Now).toLocaleString()}**`,
-            `${TextConfig.AllTimeLabel}: **${this.SumAll(MessageCounters).toLocaleString()}**`
-          ].join("\n"),
-          inline: true
-        },
-        {
-          name: this.ReplaceStatsTags(TextConfig.VoiceFieldTitle, DisplayName),
-          value: [
-            `${TextConfig.TodayLabel}: **${this.FormatDuration(this.SumRange(VoiceCounters, this.GetStartOfDay(Now), Now))}**`,
-            `${TextConfig.ThisWeekLabel}: **${this.FormatDuration(this.SumRange(VoiceCounters, this.GetStartOfWeek(Now), Now))}**`,
-            `${TextConfig.ThisMonthLabel}: **${this.FormatDuration(this.SumRange(VoiceCounters, this.GetStartOfMonth(Now), Now))}**`,
-            `${TextConfig.ThisYearLabel}: **${this.FormatDuration(this.SumRange(VoiceCounters, this.GetStartOfYear(Now), Now))}**`,
-            `${TextConfig.AllTimeLabel}: **${this.FormatDuration(this.SumAll(VoiceCounters))}**`
-          ].join("\n"),
-          inline: true
-        }
-      )
-      .setTimestamp(new Date());
+    const StatsEmbed = await this.GetStatsEmbedConfig(Interaction.guildId, TextConfig);
+    const TemplateValues = this.BuildStatsTemplateValues(DisplayName, Interaction.user.displayAvatarURL(), MessageCounters, VoiceCounters, Now);
+    const BuiltEmbed = this.BuildStatsEmbed(StatsEmbed, TemplateValues);
 
-    if (TextConfig.StatsFooterText.trim()) {
-      Embed.setFooter({ text: this.ReplaceStatsTags(TextConfig.StatsFooterText, DisplayName) });
-    }
-
-    await Interaction.reply({ embeds: [Embed], ephemeral: true });
+    await Interaction.reply({ embeds: [BuiltEmbed.Embed], files: BuiltEmbed.Files, ephemeral: true });
   }
 
   private async FlushAllVoiceSessions(): Promise<void> {
@@ -389,6 +425,323 @@ export default class StatisticsPlugin extends BasePlugin {
     };
   }
 
+  private async GetStatsEmbedConfig(GuildId: string, TextConfig: StatsTextConfig): Promise<EditableEmbed> {
+    const StoredValue = await this.Storage.GetGlobalConfig<unknown>(GuildId, "StatsEmbed");
+
+    if (!this.IsRecord(StoredValue)) {
+      return this.BuildLegacyStatsEmbed(TextConfig);
+    }
+
+    return {
+      Title: this.GetRecordString(StoredValue, "Title", DefaultStatsEmbed.Title),
+      Description: this.GetRecordString(StoredValue, "Description", DefaultStatsEmbed.Description),
+      Color: this.GetRecordString(StoredValue, "Color", DefaultStatsEmbed.Color),
+      Url: this.GetRecordString(StoredValue, "Url", DefaultStatsEmbed.Url),
+      AuthorName: this.GetRecordString(StoredValue, "AuthorName", DefaultStatsEmbed.AuthorName),
+      AuthorIconUrl: this.GetRecordString(StoredValue, "AuthorIconUrl", DefaultStatsEmbed.AuthorIconUrl),
+      ThumbnailUrl: this.GetRecordString(StoredValue, "ThumbnailUrl", DefaultStatsEmbed.ThumbnailUrl),
+      ImageUrl: this.GetRecordString(StoredValue, "ImageUrl", DefaultStatsEmbed.ImageUrl),
+      FooterText: this.GetRecordString(StoredValue, "FooterText", DefaultStatsEmbed.FooterText),
+      FooterIconUrl: this.GetRecordString(StoredValue, "FooterIconUrl", DefaultStatsEmbed.FooterIconUrl),
+      Timestamp: typeof StoredValue.Timestamp === "boolean" ? StoredValue.Timestamp : DefaultStatsEmbed.Timestamp,
+      Fields: this.ParseEmbedFields(StoredValue.Fields),
+      ImageDataUrl: this.GetRecordString(StoredValue, "ImageDataUrl", DefaultStatsEmbed.ImageDataUrl),
+      ImageName: this.GetRecordString(StoredValue, "ImageName", DefaultStatsEmbed.ImageName)
+    };
+  }
+
+  private BuildLegacyStatsEmbed(TextConfig: StatsTextConfig): EditableEmbed {
+    return {
+      ...DefaultStatsEmbed,
+      Title: TextConfig.StatsEmbedTitle,
+      Color: TextConfig.StatsEmbedColor,
+      FooterText: TextConfig.StatsFooterText,
+      Fields: [
+        {
+          Name: TextConfig.MessagesFieldTitle,
+          Value: [
+            `${TextConfig.TodayLabel}: **%messages_today%**`,
+            `${TextConfig.ThisWeekLabel}: **%messages_week%**`,
+            `${TextConfig.ThisMonthLabel}: **%messages_month%**`,
+            `${TextConfig.AllTimeLabel}: **%messages_all%**`
+          ].join("\n"),
+          Inline: true
+        },
+        {
+          Name: TextConfig.VoiceFieldTitle,
+          Value: [
+            `${TextConfig.TodayLabel}: **%voice_today%**`,
+            `${TextConfig.ThisWeekLabel}: **%voice_week%**`,
+            `${TextConfig.ThisMonthLabel}: **%voice_month%**`,
+            `${TextConfig.ThisYearLabel}: **%voice_year%**`,
+            `${TextConfig.AllTimeLabel}: **%voice_all%**`
+          ].join("\n"),
+          Inline: true
+        }
+      ]
+    };
+  }
+
+  private BuildStatsTemplateValues(DisplayName: string, AvatarUrl: string, MessageCounters: DailyCounters, VoiceCounters: DailyCounters, Now: Date): Record<string, string> {
+    const MessagesToday = this.SumRange(MessageCounters, this.GetStartOfDay(Now), Now);
+    const MessagesWeek = this.SumRange(MessageCounters, this.GetStartOfWeek(Now), Now);
+    const MessagesMonth = this.SumRange(MessageCounters, this.GetStartOfMonth(Now), Now);
+    const MessagesAll = this.SumAll(MessageCounters);
+    const VoiceToday = this.SumRange(VoiceCounters, this.GetStartOfDay(Now), Now);
+    const VoiceWeek = this.SumRange(VoiceCounters, this.GetStartOfWeek(Now), Now);
+    const VoiceMonth = this.SumRange(VoiceCounters, this.GetStartOfMonth(Now), Now);
+    const VoiceYear = this.SumRange(VoiceCounters, this.GetStartOfYear(Now), Now);
+    const VoiceAll = this.SumAll(VoiceCounters);
+
+    return {
+      "%user%": DisplayName,
+      "%avatar%": AvatarUrl,
+      "%messages_today%": MessagesToday.toLocaleString(),
+      "%messages_week%": MessagesWeek.toLocaleString(),
+      "%messages_month%": MessagesMonth.toLocaleString(),
+      "%messages_all%": MessagesAll.toLocaleString(),
+      "%voice_today%": this.FormatDuration(VoiceToday),
+      "%voice_week%": this.FormatDuration(VoiceWeek),
+      "%voice_month%": this.FormatDuration(VoiceMonth),
+      "%voice_year%": this.FormatDuration(VoiceYear),
+      "%voice_all%": this.FormatDuration(VoiceAll),
+      "%voice_today_seconds%": VoiceToday.toLocaleString(),
+      "%voice_week_seconds%": VoiceWeek.toLocaleString(),
+      "%voice_month_seconds%": VoiceMonth.toLocaleString(),
+      "%voice_year_seconds%": VoiceYear.toLocaleString(),
+      "%voice_all_seconds%": VoiceAll.toLocaleString()
+    };
+  }
+
+  private BuildStatsEmbed(Source: EditableEmbed, TemplateValues: Record<string, string>): BuiltStatsEmbed {
+    const Embed = new EmbedBuilder().setColor(this.ParseEmbedColor(Source.Color));
+    const Files: AttachmentBuilder[] = [];
+    const Title = this.ApplyStatsTemplate(Source.Title, TemplateValues).trim();
+    const Description = this.ApplyStatsTemplate(Source.Description, TemplateValues).trim();
+    const Url = this.ApplyStatsTemplate(Source.Url, TemplateValues).trim();
+    const AuthorName = this.ApplyStatsTemplate(Source.AuthorName, TemplateValues).trim();
+    const AuthorIconUrl = this.ApplyStatsTemplate(Source.AuthorIconUrl, TemplateValues).trim();
+    const ThumbnailUrl = this.ApplyStatsTemplate(Source.ThumbnailUrl, TemplateValues).trim();
+    const ImageUrl = this.ApplyStatsTemplate(Source.ImageUrl, TemplateValues).trim();
+    const FooterText = this.ApplyStatsTemplate(Source.FooterText, TemplateValues).trim();
+    const FooterIconUrl = this.ApplyStatsTemplate(Source.FooterIconUrl, TemplateValues).trim();
+
+    if (Title) {
+      Embed.setTitle(Title.slice(0, 256));
+    }
+
+    if (Description) {
+      Embed.setDescription(Description.slice(0, 4096));
+    }
+
+    if (Url) {
+      Embed.setURL(Url);
+    }
+
+    if (AuthorName) {
+      Embed.setAuthor({ name: AuthorName.slice(0, 256), iconURL: AuthorIconUrl || undefined });
+    }
+
+    if (ThumbnailUrl) {
+      Embed.setThumbnail(ThumbnailUrl);
+    }
+
+    const ParsedImage = this.ParseDataImage(Source.ImageDataUrl, Source.ImageName);
+
+    if (ParsedImage) {
+      Files.push(new AttachmentBuilder(ParsedImage.Buffer, { name: ParsedImage.Name }));
+      Embed.setImage(`attachment://${ParsedImage.Name}`);
+    } else if (ImageUrl) {
+      Embed.setImage(ImageUrl);
+    }
+
+    if (FooterText) {
+      Embed.setFooter({ text: FooterText.slice(0, 2048), iconURL: FooterIconUrl || undefined });
+    }
+
+    if (Source.Timestamp) {
+      Embed.setTimestamp(new Date());
+    }
+
+    const Fields = Source.Fields.map((Field) => ({
+      name: this.ApplyStatsTemplate(Field.Name, TemplateValues).trim().slice(0, 256),
+      value: this.ApplyStatsTemplate(Field.Value, TemplateValues).trim().slice(0, 1024),
+      inline: Field.Inline
+    })).filter((Field) => Field.name && Field.value).slice(0, 25);
+
+    if (Fields.length > 0) {
+      Embed.addFields(Fields);
+    }
+
+    return { Embed, Files };
+  }
+
+  private ApplyStatsTemplate(Value: string, TemplateValues: Record<string, string>): string {
+    return Object.entries(TemplateValues).reduce((CurrentValue, [Key, Replacement]) => CurrentValue.replaceAll(Key, Replacement), Value);
+  }
+
+  private ParseEmbedFields(Value: unknown): EditableEmbedField[] {
+    if (!Array.isArray(Value)) {
+      return DefaultStatsEmbed.Fields;
+    }
+
+    return Value.filter((Item): Item is Record<string, unknown> => this.IsRecord(Item)).map((Item) => ({
+      Name: typeof Item.Name === "string" ? Item.Name : "",
+      Value: typeof Item.Value === "string" ? Item.Value : "",
+      Inline: Item.Inline === true
+    })).filter((Field) => Field.Name.trim() || Field.Value.trim());
+  }
+
+  private ParseDataImage(DataUrl: string, ImageName: string): { Buffer: Buffer; Name: string } | null {
+    const Match = /^data:image\/(png|jpe?g|gif|webp);base64,([a-z0-9+/=]+)$/iu.exec(DataUrl);
+
+    if (!Match) {
+      return null;
+    }
+
+    const Extension = Match[1].toLowerCase() === "jpeg" ? "jpg" : Match[1].toLowerCase();
+    const SafeBaseName = ImageName.replace(/\.[^.]+$/u, "").replace(/[^a-z0-9_-]/giu, "-").replace(/-+/gu, "-").replace(/^-|-$/gu, "").slice(0, 40) || "stats-image";
+    return {
+      Buffer: Buffer.from(Match[2], "base64"),
+      Name: `${SafeBaseName}.${Extension}`
+    };
+  }
+
+  private IsRecord(Value: unknown): Value is Record<string, unknown> {
+    return typeof Value === "object" && Value !== null && !Array.isArray(Value);
+  }
+
+  private GetRecordString(Value: Record<string, unknown>, Key: string, Fallback: string): string {
+    return typeof Value[Key] === "string" ? Value[Key] : Fallback;
+  }
+
+  private async UpdateChannelCounters(): Promise<void> {
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      const Counters = await this.GetChannelCounters(Guild.id);
+      let HasChanges = false;
+
+      for (const Counter of Counters) {
+        if (!Counter.Enabled || !Counter.Template.trim()) {
+          continue;
+        }
+
+        const Channel = await this.ResolveOrCreateCounterChannel(Guild, Counter);
+
+        if (!Channel) {
+          continue;
+        }
+
+        if (Counter.ChannelId !== Channel.id) {
+          Counter.ChannelId = Channel.id;
+          HasChanges = true;
+        }
+
+        const NextName = this.BuildCounterChannelName(Counter.Template, Guild);
+
+        if (Channel.name !== NextName) {
+          await Channel.setName(NextName, "Statistics channel counter update").catch((ErrorValue: unknown) => {
+            this.Logger.Warn("Statistics counter channel could not be renamed.", {
+              ChannelId: Channel.id,
+              Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+              GuildId: Guild.id
+            });
+          });
+        }
+      }
+
+      if (HasChanges) {
+        await this.Storage.SetGlobalConfig(Guild.id, ChannelCountersKey, Counters);
+      }
+    }
+  }
+
+  private async ResolveOrCreateCounterChannel(Guild: Guild, Counter: ChannelCounter): Promise<VoiceChannel | null> {
+    if (Counter.ChannelId) {
+      const ExistingChannel = await Guild.channels.fetch(Counter.ChannelId).catch(() => null);
+
+      if (ExistingChannel?.type === ChannelType.GuildVoice) {
+        await this.EnsureCounterChannelLocked(ExistingChannel);
+        return ExistingChannel;
+      }
+    }
+
+    const Name = this.BuildCounterChannelName(Counter.Template, Guild);
+    const CreatedChannel = await Guild.channels.create({
+      name: Name,
+      type: ChannelType.GuildVoice,
+      reason: "Statistics channel counter created",
+      permissionOverwrites: [
+        {
+          id: Guild.id,
+          deny: [PermissionFlagsBits.Connect]
+        }
+      ]
+    }).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Statistics counter channel could not be created.", {
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        GuildId: Guild.id
+      });
+      return null;
+    });
+
+    return CreatedChannel?.type === ChannelType.GuildVoice ? CreatedChannel : null;
+  }
+
+  private async EnsureCounterChannelLocked(Channel: VoiceChannel): Promise<void> {
+    const EveryoneOverwrite = Channel.permissionOverwrites.cache.get(Channel.guild.id);
+
+    if (EveryoneOverwrite?.deny.has(PermissionFlagsBits.Connect)) {
+      return;
+    }
+
+    await Channel.permissionOverwrites.edit(Channel.guild.id, {
+      Connect: false
+    }, {
+      reason: "Statistics channel counter locked"
+    }).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Statistics counter channel could not be locked.", {
+        ChannelId: Channel.id,
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        GuildId: Channel.guild.id
+      });
+    });
+  }
+
+  private BuildCounterChannelName(Template: string, Guild: Guild): string {
+    const MembersCount = Guild.memberCount;
+    const BotsCount = Guild.members.cache.filter((Member) => Member.user.bot).size;
+    const HumansCount = Math.max(0, MembersCount - BotsCount);
+    const OnlineCount = Guild.members.cache.filter((Member) => Member.presence?.status && Member.presence.status !== "offline").size;
+    const VoiceCount = Guild.voiceStates.cache.filter((State) => Boolean(State.channelId)).size;
+    const BoostCount = Guild.premiumSubscriptionCount ?? 0;
+
+    return Template
+      .replaceAll("%members_count%", MembersCount.toLocaleString())
+      .replaceAll("%humans_count%", HumansCount.toLocaleString())
+      .replaceAll("%bots_count%", BotsCount.toLocaleString())
+      .replaceAll("%online_count%", OnlineCount.toLocaleString())
+      .replaceAll("%voice_count%", VoiceCount.toLocaleString())
+      .replaceAll("%channels_count%", Guild.channels.cache.size.toLocaleString())
+      .replaceAll("%roles_count%", Guild.roles.cache.size.toLocaleString())
+      .replaceAll("%boosts_count%", BoostCount.toLocaleString())
+      .slice(0, 100) || "Statistics";
+  }
+
+  private async GetChannelCounters(GuildId: string): Promise<ChannelCounter[]> {
+    const StoredValue = await this.Storage.GetGlobalConfig<unknown>(GuildId, ChannelCountersKey);
+
+    if (!Array.isArray(StoredValue)) {
+      return [];
+    }
+
+    return StoredValue.filter((Value): Value is Record<string, unknown> => typeof Value === "object" && Value !== null && !Array.isArray(Value)).map((Value) => ({
+      Id: typeof Value.Id === "string" ? Value.Id : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      Enabled: Value.Enabled !== false,
+      ChannelId: typeof Value.ChannelId === "string" ? Value.ChannelId : "",
+      Template: typeof Value.Template === "string" ? Value.Template : "Members: %members_count%"
+    }));
+  }
+
   private async GetTextConfigValue(GuildId: string, Key: keyof StatsTextConfig): Promise<string> {
     const StoredValue = await this.Storage.GetGlobalConfig<string>(GuildId, Key);
     const SafeValue = StoredValue ?? DefaultStatsTextConfig[Key];
@@ -409,10 +762,6 @@ export default class StatisticsPlugin extends BasePlugin {
     }
 
     return Interaction.user.globalName ?? Interaction.user.displayName;
-  }
-
-  private ReplaceStatsTags(Value: string, DisplayName: string): string {
-    return Value.replace(/%user%/giu, DisplayName);
   }
 
   private ParseEmbedColor(ColorValue: string): number {

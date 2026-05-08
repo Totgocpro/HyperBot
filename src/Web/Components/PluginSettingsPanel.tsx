@@ -142,6 +142,13 @@ type NotificationSourceDraft = {
   Embed: EditableEmbed;
 };
 
+type ChannelCounterDraft = {
+  Id: string;
+  Enabled: boolean;
+  ChannelId: string;
+  Template: string;
+};
+
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
@@ -481,6 +488,15 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   ) : SelectedPlugin.Metadata.Id === "Notifications" ? (
                     <NotificationsEditor
                       DraftValues={DraftValues}
+                      OnCreateChannel={CreateChannel}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : SelectedPlugin.Metadata.Id === "Statistics" ? (
+                    <StatisticsEditor
+                      DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
                       Plugin={SelectedPlugin}
                       SetStatus={SetStatus}
@@ -1373,6 +1389,140 @@ function NotificationsEditor(Properties: {
                   <span>Last checked: {Source.LastCheckedAt ? FormatReminderDate(Source.LastCheckedAt) : "Never"}</span>
                   <button className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500" onClick={() => RemoveSource(Source.Id)} type="button">
                     Delete source
+                  </button>
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function StatisticsEditor(Properties: {
+  DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
+  OnCreateChannel: (Name: string) => Promise<string | null>;
+  Plugin: DashboardPlugin;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const PluginId = Properties.Plugin.Metadata.Id;
+  const Values = Properties.DraftValues[PluginId] ?? {};
+  const Counters = ParseChannelCounters(Values.ChannelCounters);
+  const CounterField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "ChannelCounters");
+  const GenericFields = Properties.Plugin.WebInterface.filter((Field) => Field.Key !== "ChannelCounters");
+  const ConfigSections = BuildConfigSections({ ...Properties.Plugin, WebInterface: GenericFields }, Values, true);
+
+  function SetValue(Key: string, Value: unknown): void {
+    Properties.UpdateDraftValue(PluginId, Key, Value);
+  }
+
+  function SetCounters(NextCounters: ChannelCounterDraft[]): void {
+    SetValue("ChannelCounters", NextCounters);
+  }
+
+  function AddCounter(): void {
+    SetCounters([
+      ...Counters,
+      {
+        Id: CreateClientId(),
+        Enabled: true,
+        ChannelId: "",
+        Template: "Members: %members_count%"
+      }
+    ]);
+    Properties.SetStatus("Channel counter added in draft. Use Save to persist it.");
+  }
+
+  function UpdateCounter(CounterId: string, Patch: Partial<ChannelCounterDraft>): void {
+    SetCounters(Counters.map((Counter) => Counter.Id === CounterId ? { ...Counter, ...Patch } : Counter));
+  }
+
+  function RemoveCounter(CounterId: string): void {
+    SetCounters(Counters.filter((Counter) => Counter.Id !== CounterId));
+  }
+
+  return (
+    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-statistics">
+      <div className="mb-5">
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Statistics</p>
+        <h3 className="mt-2 text-2xl font-black text-white">Tracking and channel counters</h3>
+      </div>
+
+      <div className="grid gap-5">
+        {Properties.Plugin.DashboardElements?.length ? (
+          <section className="scroll-mt-28 rounded-3xl border border-slate-800 bg-slate-950 p-4" id="plugin-section-overview">
+            <div className="grid gap-4">
+              {Properties.Plugin.DashboardElements.map((Element) => (
+                <DashboardElementRenderer Element={Element} key={Element.Key} />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {ConfigSections.map((Section) => (
+          <section className="scroll-mt-28 rounded-3xl border border-slate-800 bg-slate-950 p-4" id={`plugin-section-${Section.Id}`} key={Section.Id}>
+            <h4 className="text-xl font-black text-white">{Section.Label}</h4>
+            <div className="mt-4 grid gap-4">
+              {Section.Fields.map((Field) => (
+                <div key={Field.Key}>{RenderField(Properties.GuildId, PluginId, Field, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}</div>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        <section className="scroll-mt-28 rounded-3xl border border-slate-800 bg-slate-950 p-4" id="plugin-section-channel-counters">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="text-xl font-black text-white">Channel counters</h4>
+              <p className="mt-1 text-sm text-slate-500">Voice channels are locked automatically. Leave the channel empty to let the bot create it.</p>
+            </div>
+            <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={AddCounter} type="button">
+              Add counter
+            </button>
+          </div>
+
+          <p className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400">
+            Tags: %members_count%, %humans_count%, %bots_count%, %online_count%, %voice_count%, %channels_count%, %roles_count%, %boosts_count%.
+          </p>
+
+          <div className="mt-4 grid gap-4">
+            {Counters.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No channel counter configured.</p> : null}
+            {Counters.map((Counter) => (
+              <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4" key={Counter.Id}>
+                <div className="grid gap-4 lg:grid-cols-[1fr_1fr_150px]">
+                  <label className="block text-sm font-bold text-slate-200">
+                    Channel name template
+                    <input className={EmbedInputClassName} onChange={(Event) => UpdateCounter(Counter.Id, { Template: Event.target.value })} value={Counter.Template} />
+                  </label>
+                  <div className="block text-sm font-bold text-slate-200">
+                    Existing voice channel
+                    <CustomSelect
+                      ClassName="mt-2"
+                      CreateButtonLabel="Create channel"
+                      CreateColorEnabled={false}
+                      CreateErrorMessage="Channel creation failed."
+                      CreateInputPlaceholder="counter-channel"
+                      CreateLabel="Create channel"
+                      EmptyCreateError="Channel name is required."
+                      EmptyLabel="Auto-create channel"
+                      OnChange={(ChannelId) => UpdateCounter(Counter.Id, { ChannelId })}
+                      OnCreate={Properties.OnCreateChannel}
+                      Options={CounterField?.Options ?? []}
+                      Value={Counter.ChannelId}
+                    />
+                  </div>
+                  <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 font-semibold text-slate-100">
+                    Enabled
+                    <input checked={Counter.Enabled} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateCounter(Counter.Id, { Enabled: Event.target.checked })} type="checkbox" />
+                  </label>
+                </div>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-500">Current channel ID: {Counter.ChannelId || "Will be created after Save and next bot tick."}</p>
+                  <button className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500" onClick={() => RemoveCounter(Counter.Id)} type="button">
+                    Delete counter
                   </button>
                 </div>
               </section>
@@ -2411,6 +2561,19 @@ function BuildNotificationSourceName(Type: NotificationSourceType): string {
 
 function NotificationSourceUsesKeys(Type: NotificationSourceType): boolean {
   return Type === "Twitch" || Type === "Kick" || Type === "X" || Type === "Reddit" || Type === "Instagram";
+}
+
+function ParseChannelCounters(Value: unknown): ChannelCounterDraft[] {
+  if (!Array.isArray(Value)) {
+    return [];
+  }
+
+  return Value.filter(IsRecord).map((CounterValue) => ({
+    Id: typeof CounterValue.Id === "string" ? CounterValue.Id : CreateClientId(),
+    Enabled: CounterValue.Enabled !== false,
+    ChannelId: typeof CounterValue.ChannelId === "string" ? CounterValue.ChannelId : "",
+    Template: typeof CounterValue.Template === "string" ? CounterValue.Template : "Members: %members_count%"
+  }));
 }
 
 const ReminderWeekdays = [

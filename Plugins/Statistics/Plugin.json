@@ -31,74 +31,48 @@
       "SupportedChannelTypes": ["GuildVoice"]
     },
     {
-      "Key": "StatsEmbedTitle",
-      "Type": "String",
-      "Label": "Stats embed title",
-      "Default": "%user%'s statistics",
-      "Section": "Command text"
+      "Key": "StatsEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Stats command embed",
+      "Description": "Available tags: %user%, %messages_today%, %messages_week%, %messages_month%, %messages_all%, %voice_today%, %voice_week%, %voice_month%, %voice_year%, %voice_all%.",
+      "Default": {
+        "Name": "Stats command",
+        "Title": "%user%'s statistics",
+        "Description": "",
+        "Color": "#3b82f6",
+        "Url": "",
+        "AuthorName": "",
+        "AuthorIconUrl": "",
+        "ThumbnailUrl": "%avatar%",
+        "ImageUrl": "",
+        "FooterText": "Statistics are tracked from the moment the plugin version with user stats is active.",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [
+          {
+            "Name": "Messages",
+            "Value": "Today: **%messages_today%**\nThis week: **%messages_week%**\nThis month: **%messages_month%**\nAll-time: **%messages_all%**",
+            "Inline": true
+          },
+          {
+            "Name": "Voice time",
+            "Value": "Today: **%voice_today%**\nThis week: **%voice_week%**\nThis month: **%voice_month%**\nThis year: **%voice_year%**\nAll-time: **%voice_all%**",
+            "Inline": true
+          }
+        ],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Stats command"
     },
     {
-      "Key": "MessagesFieldTitle",
-      "Type": "String",
-      "Label": "Messages field title",
-      "Default": "Messages",
-      "Section": "Command text"
-    },
-    {
-      "Key": "VoiceFieldTitle",
-      "Type": "String",
-      "Label": "Voice field title",
-      "Default": "Voice time",
-      "Section": "Command text"
-    },
-    {
-      "Key": "TodayLabel",
-      "Type": "String",
-      "Label": "Today label",
-      "Default": "Today",
-      "Section": "Command text"
-    },
-    {
-      "Key": "ThisWeekLabel",
-      "Type": "String",
-      "Label": "This week label",
-      "Default": "This week",
-      "Section": "Command text"
-    },
-    {
-      "Key": "ThisMonthLabel",
-      "Type": "String",
-      "Label": "This month label",
-      "Default": "This month",
-      "Section": "Command text"
-    },
-    {
-      "Key": "ThisYearLabel",
-      "Type": "String",
-      "Label": "This year label",
-      "Default": "This year",
-      "Section": "Command text"
-    },
-    {
-      "Key": "AllTimeLabel",
-      "Type": "String",
-      "Label": "All-time label",
-      "Default": "All-time",
-      "Section": "Command text"
-    },
-    {
-      "Key": "StatsFooterText",
-      "Type": "String",
-      "Label": "Stats footer text",
-      "Default": "Statistics are tracked from the moment the plugin version with user stats is active.",
-      "Section": "Command text"
-    },
-    {
-      "Key": "StatsEmbedColor",
-      "Type": "String",
-      "Label": "Stats embed color",
-      "Default": "#3b82f6",
-      "Section": "Design"
+      "Key": "ChannelCounters",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Channel counters",
+      "Default": [],
+      "Section": "Channel counters",
+      "SupportedChannelTypes": ["GuildVoice"]
     }
   ],
   "DashboardElements": [
