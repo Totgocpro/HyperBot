@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect as UseEffect, useState as UseState } from "react";
+import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type Ref } from "react";
 import type { HealthReport, SettingsField } from "../../Core/Types";
 import { CustomSelect } from "./CustomSelect";
 
-type AdminSection = "GeneralStatus" | "GlobalPlugins" | "UserManagement" | "GuildBanlist";
+type AdminSection = "GeneralStatus" | "GlobalPlugins" | "ConfigTransfer" | "UserManagement" | "GuildBanlist";
 
 type DashboardUserRow = {
   DiscordId: string;
@@ -99,6 +99,7 @@ const EmptyUserForm: UserForm = {
 const AdminSections: Array<{ Id: AdminSection; Label: string; Description: string }> = [
   { Id: "GeneralStatus", Label: "General and status", Description: "Instance health and quick metrics." },
   { Id: "GlobalPlugins", Label: "Plugins", Description: "Enable, disable, reload, and configure plugins." },
+  { Id: "ConfigTransfer", Label: "Config export/import", Description: "Move every saved configuration as JSON." },
   { Id: "UserManagement", Label: "User Management", Description: "Accounts, roles, bans, and access." },
   { Id: "GuildBanlist", Label: "Guild Banlist", Description: "Servers blocked from using the bot." }
 ];
@@ -124,7 +125,10 @@ export function SuperAdminPanel() {
   const [SelectedUserDiscordId, SetSelectedUserDiscordId] = UseState("");
   const [EditUserForm, SetEditUserForm] = UseState<UserForm>(EmptyUserForm);
   const [EditUserAccessDraft, SetEditUserAccessDraft] = UseState<UserAccessDraft>({});
+  const [ImportReplaceExisting, SetImportReplaceExisting] = UseState(false);
+  const [ImportFileName, SetImportFileName] = UseState("");
   const [Status, SetStatus] = UseState("Loading admin panel...");
+  const ImportInputRef = UseRef<HTMLInputElement | null>(null);
   const SelectedGlobalPlugin = GlobalPlugins.find((Plugin) => Plugin.Metadata.Id === SelectedGlobalPluginId) ?? GlobalPlugins[0];
   const SelectedUser = Users.find((User) => User.DiscordId === SelectedUserDiscordId) ?? Users[0];
 
@@ -314,6 +318,66 @@ export function SuperAdminPanel() {
     await LoadAdminData();
   }
 
+  async function ExportConfigs(): Promise<void> {
+    const Response = await fetch("/api/admin/configs");
+
+    if (!Response.ok) {
+      SetStatus(await Response.text());
+      return;
+    }
+
+    const BlobValue = await Response.blob();
+    const DownloadUrl = window.URL.createObjectURL(BlobValue);
+    const DownloadLink = document.createElement("a");
+    const HeaderFileName = Response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/u)?.[1];
+
+    DownloadLink.href = DownloadUrl;
+    DownloadLink.download = HeaderFileName ?? `hyperbot-configs-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(DownloadLink);
+    DownloadLink.click();
+    DownloadLink.remove();
+    window.URL.revokeObjectURL(DownloadUrl);
+    SetStatus("Configuration export downloaded.");
+  }
+
+  async function ImportConfigs(FileValue: File | null): Promise<void> {
+    if (!FileValue) {
+      return;
+    }
+
+    SetImportFileName(FileValue.name);
+
+    try {
+      const RawText = await FileValue.text();
+      const ParsedExport = JSON.parse(RawText) as unknown;
+      const Response = await fetch("/api/admin/configs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          Export: ParsedExport,
+          ReplaceExisting: ImportReplaceExisting
+        })
+      });
+
+      if (!Response.ok) {
+        SetStatus(await Response.text());
+        return;
+      }
+
+      const Payload = (await Response.json()) as { Counts: Record<string, number>; ReplaceExisting: boolean };
+      SetStatus(`Configuration imported (${Object.values(Payload.Counts).reduce((Total, Count) => Total + Count, 0)} row(s)).`);
+      await LoadAdminData();
+    } catch (ErrorValue) {
+      SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Invalid import file.");
+    } finally {
+      if (ImportInputRef.current) {
+        ImportInputRef.current.value = "";
+      }
+    }
+  }
+
   function UpdateGlobalPluginDraftValue(PluginId: string, Key: string, Value: unknown): void {
     SetGlobalPluginDraftValues((PreviousValues) => ({
       ...PreviousValues,
@@ -457,6 +521,17 @@ export function SuperAdminPanel() {
               ControlPlugin={ControlPlugin}
               AvailableCommands={AvailableCommands}
               UpdateGlobalPluginDraftValue={UpdateGlobalPluginDraftValue}
+            />
+          ) : null}
+
+          {ActiveSection === "ConfigTransfer" ? (
+            <ConfigTransferPanel
+              ExportConfigs={ExportConfigs}
+              ImportFileName={ImportFileName}
+              ImportInputRef={ImportInputRef}
+              ImportReplaceExisting={ImportReplaceExisting}
+              ImportConfigs={ImportConfigs}
+              SetImportReplaceExisting={SetImportReplaceExisting}
             />
           ) : null}
 
@@ -671,6 +746,66 @@ function GlobalPluginsPanel(Properties: {
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-700 p-10 text-center text-slate-400">No global plugin.</div>
           )}
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function ConfigTransferPanel(Properties: {
+  ExportConfigs: () => Promise<void>;
+  ImportConfigs: (FileValue: File | null) => Promise<void>;
+  ImportFileName: string;
+  ImportInputRef: Ref<HTMLInputElement>;
+  ImportReplaceExisting: boolean;
+  SetImportReplaceExisting: (Value: boolean) => void;
+}) {
+  return (
+    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
+      <div>
+        <p className="text-sm uppercase tracking-[0.35em] text-blue-300">Config export/import</p>
+        <h2 className="mt-3 text-2xl font-black text-white sm:text-3xl">Configuration transfer</h2>
+        <p className="mt-2 max-w-3xl text-sm text-slate-400">
+          Export or restore plugin configs, plugin user values, system settings, guild access rules, and plugin grants. Dashboard accounts, sessions, and audit logs are not included.
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+          <h3 className="text-xl font-black text-white">Export all configs</h3>
+          <p className="mt-2 text-sm text-slate-400">
+            Downloads a JSON snapshot that can be imported into another HyperBot instance or restored later.
+          </p>
+          <button className="mt-5 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={() => void Properties.ExportConfigs()} type="button">
+            Download JSON
+          </button>
+        </section>
+
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+          <h3 className="text-xl font-black text-white">Import configs</h3>
+          <p className="mt-2 text-sm text-slate-400">
+            Merges the JSON into the current database by default. Enable replacement to clear existing config rows first.
+          </p>
+
+          <label className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-red-500/30 bg-red-950/20 px-4 py-3 text-sm font-bold text-red-100">
+            Replace existing configs
+            <input
+              checked={Properties.ImportReplaceExisting}
+              className="h-5 w-5 accent-red-600"
+              onChange={(Event) => Properties.SetImportReplaceExisting(Event.target.checked)}
+              type="checkbox"
+            />
+          </label>
+
+          <input
+            accept="application/json,.json"
+            className="mt-4 block w-full text-sm text-slate-300 file:mr-4 file:rounded-2xl file:border-0 file:bg-slate-800 file:px-4 file:py-3 file:text-sm file:font-bold file:text-white hover:file:bg-slate-700"
+            onChange={(Event) => void Properties.ImportConfigs(Event.target.files?.[0] ?? null)}
+            ref={Properties.ImportInputRef}
+            type="file"
+          />
+
+          {Properties.ImportFileName ? <p className="mt-3 text-xs text-slate-500">Last selected file: {Properties.ImportFileName}</p> : null}
         </section>
       </div>
     </section>
