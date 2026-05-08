@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect as UseEffect, useRef as UseRef, useState as UseState } from "react";
+import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type ReactNode } from "react";
 import type { BotGuildSummary, DashboardElement, SettingsField } from "../../Core/Types";
 import { CustomSelect } from "./CustomSelect";
 
@@ -137,7 +137,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
 
   const SelectedPlugin = Plugins.find((Plugin) => Plugin.Metadata.Id === SelectedPluginId) ?? Plugins[0];
   const SelectedPluginDraftValues = SelectedPlugin ? DraftValues[SelectedPlugin.Metadata.Id] ?? {} : {};
-  const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin, SelectedPluginDraftValues) : [];
+  const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin) : [];
+  const VisibleConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin, SelectedPluginDraftValues, true) : [];
   const HasDashboardOverview = Boolean(SelectedPlugin?.DashboardElements?.length);
 
   UseEffect(() => {
@@ -377,7 +378,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       Overview
                     </button>
                   ) : null}
-                  {ConfigSections.map((Section) => (
+                  {VisibleConfigSections.map((Section) => (
                     <button
                       className="rounded-2xl px-3 py-2 text-left text-sm font-semibold text-slate-300 hover:bg-slate-900 hover:text-white"
                       key={Section.Id}
@@ -473,19 +474,32 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       </div>
                     </section>
                   ) : null}
-                  {ConfigSections.map((Section) => (
-                    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id={`plugin-section-${Section.Id}`} key={Section.Id}>
-                      <div className="mb-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Configuration</p>
-                        <h3 className="mt-2 text-2xl font-black text-white">{Section.Label}</h3>
-                      </div>
-                      <div className="grid gap-4">
-                        {Section.Fields.map((Field) => (
-                          <div key={Field.Key}>{RenderField(Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus, CreateRole, CreateChannel)}</div>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
+                  {ConfigSections.map((Section) => {
+                    const SectionVisible = Section.Fields.some((Field) => IsFieldVisible(Field, SelectedPluginDraftValues));
+
+                    return (
+                      <AnimatedVisibility
+                        ClassName="scroll-mt-28"
+                        Id={`plugin-section-${Section.Id}`}
+                        IsVisible={SectionVisible}
+                        key={Section.Id}
+                      >
+                        <section className="rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5">
+                          <div className="mb-4">
+                            <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Configuration</p>
+                            <h3 className="mt-2 text-2xl font-black text-white">{Section.Label}</h3>
+                          </div>
+                          <div className="grid gap-4">
+                            {Section.Fields.map((Field) => (
+                              <AnimatedVisibility IsVisible={IsFieldVisible(Field, SelectedPluginDraftValues)} key={Field.Key}>
+                                {RenderField(Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus, CreateRole, CreateChannel)}
+                              </AnimatedVisibility>
+                            ))}
+                          </div>
+                        </section>
+                      </AnimatedVisibility>
+                    );
+                  })}
                     </>
                   )}
                 </div>
@@ -1851,10 +1865,43 @@ function BuildGuildHeaders(): HeadersInit {
   return {};
 }
 
-function BuildConfigSections(Plugin: DashboardPlugin, Values: Record<string, unknown>): PluginConfigSection[] {
+function AnimatedVisibility(Properties: {
+  ClassName?: string;
+  Id?: string;
+  IsVisible: boolean;
+  children?: ReactNode;
+}) {
+  const [ShouldRender, SetShouldRender] = UseState(Properties.IsVisible);
+
+  UseEffect(() => {
+    if (Properties.IsVisible) {
+      SetShouldRender(true);
+      return;
+    }
+
+    const Timeout = window.setTimeout(() => SetShouldRender(false), 300);
+    return () => window.clearTimeout(Timeout);
+  }, [Properties.IsVisible]);
+
+  if (!ShouldRender) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden={!Properties.IsVisible}
+      className={`${Properties.ClassName ?? ""} overflow-hidden transition-[max-height,opacity,transform,margin] duration-300 ease-out ${Properties.IsVisible ? "max-h-[6000px] translate-y-0 opacity-100" : "pointer-events-none max-h-0 -translate-y-2 opacity-0"}`}
+      id={Properties.Id}
+    >
+      {Properties.children}
+    </div>
+  );
+}
+
+function BuildConfigSections(Plugin: DashboardPlugin, Values: Record<string, unknown> = {}, OnlyVisible = false): PluginConfigSection[] {
   const Sections = new Map<string, PluginConfigSection>();
 
-  for (const Field of Plugin.WebInterface.filter((FieldValue) => IsFieldVisible(FieldValue, Values))) {
+  for (const Field of Plugin.WebInterface.filter((FieldValue) => !OnlyVisible || IsFieldVisible(FieldValue, Values))) {
     const Label = Field.Section ?? "General";
     const Id = BuildSectionId(Label);
     const ExistingSection = Sections.get(Id);
