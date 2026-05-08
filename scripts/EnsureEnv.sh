@@ -93,6 +93,7 @@ fi
 PostgresPassword="$(ReadEnvValue POSTGRES_PASSWORD)"
 RedisPassword="$(ReadEnvValue REDIS_PASSWORD)"
 ComposeProjectName="$(ReadEnvValue COMPOSE_PROJECT_NAME)"
+AppHostPort="$(ReadEnvValue APP_HOST_PORT)"
 
 if [ -z "${PostgresPassword}" ] || [ "${PostgresPassword}" = "change-me" ]; then
   PostgresPassword="$(GenerateSecret)"
@@ -106,11 +107,16 @@ if [ -z "${ComposeProjectName}" ]; then
   ComposeProjectName="$(GenerateComposeProjectName)"
 fi
 
+if [ "${AppHostPort}" = "3000" ]; then
+  AppHostPort=""
+fi
+
 SetEnvKey COMPOSE_PROJECT_NAME "${ComposeProjectName}"
 SetEnvKey POSTGRES_PASSWORD "${PostgresPassword}"
 SetEnvKey REDIS_PASSWORD "${RedisPassword}"
 SetEnvKey POSTGRES_PASSWORD_URL_ENCODED "$(UrlEncode "${PostgresPassword}")"
 SetEnvKey REDIS_PASSWORD_URL_ENCODED "$(UrlEncode "${RedisPassword}")"
+SetEnvKey APP_HOST_PORT "${AppHostPort}"
 EnsureEnvKey DISCORD_TOKEN ""
 EnsureEnvKey DISCORD_CLIENT_ID ""
 EnsureEnvKey DISCORD_GUILD_ID ""
@@ -120,4 +126,5 @@ EnsureEnvKey PLUGIN_DIRECTORY "Plugins"
 EnsureEnvKey NEXT_PUBLIC_APP_URL "http://localhost:3000"
 EnsureEnvKey ENABLE_MESSAGE_EVENTS "false"
 EnsureEnvKey FOLLOW_LOGS "true"
-EnsureEnvKey APP_HOST_PORT ""
+EnsureEnvKey APP_HOST_BIND "127.0.0.1"
+EnsureEnvKey DATABASE_HOST_BIND "127.0.0.1"

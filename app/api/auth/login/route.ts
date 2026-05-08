@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
-import { CreateDashboardSession, SessionCookieName } from "@/src/Web/Auth";
+import { CreateDashboardSession, SessionCookieName, ShouldUseSecureCookies } from "@/src/Web/Auth";
 import { VerifyPassword } from "@/src/Web/Password";
 import { ClearAuthRateLimit, EnforceAuthRateLimit } from "@/src/Web/RateLimit";
 
@@ -41,7 +41,7 @@ async function Post(Request: Request): Promise<Response> {
   ResponseValue.cookies.set(SessionCookieName, Session.SessionToken, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: ShouldUseSecureCookies(Request),
     path: "/",
     expires: Session.ExpiresAt
   });

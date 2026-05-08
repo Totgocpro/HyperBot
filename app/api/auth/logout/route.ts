@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
-import { HashSessionToken, SessionCookieName } from "@/src/Web/Auth";
+import { HashSessionToken, SessionCookieName, ShouldUseSecureCookies } from "@/src/Web/Auth";
 
 async function Post(Request: Request): Promise<Response> {
   const SessionToken = Request.headers
@@ -26,7 +26,7 @@ async function Post(Request: Request): Promise<Response> {
   ResponseValue.cookies.set(SessionCookieName, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: ShouldUseSecureCookies(Request),
     path: "/",
     maxAge: 0
   });

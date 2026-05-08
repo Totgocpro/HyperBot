@@ -16,58 +16,75 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 
 ## Included Plugins
 
-| Plugin | Scope | Commands | Description |
+| Plugin | Scope | Commands | Main use |
 | --- | --- | --- | --- |
-| `Backups` | Guild | - | Create and restore backups from the dashboard. |
-| `CommandAliases` | Global | - | Add aliases for existing slash commands. |
-| `CustomCommands` | Guild | - | Create prefix commands such as `!role` with checks and actions from the dashboard. |
-| `CustomStatus` | Global | - | Custom Discord presence with rotating status text. |
-| `DiscordGame` | Guild | `/minesweeper`, `/tictactoe` | Interactive Discord mini-games. |
-| `Giveaway` | Guild | `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list` | Button-based giveaways with automatic ending, winner rerolls, entry rules, and role bonuses. |
-| `Leveling` | Guild | `/leaderboard` | XP, rankings, and member progression. Depends on `Statistics`. |
-| `Moderation` | Guild | `/warn`, `/lookup` | Sanctions, moderation logs, and AutoMod rules. |
-| `Notifications` | Guild | - | Dashboard-managed RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram notifications with custom embeds per source. |
-| `SendEmbed` | Guild | - | Create and send embeds from the dashboard. |
-| `Statistics` | Guild | `/stats` | Message, voice, join, and leave statistics. |
-| `TempVoice` | Guild | - | Temporary voice channels with a control panel. |
-| `WelcomeMessage` | Guild | - | Join and leave messages, as embeds or images. |
+| `Backups` | Guild | Dashboard only | Create, download, and restore server backups from the dashboard. |
+| `CommandAliases` | Global | Dashboard only | Register global aliases for existing slash commands. |
+| `CustomCommands` | Guild | Prefix commands | Build custom prefix commands with checks, role actions, messages, embeds, reactions, and trigger deletion. |
+| `CustomStatus` | Global | Dashboard only | Configure the bot presence and rotating activity text. |
+| `DiscordGame` | Guild | `/minesweeper`, `/tictactoe` | Run small interactive Discord games. |
+| `Giveaway` | Guild | `/giveaway-*` | Run button-based giveaways with automatic ending, rerolls, eligibility rules, and custom embeds. |
+| `Leveling` | Guild | `/leaderboard` | Award XP from activity and display member rankings. Depends on `Statistics`. |
+| `Moderation` | Guild | `/warn`, `/lookup` | Store sanctions, view user history, log moderation actions, and configure AutoMod rules. |
+| `Notifications` | Guild | Dashboard only | Watch RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram sources and post custom embed notifications. |
+| `Reminders` | Guild | `/reminder-*` | Schedule recurring messages or embeds from the dashboard, with slash commands for control. |
+| `SendEmbed` | Guild | Dashboard only | Build, save, and send Discord embeds using the shared embed editor. |
+| `Statistics` | Guild | `/stats` | Track messages, voice time, joins, leaves, channel counters, and custom `/stats` embeds. |
+| `TempVoice` | Guild | Dashboard only | Create temporary voice channels with owner controls and protection rules. |
+| `WelcomeMessage` | Guild | Dashboard only | Send welcome/leave messages and run configurable captcha verification flows. |
 
-### Giveaway Plugin
+### Plugin Details
 
-The `Giveaway` plugin provides Mee6-style giveaway messages with Discord buttons.
+#### Backups
 
-- `/giveaway-start prize duration winners [channel]`: creates a giveaway message with enter and leave buttons.
-- `/giveaway-end message_id`: ends a giveaway immediately and selects winners.
-- `/giveaway-reroll message_id`: rerolls winners for an ended giveaway.
-- `/giveaway-list`: shows active giveaways for the server.
+- Scope: guild.
+- Interface: dashboard.
+- Configuration: backup name, restore safety, backup creation, selected restore, latest restore, and backup download.
+- Notes: backups include roles, permissions, categories, channels, and saved plugin configuration. Discord messages are not copied.
 
-Dashboard settings include default channel and duration, maximum winners, required roles, blocked roles, custom messages, embed colors, and role-based bonus entries. Bonus entries use the format `ROLE_ID=ENTRIES`, for example `123456789012345678=3` gives members with that role three total entries.
+#### Custom Commands
 
-The `Reminders` plugin provides Mee6-style scheduled messages for server announcements, recurring rules, bump prompts, event notices, or automated embed posts. Reminders are created and edited from the dashboard panel so scheduled content stays controlled by guild managers.
+- Scope: guild.
+- Interface: dashboard.
+- Configuration: prefix, case sensitivity, default channel/role checks, denied messages, and command action chains.
+- Actions: send message, reply, DM, send/reply/DM embed, add/remove/toggle role, delete trigger, and react.
+- Notes: message and embed fields support command placeholders such as `%user%`, `%mention%`, `%args%`, `%server%`, and `%channel%`.
 
-- `/reminder-list`: lists configured reminders, their status, channel, interval, and next run.
-- `/reminder-enable id`: re-enables a disabled reminder.
-- `/reminder-disable id`: pauses a reminder without deleting it.
-- `/reminder-delete id`: removes a reminder permanently.
-- `/reminder-run id`: sends a reminder immediately without changing its next scheduled run.
+#### Giveaway
 
-Dashboard settings include reminder creation/editing, target channel, message/embed mode, schedule interval, next run time, default reminder channel, default embed mode, default interval, embed color, footer text, and maximum reminders per server. Reminder text supports placeholders like `%name%`, `%id%`, `%server%`, `%runCount%`, `%interval%`, and `%nextRun%`.
+- Scope: guild.
+- Commands: `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list`.
+- Configuration: default channel, default duration, winner limits, required/blocked roles, entry messages, join/leave labels, role bonus entries, active embed, and ended embed.
+- Notes: bonus entries use `ROLE_ID=ENTRIES`, for example `123456789012345678=3` gives members with that role three total entries.
 
-### Notifications Plugin
+#### Notifications
 
-The `Notifications` plugin watches external sources and posts new items into configured Discord channels. Sources are created from the dashboard and each source has its own target channel, check interval, and embed template.
+- Scope: guild.
+- Interface: dashboard.
+- Sources: RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram.
+- Configuration: source list, target channel, check interval, external IDs/URLs, bring-your-own API keys, and custom embed template per source.
+- Notes: notification embeds support tags such as `%source%`, `%type%`, `%title%`, `%url%`, `%author%`, `%publishedAt%`, `%summary%`, and `%image%`.
 
-Supported source types:
+#### Reminders
 
-- RSS: any public RSS or Atom feed URL.
-- YouTube: public channel RSS feeds, using a YouTube channel ID or a feed URL override.
-- Twitch: live stream notifications through the Twitch API. Use per-source client ID/secret or set `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` in `.env`.
-- Kick: live stream notifications through Kick channel data. A per-source access token can be provided when needed.
-- X: recent post notifications through the X API. Requires a per-source bearer token.
-- Reddit: subreddit post notifications through public JSON, or through Reddit OAuth using per-source client credentials / bearer token.
-- Instagram: media notifications through Instagram Graph. Requires a per-source user ID and access token.
+- Scope: guild.
+- Commands: `/reminder-list`, `/reminder-enable`, `/reminder-disable`, `/reminder-delete`, `/reminder-run`.
+- Configuration: reminders are created and edited from the dashboard, with target channel, message/embed mode, interval or weekly schedule, next run time, default embed, and max reminders.
+- Notes: reminder text supports placeholders such as `%name%`, `%id%`, `%server%`, `%runCount%`, `%interval%`, and `%nextRun%`.
 
-Notification embeds support `%source%`, `%type%`, `%title%`, `%url%`, `%author%`, `%publishedAt%`, `%summary%`, and `%image%`.
+#### Statistics
+
+- Scope: guild.
+- Commands: `/stats`.
+- Configuration: bot tracking, ignored voice channels, custom `/stats` embed, dashboard charts, and locked voice channel counters.
+- Notes: channel counter names support tags such as `%members_count%`, `%humans_count%`, `%bots_count%`, `%online_count%`, `%voice_count%`, `%channels_count%`, `%roles_count%`, and `%boosts_count%`.
+
+#### Welcome Message
+
+- Scope: guild.
+- Interface: dashboard.
+- Configuration: welcome/leave channels, text or embed mode, image mode, role assignment, captcha channel, captcha roles, captcha difficulty, and captcha embed/messages.
+- Notes: captcha challenges are sent to users in DM as generated images, and completed users can receive one or more roles.
 
 ## Requirements
 
@@ -107,7 +124,9 @@ Useful variables:
 - `DATABASE_URL`: normally generated by the scripts from the random Docker PostgreSQL port.
 - `REDIS_URL`: normally generated by the scripts from the random Docker Redis port.
 - `COMPOSE_PROJECT_NAME`: generated automatically per project folder so multiple HyperBot folders do not share Docker containers or volumes.
-- `APP_HOST_PORT`: dashboard port exposed by Docker Compose. Leave empty for an automatic free port; set a value like `3000` if you want a fixed dashboard URL.
+- `APP_HOST_BIND`: dashboard bind address. Defaults to `127.0.0.1` for local-only access. Use `0.0.0.0` only if you need access from another device on your LAN.
+- `APP_HOST_PORT`: dashboard port exposed by Docker Compose. Leave empty for an automatic free port. Existing generated `APP_HOST_PORT=3000` values are migrated back to automatic by the scripts; set another value manually only if you really want a fixed dashboard URL.
+- `DATABASE_HOST_BIND`: PostgreSQL and Redis bind address. Defaults to `127.0.0.1`; keep it local unless you explicitly need external database access.
 - `PLUGIN_DIRECTORY`: defaults to `Plugins` in development and `dist/Plugins` in production Docker builds.
 - `ENABLE_MESSAGE_EVENTS=true`: optional, useful when enabling behavior that explicitly depends on message events.
 
@@ -178,7 +197,7 @@ docker compose up -d --build
 
 The `application` service uses variables from `.env`, builds the app, and exposes the dashboard at `http://localhost:3000`.
 
-PostgreSQL, Redis, and the dashboard are bound to `127.0.0.1` only and use automatic host ports by default, so multiple HyperBot projects can run at the same time without manually changing `5432`, `6379`, or `3000`. Each folder also gets a generated `COMPOSE_PROJECT_NAME`, so Docker volumes are isolated per bot. The application container reaches PostgreSQL and Redis through Docker's internal network. Redis requires `REDIS_PASSWORD`; PostgreSQL requires `POSTGRES_PASSWORD`; the provided scripts generate both.
+PostgreSQL, Redis, and the dashboard are bound to `127.0.0.1` by default and use automatic host ports, so multiple HyperBot projects can run at the same time without manually changing `5432`, `6379`, or `3000`. Each folder also gets a generated `COMPOSE_PROJECT_NAME`, so Docker volumes are isolated per bot. To reach the dashboard from another device on your LAN, set `APP_HOST_BIND=0.0.0.0` in `.env`, restart with `./Release.sh`, then open `http://SERVER_LAN_IP:PRINTED_PORT`. Keep `DATABASE_HOST_BIND=127.0.0.1` unless you really need external DB access.
 
 To view logs:
 

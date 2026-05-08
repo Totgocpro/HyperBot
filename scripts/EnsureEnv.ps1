@@ -97,6 +97,7 @@ if (-not (Test-Path $EnvFile)) {
 $PostgresPassword = Get-HyperBotEnvValue "POSTGRES_PASSWORD"
 $RedisPassword = Get-HyperBotEnvValue "REDIS_PASSWORD"
 $ComposeProjectName = Get-HyperBotEnvValue "COMPOSE_PROJECT_NAME"
+$AppHostPort = Get-HyperBotEnvValue "APP_HOST_PORT"
 
 if (-not $PostgresPassword -or $PostgresPassword -eq "change-me") {
   $PostgresPassword = New-HyperBotSecret
@@ -110,11 +111,16 @@ if (-not $ComposeProjectName) {
   $ComposeProjectName = New-HyperBotComposeProjectName
 }
 
+if ($AppHostPort -eq "3000") {
+  $AppHostPort = ""
+}
+
 Set-HyperBotEnvValue "COMPOSE_PROJECT_NAME" $ComposeProjectName
 Set-HyperBotEnvValue "POSTGRES_PASSWORD" $PostgresPassword
 Set-HyperBotEnvValue "REDIS_PASSWORD" $RedisPassword
 Set-HyperBotEnvValue "POSTGRES_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $PostgresPassword)
 Set-HyperBotEnvValue "REDIS_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $RedisPassword)
+Set-HyperBotEnvValue "APP_HOST_PORT" $AppHostPort
 Add-HyperBotEnvValue "DISCORD_TOKEN" ""
 Add-HyperBotEnvValue "DISCORD_CLIENT_ID" ""
 Add-HyperBotEnvValue "DISCORD_GUILD_ID" ""
@@ -124,4 +130,5 @@ Add-HyperBotEnvValue "PLUGIN_DIRECTORY" "Plugins"
 Add-HyperBotEnvValue "NEXT_PUBLIC_APP_URL" "http://localhost:3000"
 Add-HyperBotEnvValue "ENABLE_MESSAGE_EVENTS" "false"
 Add-HyperBotEnvValue "FOLLOW_LOGS" "true"
-Add-HyperBotEnvValue "APP_HOST_PORT" ""
+Add-HyperBotEnvValue "APP_HOST_BIND" "127.0.0.1"
+Add-HyperBotEnvValue "DATABASE_HOST_BIND" "127.0.0.1"

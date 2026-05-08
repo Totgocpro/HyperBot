@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_DB: hyperbot
     ports:
-      - "127.0.0.1::5432"
+      - "${DATABASE_HOST_BIND:-127.0.0.1}::5432"
     volumes:
       - PostgreSQLData:/var/lib/postgresql/data
     healthcheck:
@@ -19,7 +19,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}"]
     ports:
-      - "127.0.0.1::6379"
+      - "${DATABASE_HOST_BIND:-127.0.0.1}::6379"
     volumes:
       - RedisData:/data
     healthcheck:
@@ -44,7 +44,7 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NODE_ENV: production
     ports:
-      - "127.0.0.1:${APP_HOST_PORT:-}:3000"
+      - "${APP_HOST_BIND:-127.0.0.1}:${APP_HOST_PORT:-}:3000"
     depends_on:
       postgresql:
         condition: service_healthy

@@ -5,6 +5,16 @@ import { Prisma } from "../Core/Clients";
 
 export const SessionCookieName = "HyperBotSession";
 
+export function ShouldUseSecureCookies(Request: Request): boolean {
+  const ForwardedProto = Request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+
+  if (ForwardedProto) {
+    return ForwardedProto === "https";
+  }
+
+  return new URL(Request.url).protocol === "https:";
+}
+
 export function GetRequestDiscordId(Request: Request): string | null {
   return Request.headers.get("X-Discord-User-Id");
 }
