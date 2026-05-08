@@ -16,14 +16,14 @@ if [ ! -f "docker-compose.yml" ]; then
   exit 1
 fi
 
+sh ./scripts/EnsureEnv.sh .env
+
 if [ -f ".env" ]; then
   set -a
   . ./.env
   set +a
 fi
 
-export DATABASE_URL="${DATABASE_URL:-postgresql://hyperbot:hyperbot@localhost:5432/hyperbot?schema=public}"
-export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 export PLUGIN_DIRECTORY="${PLUGIN_DIRECTORY:-dist/Plugins}"
 export NODE_OPTIONS="${NODE_OPTIONS:-} --no-deprecation"
 export NEXT_TELEMETRY_DISABLED="${NEXT_TELEMETRY_DISABLED:-1}"
@@ -137,9 +137,11 @@ StartReleaseContainers() {
 }
 
 PrintStatus() {
+  ApplicationPort="$(docker compose port application 3000 | sed 's/.*://')"
+
   echo
   echo "Release started."
-  echo "Dashboard: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+  echo "Dashboard: http://127.0.0.1:${ApplicationPort:-3000}"
   echo "Database backups: ${BackupDirectory}"
   echo
   docker compose ps
@@ -166,6 +168,12 @@ trap StopRelease INT TERM HUP
 
 echo "Starting HyperBot release deployment..."
 docker compose up -d --remove-orphans postgresql redis
+PostgresHostPort="$(docker compose port postgresql 5432 | sed 's/.*://')"
+RedisHostPort="$(docker compose port redis 6379 | sed 's/.*://')"
+export DATABASE_URL="postgresql://hyperbot:${POSTGRES_PASSWORD_URL_ENCODED}@127.0.0.1:${PostgresHostPort}/hyperbot?schema=public"
+export REDIS_URL="redis://:${REDIS_PASSWORD_URL_ENCODED}@127.0.0.1:${RedisHostPort}"
+echo "PostgreSQL local port: ${PostgresHostPort}"
+echo "Redis local port: ${RedisHostPort}"
 WaitForPostgreSQL
 BackupDatabase
 EnsureDatabaseExists

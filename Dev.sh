@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+sh ./scripts/EnsureEnv.sh .env
+
 if [ -f ".env" ]; then
   set -a
   source .env
   set +a
 fi
 
-export DATABASE_URL="${DATABASE_URL:-postgresql://hyperbot:hyperbot@localhost:5432/hyperbot?schema=public}"
-export REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 export PLUGIN_DIRECTORY="${PLUGIN_DIRECTORY:-Plugins}"
 export NODE_OPTIONS="${NODE_OPTIONS:-} --no-deprecation"
 
 docker compose up -d --remove-orphans postgresql redis
+
+POSTGRES_HOST_PORT="$(docker compose port postgresql 5432 | sed 's/.*://')"
+REDIS_HOST_PORT="$(docker compose port redis 6379 | sed 's/.*://')"
+
+export DATABASE_URL="postgresql://hyperbot:${POSTGRES_PASSWORD_URL_ENCODED}@127.0.0.1:${POSTGRES_HOST_PORT}/hyperbot?schema=public"
+export REDIS_URL="redis://:${REDIS_PASSWORD_URL_ENCODED}@127.0.0.1:${REDIS_HOST_PORT}"
+
+echo "PostgreSQL local port: ${POSTGRES_HOST_PORT}"
+echo "Redis local port: ${REDIS_HOST_PORT}"
 
 echo "Waiting for PostgreSQL..."
 until docker compose exec -T postgresql pg_isready -U hyperbot -d postgres >/dev/null 2>&1; do
@@ -39,7 +48,7 @@ SQL
 fi
 
 echo "Clearing Redis..."
-docker compose exec -T redis redis-cli FLUSHDB >/dev/null
+docker compose exec -T redis redis-cli -a "${REDIS_PASSWORD}" FLUSHDB >/dev/null
 
 if [ ! -d "node_modules" ]; then
   npm install

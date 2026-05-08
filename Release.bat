@@ -15,6 +15,8 @@ if not exist "docker-compose.yml" (
   exit /b 1
 )
 
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\EnsureEnv.ps1" ".env" || exit /b 1
+
 if exist ".env" (
   for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
     set "EnvKey=%%A"
@@ -31,11 +33,6 @@ call :RequireCommand docker || exit /b 1
 call :RequireCommand npm || exit /b 1
 call :RequireCommand npx || exit /b 1
 
-call :RequireEnv POSTGRES_PASSWORD || exit /b 1
-call :RequireEnv REDIS_PASSWORD || exit /b 1
-
-if "%DATABASE_URL%"=="" set "DATABASE_URL=postgresql://hyperbot:%POSTGRES_PASSWORD%@localhost:5432/hyperbot?schema=public"
-if "%REDIS_URL%"=="" set "REDIS_URL=redis://:%REDIS_PASSWORD%@localhost:6379"
 if "%PLUGIN_DIRECTORY%"=="" set "PLUGIN_DIRECTORY=dist/Plugins"
 if "%NEXT_PUBLIC_APP_URL%"=="" set "NEXT_PUBLIC_APP_URL=http://localhost:3000"
 if "%NEXT_TELEMETRY_DISABLED%"=="" set "NEXT_TELEMETRY_DISABLED=1"
@@ -45,6 +42,7 @@ set "NODE_OPTIONS=%NODE_OPTIONS% --no-deprecation"
 echo Starting HyperBot release deployment...
 docker compose up -d --remove-orphans postgresql redis || exit /b 1
 
+call :SetDockerHostUrls || exit /b 1
 call :WaitForPostgreSQL || exit /b 1
 call :BackupDatabase || exit /b 1
 call :EnsureDatabaseExists || exit /b 1
@@ -65,12 +63,15 @@ if errorlevel 1 (
 )
 exit /b 0
 
-:RequireEnv
-if "!%~1!"=="" (
-  echo Missing required environment variable: %~1 1>&2
-  echo Set it in .env before running Release.bat. 1>&2
-  exit /b 1
-)
+:SetDockerHostUrls
+for /f %%P in ('docker compose port postgresql 5432') do set "PostgresEndpoint=%%P"
+for /f %%P in ('docker compose port redis 6379') do set "RedisEndpoint=%%P"
+set "PostgresHostPort=!PostgresEndpoint:*:=!"
+set "RedisHostPort=!RedisEndpoint:*:=!"
+set "DATABASE_URL=postgresql://hyperbot:%POSTGRES_PASSWORD_URL_ENCODED%@127.0.0.1:!PostgresHostPort!/hyperbot?schema=public"
+set "REDIS_URL=redis://:%REDIS_PASSWORD_URL_ENCODED%@127.0.0.1:!RedisHostPort!"
+echo PostgreSQL local port: !PostgresHostPort!
+echo Redis local port: !RedisHostPort!
 exit /b 0
 
 :WaitForPostgreSQL
@@ -136,9 +137,11 @@ docker compose up -d --remove-orphans postgresql redis application || exit /b 1
 exit /b 0
 
 :PrintStatus
+for /f %%P in ('docker compose port application 3000') do set "ApplicationEndpoint=%%P"
+set "ApplicationHostPort=!ApplicationEndpoint:*:=!"
 echo.
 echo Release started.
-echo Dashboard: %NEXT_PUBLIC_APP_URL%
+echo Dashboard: http://127.0.0.1:!ApplicationHostPort!
 echo Database backups: %BackupDirectory%
 echo.
 docker compose ps
