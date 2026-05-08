@@ -1,0 +1,38 @@
+{
+  "Metadata": {
+    "Id": "Notifications",
+    "DisplayName": "Notifications",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "NT"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "DefaultChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Default notification channel",
+      "Default": "",
+      "Section": "Defaults",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "DefaultIntervalMinutes",
+      "Type": "Number",
+      "Label": "Default check interval minutes",
+      "Default": 10,
+      "Section": "Defaults"
+    },
+    {
+      "Key": "Sources",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Notification sources",
+      "Default": [],
+      "Section": "Sources"
+    }
+  ],
+  "EntryPoint": "./NotificationsPlugin.ts"
+}

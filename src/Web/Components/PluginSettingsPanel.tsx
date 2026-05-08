@@ -123,6 +123,25 @@ type ReminderDraft = {
   RunCount: number;
 };
 
+type NotificationSourceType = "RSS" | "YouTube" | "Twitch" | "Kick" | "X" | "Reddit" | "Instagram";
+
+type NotificationSourceDraft = {
+  Id: string;
+  Name: string;
+  Type: NotificationSourceType;
+  Enabled: boolean;
+  ChannelId: string;
+  Url: string;
+  ExternalId: string;
+  ApiKey: string;
+  ApiSecret: string;
+  AccessToken: string;
+  IntervalSeconds: number;
+  IntervalMinutes: number;
+  LastCheckedAt: string | null;
+  Embed: EditableEmbed;
+};
+
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
@@ -453,6 +472,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     />
                   ) : SelectedPlugin.Metadata.Id === "Reminders" ? (
                     <RemindersEditor
+                      DraftValues={DraftValues}
+                      OnCreateChannel={CreateChannel}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : SelectedPlugin.Metadata.Id === "Notifications" ? (
+                    <NotificationsEditor
                       DraftValues={DraftValues}
                       OnCreateChannel={CreateChannel}
                       Plugin={SelectedPlugin}
@@ -1079,6 +1106,279 @@ function RemindersEditor(Properties: {
             </div>
           </section>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function NotificationsEditor(Properties: {
+  DraftValues: Record<string, Record<string, unknown>>;
+  OnCreateChannel: (Name: string) => Promise<string | null>;
+  Plugin: DashboardPlugin;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const PluginId = Properties.Plugin.Metadata.Id;
+  const Values = Properties.DraftValues[PluginId] ?? {};
+  const Sources = ParseNotificationSources(Values.Sources);
+  const ChannelField = Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId");
+  const ChannelOptions = ChannelField?.Options ?? [];
+  const DefaultChannelId = String(Values.DefaultChannelId ?? "");
+  const DefaultIntervalMinutes = Math.max(5, Number(Values.DefaultIntervalMinutes ?? 10) || 10);
+  const DebugIntervalsEnabled = process.env.NODE_ENV !== "production";
+  const MinimumIntervalSeconds = DebugIntervalsEnabled ? 5 : 300;
+
+  function SetValue(Key: string, Value: unknown): void {
+    Properties.UpdateDraftValue(PluginId, Key, Value);
+  }
+
+  function SetSources(NextSources: NotificationSourceDraft[]): void {
+    SetValue("Sources", NextSources);
+  }
+
+  function AddSource(Type: NotificationSourceType = "RSS"): void {
+    const NextSource: NotificationSourceDraft = {
+      Id: CreateClientId(),
+      Name: BuildNotificationSourceName(Type),
+      Type,
+      Enabled: true,
+      ChannelId: DefaultChannelId,
+      Url: "",
+      ExternalId: "",
+      ApiKey: "",
+      ApiSecret: "",
+      AccessToken: "",
+      IntervalSeconds: Math.max(MinimumIntervalSeconds, DefaultIntervalMinutes * 60),
+      IntervalMinutes: DefaultIntervalMinutes,
+      LastCheckedAt: null,
+      Embed: {
+        ...CreateDefaultEmbed(),
+        Name: "Notification embed",
+        Title: "%source%: %title%",
+        Description: "%summary%",
+        Color: "#5865f2",
+        Url: "%url%",
+        AuthorName: "%author%",
+        ThumbnailUrl: "%image%",
+        FooterText: "%type% notification",
+        Timestamp: true
+      }
+    };
+
+    SetSources([...Sources, NextSource]);
+    Properties.SetStatus("Notification source added in draft. Use Save to persist it.");
+  }
+
+  function UpdateSource(SourceId: string, Patch: Partial<NotificationSourceDraft>): void {
+    SetSources(Sources.map((Source) => Source.Id === SourceId ? { ...Source, ...Patch } : Source));
+  }
+
+  function RemoveSource(SourceId: string): void {
+    SetSources(Sources.filter((Source) => Source.Id !== SourceId));
+  }
+
+  return (
+    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-notifications">
+      <div className="mb-5">
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Notification feeds</p>
+        <h3 className="mt-2 text-2xl font-black text-white">Social and RSS notifications</h3>
+      </div>
+
+      <div className="grid gap-5">
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultIntervalMinutes") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h4 className="text-xl font-black text-white">Sources</h4>
+              <p className="mt-1 text-sm text-slate-500">Bring your own keys per source when the platform requires API access.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-7">
+              <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={() => AddSource("RSS")} type="button">Add RSS</button>
+              <button className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500" onClick={() => AddSource("YouTube")} type="button">Add YouTube</button>
+              <button className="rounded-2xl bg-purple-600 px-4 py-3 text-sm font-bold text-white hover:bg-purple-500" onClick={() => AddSource("Twitch")} type="button">Add Twitch</button>
+              <button className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500" onClick={() => AddSource("Kick")} type="button">Add Kick</button>
+              <button className="rounded-2xl bg-slate-800 px-4 py-3 text-sm font-bold text-white hover:bg-slate-700" onClick={() => AddSource("X")} type="button">Add X</button>
+              <button className="rounded-2xl bg-orange-600 px-4 py-3 text-sm font-bold text-white hover:bg-orange-500" onClick={() => AddSource("Reddit")} type="button">Add Reddit</button>
+              <button className="rounded-2xl bg-pink-600 px-4 py-3 text-sm font-bold text-white hover:bg-pink-500" onClick={() => AddSource("Instagram")} type="button">Add Instagram</button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4">
+            {Sources.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No notification source configured.</p> : null}
+            {Sources.map((Source) => (
+              <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4" key={Source.Id}>
+                <div className="grid gap-4 lg:grid-cols-[1fr_220px_150px]">
+                  <label className="block text-sm font-bold text-slate-200">
+                    Name
+                    <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { Name: Event.target.value })} value={Source.Name} />
+                  </label>
+                  <div className="block text-sm font-bold text-slate-200">
+                    Type
+                    <CustomSelect
+                      ClassName="mt-2"
+                      OnChange={(Value) => UpdateSource(Source.Id, { Type: Value as NotificationSourceType })}
+                      Options={[
+                        { Label: "RSS", Value: "RSS" },
+                        { Label: "YouTube", Value: "YouTube" },
+                        { Label: "Twitch", Value: "Twitch" },
+                        { Label: "Kick", Value: "Kick" },
+                        { Label: "X", Value: "X" },
+                        { Label: "Reddit", Value: "Reddit" },
+                        { Label: "Instagram", Value: "Instagram" }
+                      ]}
+                      Required={true}
+                      Value={Source.Type}
+                    />
+                  </div>
+                  <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 font-semibold text-slate-100">
+                    Enabled
+                    <input checked={Source.Enabled} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateSource(Source.Id, { Enabled: Event.target.checked })} type="checkbox" />
+                  </label>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div className="block text-sm font-bold text-slate-200">
+                    Target channel
+                    <CustomSelect
+                      ClassName="mt-2"
+                      CreateButtonLabel="Create channel"
+                      CreateColorEnabled={false}
+                      CreateErrorMessage="Channel creation failed."
+                      CreateInputPlaceholder="channel-name"
+                      CreateLabel="Create channel"
+                      EmptyCreateError="Channel name is required."
+                      EmptyLabel="Select a writable channel"
+                      OnChange={(ChannelId) => UpdateSource(Source.Id, { ChannelId })}
+                      OnCreate={Properties.OnCreateChannel}
+                      Options={ChannelOptions}
+                      Value={Source.ChannelId}
+                    />
+                  </div>
+                  <label className="block text-sm font-bold text-slate-200">
+                    {DebugIntervalsEnabled ? "Check interval seconds" : "Check interval minutes"}
+                    <input
+                      className={EmbedInputClassName}
+                      min={DebugIntervalsEnabled ? 5 : 5}
+                      onChange={(Event) => {
+                        const RawValue = Number(Event.target.value) || (DebugIntervalsEnabled ? 5 : 5);
+                        UpdateSource(Source.Id, DebugIntervalsEnabled ? { IntervalSeconds: Math.max(5, RawValue), IntervalMinutes: Math.max(1, RawValue / 60) } : { IntervalMinutes: Math.max(5, RawValue), IntervalSeconds: Math.max(300, RawValue * 60) });
+                      }}
+                      type="number"
+                      value={DebugIntervalsEnabled ? Source.IntervalSeconds : Source.IntervalMinutes}
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  {Source.Type === "RSS" ? (
+                    <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                      RSS feed URL
+                      <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { Url: Event.target.value })} placeholder="https://example.com/feed.xml" value={Source.Url} />
+                    </label>
+                  ) : null}
+                  {Source.Type === "YouTube" ? (
+                    <>
+                      <label className="block text-sm font-bold text-slate-200">
+                        YouTube channel ID
+                        <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ExternalId: Event.target.value })} placeholder="UC..." value={Source.ExternalId} />
+                      </label>
+                      <label className="block text-sm font-bold text-slate-200">
+                        Feed URL override
+                        <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { Url: Event.target.value })} placeholder="Optional RSS URL" value={Source.Url} />
+                      </label>
+                    </>
+                  ) : null}
+                  {Source.Type === "Twitch" ? (
+                    <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                      Twitch login
+                      <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ExternalId: Event.target.value })} placeholder="channel_login" value={Source.ExternalId} />
+                    </label>
+                  ) : null}
+                  {Source.Type === "Kick" ? (
+                    <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                      Kick login
+                      <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ExternalId: Event.target.value })} placeholder="channel_login" value={Source.ExternalId} />
+                    </label>
+                  ) : null}
+                  {Source.Type === "X" ? (
+                    <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                      X username
+                      <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ExternalId: Event.target.value })} placeholder="username without @" value={Source.ExternalId} />
+                    </label>
+                  ) : null}
+                  {Source.Type === "Reddit" ? (
+                    <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                      Subreddit
+                      <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ExternalId: Event.target.value })} placeholder="announcements" value={Source.ExternalId} />
+                    </label>
+                  ) : null}
+                  {Source.Type === "Instagram" ? (
+                    <label className="block text-sm font-bold text-slate-200 lg:col-span-2">
+                      Instagram user ID
+                      <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ExternalId: Event.target.value })} placeholder="178414..." value={Source.ExternalId} />
+                    </label>
+                  ) : null}
+                </div>
+
+                {NotificationSourceUsesKeys(Source.Type) ? (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                    {Source.Type === "Twitch" || Source.Type === "Reddit" ? (
+                      <>
+                        <label className="block text-sm font-bold text-slate-200">
+                          API key / client ID
+                          <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ApiKey: Event.target.value })} value={Source.ApiKey} />
+                        </label>
+                        <label className="block text-sm font-bold text-slate-200">
+                          API secret
+                          <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { ApiSecret: Event.target.value })} type="password" value={Source.ApiSecret} />
+                        </label>
+                      </>
+                    ) : null}
+                    {Source.Type === "X" || Source.Type === "Instagram" || Source.Type === "Kick" || Source.Type === "Reddit" ? (
+                      <label className="block text-sm font-bold text-slate-200">
+                        Access token
+                        <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { AccessToken: Event.target.value })} type="password" value={Source.AccessToken} />
+                      </label>
+                    ) : null}
+                    {Source.Type === "Twitch" ? (
+                      <p className="self-end rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-500">Uses source keys first, then TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET from .env.</p>
+                    ) : null}
+                    {Source.Type === "Reddit" ? (
+                      <p className="self-end rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-500">Can work without keys through public JSON. Client credentials or bearer token are used when provided.</p>
+                    ) : null}
+                    {Source.Type === "X" ? (
+                      <p className="self-end rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-500">Requires an X API bearer token.</p>
+                    ) : null}
+                    {Source.Type === "Instagram" ? (
+                      <p className="self-end rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-500">Requires an Instagram Graph access token for the configured user ID.</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-4">
+                  <AdvancedEmbedEditor
+                    EmbedValue={Source.Embed}
+                    OnChange={(Embed) => UpdateSource(Source.Id, { Embed })}
+                    PlaceholderText="Available tags: %source%, %type%, %title%, %url%, %author%, %publishedAt%, %summary%, %image%."
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                  <span>Last checked: {Source.LastCheckedAt ? FormatReminderDate(Source.LastCheckedAt) : "Never"}</span>
+                  <button className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500" onClick={() => RemoveSource(Source.Id)} type="button">
+                    Delete source
+                  </button>
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
       </div>
     </section>
   );
@@ -2066,6 +2366,51 @@ function ParseReminderDrafts(Value: unknown): Record<string, ReminderDraft> {
   }
 
   return Reminders;
+}
+
+function ParseNotificationSources(Value: unknown): NotificationSourceDraft[] {
+  if (!Array.isArray(Value)) {
+    return [];
+  }
+
+  return Value.filter(IsRecord).map((SourceValue) => ({
+    Id: typeof SourceValue.Id === "string" ? SourceValue.Id : CreateClientId(),
+    Name: typeof SourceValue.Name === "string" ? SourceValue.Name : "Notification source",
+    Type: ParseNotificationSourceType(SourceValue.Type),
+    Enabled: SourceValue.Enabled !== false,
+    ChannelId: typeof SourceValue.ChannelId === "string" ? SourceValue.ChannelId : "",
+    Url: typeof SourceValue.Url === "string" ? SourceValue.Url : "",
+    ExternalId: typeof SourceValue.ExternalId === "string" ? SourceValue.ExternalId : "",
+    ApiKey: typeof SourceValue.ApiKey === "string" ? SourceValue.ApiKey : "",
+    ApiSecret: typeof SourceValue.ApiSecret === "string" ? SourceValue.ApiSecret : "",
+    AccessToken: typeof SourceValue.AccessToken === "string" ? SourceValue.AccessToken : "",
+    IntervalSeconds: Math.max(process.env.NODE_ENV === "production" ? 300 : 5, Number(SourceValue.IntervalSeconds) || (Number(SourceValue.IntervalMinutes) || 10) * 60),
+    IntervalMinutes: Math.max(5, Number(SourceValue.IntervalMinutes) || 10),
+    LastCheckedAt: typeof SourceValue.LastCheckedAt === "string" ? SourceValue.LastCheckedAt : null,
+    Embed: ParseEditableEmbed(SourceValue.Embed)
+  }));
+}
+
+function ParseNotificationSourceType(Value: unknown): NotificationSourceType {
+  return Value === "YouTube" || Value === "Twitch" || Value === "Kick" || Value === "X" || Value === "Reddit" || Value === "Instagram" ? Value : "RSS";
+}
+
+function BuildNotificationSourceName(Type: NotificationSourceType): string {
+  const Labels: Record<NotificationSourceType, string> = {
+    RSS: "New RSS source",
+    YouTube: "New YouTube channel",
+    Twitch: "New Twitch channel",
+    Kick: "New Kick channel",
+    X: "New X account",
+    Reddit: "New subreddit",
+    Instagram: "New Instagram account"
+  };
+
+  return Labels[Type];
+}
+
+function NotificationSourceUsesKeys(Type: NotificationSourceType): boolean {
+  return Type === "Twitch" || Type === "Kick" || Type === "X" || Type === "Reddit" || Type === "Instagram";
 }
 
 const ReminderWeekdays = [

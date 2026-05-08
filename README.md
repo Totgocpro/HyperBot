@@ -26,6 +26,7 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 | `Giveaway` | Guild | `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list` | Button-based giveaways with automatic ending, winner rerolls, entry rules, and role bonuses. |
 | `Leveling` | Guild | `/leaderboard` | XP, rankings, and member progression. Depends on `Statistics`. |
 | `Moderation` | Guild | `/warn`, `/lookup` | Sanctions, moderation logs, and AutoMod rules. |
+| `Notifications` | Guild | - | Dashboard-managed RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram notifications with custom embeds per source. |
 | `SendEmbed` | Guild | - | Create and send embeds from the dashboard. |
 | `Statistics` | Guild | `/stats` | Message, voice, join, and leave statistics. |
 | `TempVoice` | Guild | - | Temporary voice channels with a control panel. |
@@ -52,6 +53,22 @@ The `Reminders` plugin provides Mee6-style scheduled messages for server announc
 
 Dashboard settings include reminder creation/editing, target channel, message/embed mode, schedule interval, next run time, default reminder channel, default embed mode, default interval, embed color, footer text, and maximum reminders per server. Reminder text supports placeholders like `%name%`, `%id%`, `%server%`, `%runCount%`, `%interval%`, and `%nextRun%`.
 
+### Notifications Plugin
+
+The `Notifications` plugin watches external sources and posts new items into configured Discord channels. Sources are created from the dashboard and each source has its own target channel, check interval, and embed template.
+
+Supported source types:
+
+- RSS: any public RSS or Atom feed URL.
+- YouTube: public channel RSS feeds, using a YouTube channel ID or a feed URL override.
+- Twitch: live stream notifications through the Twitch API. Use per-source client ID/secret or set `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` in `.env`.
+- Kick: live stream notifications through Kick channel data. A per-source access token can be provided when needed.
+- X: recent post notifications through the X API. Requires a per-source bearer token.
+- Reddit: subreddit post notifications through public JSON, or through Reddit OAuth using per-source client credentials / bearer token.
+- Instagram: media notifications through Instagram Graph. Requires a per-source user ID and access token.
+
+Notification embeds support `%source%`, `%type%`, `%title%`, `%url%`, `%author%`, `%publishedAt%`, `%summary%`, and `%image%`.
+
 ## Requirements
 
 - Node.js 22 or newer
@@ -77,6 +94,8 @@ DISCORD_GUILD_ID=
 SUPER_ADMIN_IDS=
 PUBLIC_REGISTRATION_ENABLED=true
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+TWITCH_CLIENT_ID=
+TWITCH_CLIENT_SECRET=
 ```
 
 Useful variables:
