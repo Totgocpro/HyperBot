@@ -12,6 +12,7 @@ export type DashboardPlugin = {
     Author: string;
     Icon: string;
   };
+  Category?: string;
   Commands: Array<{
     Name: string;
     Description: string;

@@ -104,6 +104,7 @@ export type DashboardElement = {
 export type PluginManifest = {
   Metadata: PluginMetadata;
   Scope: PluginScope;
+  Category?: string;
   Dependencies?: string[];
   Commands: CommandDefinition[];
   WebInterface: SettingsField[];

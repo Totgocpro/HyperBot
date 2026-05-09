@@ -26,7 +26,8 @@ async function Get(Request: Request): Promise<Response> {
     .filter((Entry) => Entry.Manifest.Scope === PluginScope.Guild && !DisabledPluginIds.has(Entry.Manifest.Metadata.Id))
     .map((Entry) => ({
       Id: Entry.Manifest.Metadata.Id,
-      DisplayName: Entry.Manifest.Metadata.DisplayName
+      DisplayName: Entry.Manifest.Metadata.DisplayName,
+      Category: Entry.Manifest.Category
     }));
   const Grants = await Prisma.guildRoleGrant.findMany({
     where: { BotId },

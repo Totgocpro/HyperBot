@@ -59,6 +59,7 @@ async function Get(Request: Request): Promise<Response> {
 
       return {
         Metadata: ManifestEntry.Manifest.Metadata,
+        Category: ManifestEntry.Manifest.Category,
         Scope: ManifestEntry.Manifest.Scope,
         Loaded: BotPluginStates.get(ManifestEntry.Manifest.Metadata.Id)?.Loaded ?? false,
         Disabled: false,
@@ -74,6 +75,7 @@ async function Get(Request: Request): Promise<Response> {
 
     return {
       Metadata: ManifestEntry.Manifest.Metadata,
+      Category: ManifestEntry.Manifest.Category,
       Scope: ManifestEntry.Manifest.Scope,
       Loaded: BotState?.Loaded ?? false,
       Disabled: ManifestEntry.Manifest.Scope === PluginScope.Global ? false : DisabledPluginIds.has(PluginId) || BotState?.Disabled === true,

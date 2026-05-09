@@ -51,5 +51,6 @@
       "ActionKey": "RestoreBackup"
     }
   ],
-  "EntryPoint": "./BackupsPlugin.ts"
+  "EntryPoint": "./BackupsPlugin.ts",
+  "Category": "Administration"
 }

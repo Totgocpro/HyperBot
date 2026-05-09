@@ -30,7 +30,11 @@
       "Label": "Default allowed channels",
       "Default": [],
       "Section": "Defaults",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -57,5 +61,6 @@
       "Section": "Commands"
     }
   ],
-  "EntryPoint": "./CustomCommandsPlugin.ts"
+  "EntryPoint": "./CustomCommandsPlugin.ts",
+  "Category": "Automation"
 }

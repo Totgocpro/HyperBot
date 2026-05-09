@@ -296,8 +296,12 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
 
             <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
                 <h2 className="mb-6 text-xl font-bold text-white">Bot Plugins</h2>
-                <div className="grid gap-4 md:grid-cols-2">
-                    {ManageablePlugins.map((Plugin) => (
+                <div className="grid gap-5">
+                  {BuildManageablePluginCategoryGroups(ManageablePlugins).map((Group) => (
+                    <div className="grid gap-3" key={Group.Category}>
+                      <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-500">{Group.Category}</p>
+                      <div className="grid gap-4 md:grid-cols-2">
+                    {Group.Plugins.map((Plugin) => (
                         <div key={Plugin.Metadata.Id} className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -326,6 +330,9 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
                         </div>
                         </div>
                     ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
             </section>
           </div>
@@ -495,6 +502,20 @@ async function ReadFirstResponseError(Responses: Response[]): Promise<string> {
   }
 
   return "Bot settings loading failed.";
+}
+
+function BuildManageablePluginCategoryGroups(Plugins: any[]): Array<{ Category: string; Plugins: any[] }> {
+  const Groups = new Map<string, any[]>();
+
+  for (const Plugin of Plugins) {
+    const Category = typeof Plugin.Category === "string" && Plugin.Category.trim() ? Plugin.Category.trim() : "General";
+    Groups.set(Category, [...(Groups.get(Category) ?? []), Plugin]);
+  }
+
+  return Array.from(Groups.entries()).map(([Category, GroupPlugins]) => ({
+    Category,
+    Plugins: GroupPlugins
+  }));
 }
 
 function ParseCommandAliases(Value: unknown): CommandAliasDraft[] {

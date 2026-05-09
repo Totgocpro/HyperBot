@@ -15,7 +15,11 @@
       "Label": "Target channel",
       "Default": "",
       "Section": "Embed editor",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -60,5 +64,6 @@
       "ActionKey": "SendEmbed"
     }
   ],
-  "EntryPoint": "./SendEmbedPlugin.ts"
+  "EntryPoint": "./SendEmbedPlugin.ts",
+  "Category": "Messages"
 }

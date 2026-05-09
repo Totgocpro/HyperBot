@@ -74,7 +74,11 @@
       "Label": "Default giveaway channel",
       "Default": "",
       "Section": "Defaults",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -141,11 +145,31 @@
         "FooterIconUrl": "",
         "Timestamp": true,
         "Fields": [
-          { "Name": "Prize", "Value": "%prize%", "Inline": true },
-          { "Name": "Winners", "Value": "%winnerCount%", "Inline": true },
-          { "Name": "Entries", "Value": "%entries%", "Inline": true },
-          { "Name": "Hosted by", "Value": "%host%", "Inline": true },
-          { "Name": "Ends", "Value": "%endsAt%", "Inline": true }
+          {
+            "Name": "Prize",
+            "Value": "%prize%",
+            "Inline": true
+          },
+          {
+            "Name": "Winners",
+            "Value": "%winnerCount%",
+            "Inline": true
+          },
+          {
+            "Name": "Entries",
+            "Value": "%entries%",
+            "Inline": true
+          },
+          {
+            "Name": "Hosted by",
+            "Value": "%host%",
+            "Inline": true
+          },
+          {
+            "Name": "Ends",
+            "Value": "%endsAt%",
+            "Inline": true
+          }
         ],
         "ImageDataUrl": "",
         "ImageName": ""
@@ -171,10 +195,26 @@
         "FooterIconUrl": "",
         "Timestamp": true,
         "Fields": [
-          { "Name": "Prize", "Value": "%prize%", "Inline": true },
-          { "Name": "Winners", "Value": "%winnerCount%", "Inline": true },
-          { "Name": "Entries", "Value": "%entries%", "Inline": true },
-          { "Name": "Selected winner(s)", "Value": "%winners%", "Inline": false }
+          {
+            "Name": "Prize",
+            "Value": "%prize%",
+            "Inline": true
+          },
+          {
+            "Name": "Winners",
+            "Value": "%winnerCount%",
+            "Inline": true
+          },
+          {
+            "Name": "Entries",
+            "Value": "%entries%",
+            "Inline": true
+          },
+          {
+            "Name": "Selected winner(s)",
+            "Value": "%winners%",
+            "Inline": false
+          }
         ],
         "ImageDataUrl": "",
         "ImageName": ""
@@ -238,5 +278,6 @@
       "Section": "Button"
     }
   ],
-  "EntryPoint": "./GiveawayPlugin.ts"
+  "EntryPoint": "./GiveawayPlugin.ts",
+  "Category": "Engagement"
 }

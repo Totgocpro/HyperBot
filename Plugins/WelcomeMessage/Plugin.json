@@ -22,7 +22,11 @@
       "Label": "Welcome channel",
       "Default": "",
       "Section": "Welcome",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -48,7 +52,10 @@
       "Label": "Welcome title",
       "Default": "Welcome %user%",
       "Section": "Welcome image",
-      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Image" }
+      "VisibleWhen": {
+        "Key": "WelcomeMode",
+        "Value": "Image"
+      }
     },
     {
       "Key": "WelcomeMessage",
@@ -56,7 +63,10 @@
       "Label": "Welcome message",
       "Default": "You are member #%memberCount% on %server%.",
       "Section": "Welcome image",
-      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Image" }
+      "VisibleWhen": {
+        "Key": "WelcomeMode",
+        "Value": "Image"
+      }
     },
     {
       "Key": "WelcomeEmbed",
@@ -81,7 +91,10 @@
         "ImageName": ""
       },
       "Section": "Welcome embed",
-      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Embed" }
+      "VisibleWhen": {
+        "Key": "WelcomeMode",
+        "Value": "Embed"
+      }
     },
     {
       "Key": "LeaveEnabled",
@@ -96,7 +109,11 @@
       "Label": "Leave channel",
       "Default": "",
       "Section": "Leave",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -122,7 +139,10 @@
       "Label": "Leave title",
       "Default": "%user% left the server",
       "Section": "Leave image",
-      "VisibleWhen": { "Key": "LeaveMode", "Value": "Image" }
+      "VisibleWhen": {
+        "Key": "LeaveMode",
+        "Value": "Image"
+      }
     },
     {
       "Key": "LeaveMessage",
@@ -130,7 +150,10 @@
       "Label": "Leave message",
       "Default": "Goodbye from %server%.",
       "Section": "Leave image",
-      "VisibleWhen": { "Key": "LeaveMode", "Value": "Image" }
+      "VisibleWhen": {
+        "Key": "LeaveMode",
+        "Value": "Image"
+      }
     },
     {
       "Key": "LeaveEmbed",
@@ -155,7 +178,10 @@
         "ImageName": ""
       },
       "Section": "Leave embed",
-      "VisibleWhen": { "Key": "LeaveMode", "Value": "Embed" }
+      "VisibleWhen": {
+        "Key": "LeaveMode",
+        "Value": "Embed"
+      }
     },
     {
       "Key": "ImageBackground",
@@ -164,8 +190,14 @@
       "Default": "#020617",
       "Section": "Image background",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -175,8 +207,14 @@
       "Default": "",
       "Section": "Image background",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -185,7 +223,10 @@
       "Label": "Welcome background image override",
       "Default": "",
       "Section": "Image background",
-      "VisibleWhen": { "Key": "WelcomeMode", "Value": "Image" }
+      "VisibleWhen": {
+        "Key": "WelcomeMode",
+        "Value": "Image"
+      }
     },
     {
       "Key": "LeaveImageBackgroundImage",
@@ -193,7 +234,10 @@
       "Label": "Leave background image override",
       "Default": "",
       "Section": "Image background",
-      "VisibleWhen": { "Key": "LeaveMode", "Value": "Image" }
+      "VisibleWhen": {
+        "Key": "LeaveMode",
+        "Value": "Image"
+      }
     },
     {
       "Key": "ImageBackgroundFit",
@@ -202,13 +246,28 @@
       "Default": "Cover",
       "Section": "Image background",
       "Options": [
-        { "Label": "Cover", "Value": "Cover" },
-        { "Label": "Contain", "Value": "Contain" },
-        { "Label": "Stretch", "Value": "Stretch" }
+        {
+          "Label": "Cover",
+          "Value": "Cover"
+        },
+        {
+          "Label": "Contain",
+          "Value": "Contain"
+        },
+        {
+          "Label": "Stretch",
+          "Value": "Stretch"
+        }
       ],
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -218,8 +277,14 @@
       "Default": 100,
       "Section": "Image background",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -229,8 +294,14 @@
       "Default": 55,
       "Section": "Image background",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -240,8 +311,14 @@
       "Default": "#38bdf8",
       "Section": "Image design",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -251,8 +328,14 @@
       "Default": "#f8fafc",
       "Section": "Image design",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -262,8 +345,14 @@
       "Default": "#cbd5e1",
       "Section": "Image design",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -273,8 +362,14 @@
       "Default": true,
       "Section": "Image design",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -284,8 +379,14 @@
       "Default": 86,
       "Section": "Image design",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -295,8 +396,14 @@
       "Default": "%server% • %memberCount% members",
       "Section": "Image text",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -306,8 +413,14 @@
       "Default": true,
       "Section": "Image text",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -317,8 +430,14 @@
       "Default": "%type%",
       "Section": "Image text",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -328,8 +447,14 @@
       "Default": true,
       "Section": "Image text",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -339,8 +464,14 @@
       "Default": 40,
       "Section": "Image text",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -350,8 +481,14 @@
       "Default": 15,
       "Section": "Image text",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -361,13 +498,28 @@
       "Default": "Circle",
       "Section": "Image avatar",
       "Options": [
-        { "Label": "Circle", "Value": "Circle" },
-        { "Label": "Rounded square", "Value": "Rounded" },
-        { "Label": "Square", "Value": "Square" }
+        {
+          "Label": "Circle",
+          "Value": "Circle"
+        },
+        {
+          "Label": "Rounded square",
+          "Value": "Rounded"
+        },
+        {
+          "Label": "Square",
+          "Value": "Square"
+        }
       ],
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -377,8 +529,14 @@
       "Default": 140,
       "Section": "Image avatar",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -388,8 +546,14 @@
       "Default": true,
       "Section": "Image avatar",
       "VisibleWhenAny": [
-        { "Key": "WelcomeMode", "Value": "Image" },
-        { "Key": "LeaveMode", "Value": "Image" }
+        {
+          "Key": "WelcomeMode",
+          "Value": "Image"
+        },
+        {
+          "Key": "LeaveMode",
+          "Value": "Image"
+        }
       ]
     },
     {
@@ -412,9 +576,16 @@
       "Label": "Captcha channel",
       "Default": "",
       "Section": "Captcha",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true,
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaRoleIds",
@@ -423,7 +594,10 @@
       "Default": [],
       "Section": "Captcha",
       "ItemType": "RolePicker",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaEmbed",
@@ -448,7 +622,10 @@
         "ImageName": ""
       },
       "Section": "Captcha embed",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaButtonLabel",
@@ -456,7 +633,10 @@
       "Label": "Captcha button label",
       "Default": "Verify",
       "Section": "Captcha embed",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaVerificationLevels",
@@ -464,7 +644,10 @@
       "Label": "Verification levels",
       "Default": 2,
       "Section": "Captcha embed",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaDmMessage",
@@ -472,7 +655,10 @@
       "Label": "Captcha DM message",
       "Default": "Verification level %level%/%levels%. Enter the code shown in the image.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaDmSentMessage",
@@ -480,7 +666,10 @@
       "Label": "DM sent response",
       "Default": "I sent your captcha in DM. Complete every level there to unlock the server.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaDmFailedMessage",
@@ -488,7 +677,10 @@
       "Label": "DM failed response",
       "Default": "I could not send you a DM. Enable direct messages for this server and try again.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaAlreadyVerifiedMessage",
@@ -496,7 +688,10 @@
       "Label": "Already verified response",
       "Default": "You are already verified.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaExpiredMessage",
@@ -504,7 +699,10 @@
       "Label": "Expired session response",
       "Default": "This captcha session expired. Start verification again from the server.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaFailedMessage",
@@ -512,7 +710,10 @@
       "Label": "Wrong code response",
       "Default": "Captcha failed. Use the latest DM image and try again.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaNextLevelMessage",
@@ -520,7 +721,10 @@
       "Label": "Next level message",
       "Default": "Level %level%/%levels% passed. Here is the next captcha.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaNoRoleGrantedMessage",
@@ -528,7 +732,10 @@
       "Label": "No new role response",
       "Default": "Captcha complete. No new role was granted.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaAnswerButtonLabel",
@@ -536,7 +743,10 @@
       "Label": "DM answer button label",
       "Default": "Enter captcha code",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaModalTitle",
@@ -544,7 +754,10 @@
       "Label": "Answer modal title",
       "Default": "Captcha verification",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaModalInputLabel",
@@ -552,7 +765,10 @@
       "Label": "Answer input label",
       "Default": "Enter the code from image %level%/%levels%",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "CaptchaSuccessMessage",
@@ -560,7 +776,10 @@
       "Label": "Captcha success message",
       "Default": "Verification complete. Roles granted.",
       "Section": "Captcha messages",
-      "VisibleWhen": { "Key": "CaptchaEnabled", "Value": true }
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
     },
     {
       "Key": "TestWelcomeButton",
@@ -590,5 +809,6 @@
       "ActionKey": "PublishCaptchaPanel"
     }
   ],
-  "EntryPoint": "./WelcomeMessagePlugin.ts"
+  "EntryPoint": "./WelcomeMessagePlugin.ts",
+  "Category": "Community"
 }

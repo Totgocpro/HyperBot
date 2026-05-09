@@ -15,7 +15,9 @@
       "Label": "Creator voice channel",
       "Default": "",
       "Section": "Creation",
-      "SupportedChannelTypes": ["GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildVoice"
+      ],
       "RequireWritable": false
     },
     {
@@ -69,5 +71,6 @@
       "Section": "Control panel"
     }
   ],
-  "EntryPoint": "./TempVoicePlugin.ts"
+  "EntryPoint": "./TempVoicePlugin.ts",
+  "Category": "Voice"
 }

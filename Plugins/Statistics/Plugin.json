@@ -28,7 +28,9 @@
       "Default": [],
       "Section": "Tracking",
       "ItemType": "ChannelPicker",
-      "SupportedChannelTypes": ["GuildVoice"]
+      "SupportedChannelTypes": [
+        "GuildVoice"
+      ]
     },
     {
       "Key": "StatsEmbed",
@@ -72,7 +74,9 @@
       "Label": "Channel counters",
       "Default": [],
       "Section": "Channel counters",
-      "SupportedChannelTypes": ["GuildVoice"]
+      "SupportedChannelTypes": [
+        "GuildVoice"
+      ]
     }
   ],
   "DashboardElements": [
@@ -105,5 +109,6 @@
       "Unit": "leaves"
     }
   ],
-  "EntryPoint": "./StatisticsPlugin.ts"
+  "EntryPoint": "./StatisticsPlugin.ts",
+  "Category": "Analytics"
 }

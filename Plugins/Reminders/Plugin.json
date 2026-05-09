@@ -68,7 +68,11 @@
       "Label": "Default reminder channel",
       "Default": "",
       "Section": "Defaults",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -115,5 +119,6 @@
       "Section": "Reminders"
     }
   ],
-  "EntryPoint": "./RemindersPlugin.ts"
+  "EntryPoint": "./RemindersPlugin.ts",
+  "Category": "Automation"
 }

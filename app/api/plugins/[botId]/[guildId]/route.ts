@@ -75,6 +75,7 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
 
       return {
         Metadata: ManifestEntry.Manifest.Metadata,
+        Category: ManifestEntry.Manifest.Category,
         Dependencies: ManifestEntry.Manifest.Dependencies ?? [],
         DependencyErrors: BuildDependencyErrors(ManifestEntry.Manifest.Dependencies ?? [], AvailablePluginIds),
         Commands: ManifestEntry.Manifest.Commands,

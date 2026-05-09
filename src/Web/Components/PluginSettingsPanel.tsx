@@ -44,6 +44,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const VisibleConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin, SelectedPluginDraftValues, true) : [];
   const HasDashboardOverview = Boolean(SelectedPlugin?.DashboardElements?.length);
   const SelectedPluginHasUnsavedChanges = SelectedPlugin ? HasPluginUnsavedChanges(SelectedPlugin, DraftValues) : false;
+  const PluginCategoryGroups = BuildPluginCategoryGroups(Plugins);
 
   UseEffect(() => {
     void LoadPlugins();
@@ -294,30 +295,35 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
               </button>
             </div>
             <div className={`${PluginMenuOpen ? "grid" : "hidden"} mt-3 gap-2 lg:grid lg:space-y-2`}>
-              {Plugins.map((Plugin) => (
-                <button
-                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
-                    BlockedPluginId === Plugin.Metadata.Id
-                      ? "border border-red-500/70 bg-red-950/60 text-red-100 shadow-lg shadow-red-950/30"
-                      : SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id
-                        ? SelectedPluginHasUnsavedChanges
-                          ? "border border-red-500/70 bg-red-950/50 text-white"
-                          : "bg-blue-600 text-white"
-                        : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                  key={Plugin.Metadata.Id}
-                  onClick={() => SelectPlugin(Plugin.Metadata.Id)}
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
-                    {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span>
-                    <span className="block font-bold">{Plugin.Metadata.DisplayName}</span>
-                    <span className={SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id ? "text-xs text-blue-100" : "text-xs text-slate-500"}>
-                      {Plugin.Commands.length} command(s)
-                    </span>
-                  </span>
-                </button>
+              {PluginCategoryGroups.map((Group) => (
+                <div className="grid gap-2" key={Group.Category}>
+                  <p className="px-2 pt-2 text-[0.7rem] font-black uppercase tracking-[0.22em] text-slate-500">{Group.Category}</p>
+                  {Group.Plugins.map((Plugin) => (
+                    <button
+                      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
+                        BlockedPluginId === Plugin.Metadata.Id
+                          ? "border border-red-500/70 bg-red-950/60 text-red-100 shadow-lg shadow-red-950/30"
+                          : SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id
+                            ? SelectedPluginHasUnsavedChanges
+                              ? "border border-red-500/70 bg-red-950/50 text-white"
+                              : "bg-blue-600 text-white"
+                            : "text-slate-300 hover:bg-slate-800"
+                      }`}
+                      key={Plugin.Metadata.Id}
+                      onClick={() => SelectPlugin(Plugin.Metadata.Id)}
+                    >
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
+                        {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span>
+                        <span className="block font-bold">{Plugin.Metadata.DisplayName}</span>
+                        <span className={SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id ? "text-xs text-blue-100" : "text-xs text-slate-500"}>
+                          {Plugin.Commands.length} command(s)
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
 
@@ -572,6 +578,24 @@ function UnsavedChangesBar(Properties: {
   );
 }
 
+function BuildPluginCategoryGroups(Plugins: DashboardPlugin[]): Array<{ Category: string; Plugins: DashboardPlugin[] }> {
+  const Groups = new Map<string, DashboardPlugin[]>();
+
+  for (const Plugin of Plugins) {
+    const Category = NormalizePluginCategory(Plugin.Category);
+    Groups.set(Category, [...(Groups.get(Category) ?? []), Plugin]);
+  }
+
+  return Array.from(Groups.entries()).map(([Category, GroupPlugins]) => ({
+    Category,
+    Plugins: GroupPlugins
+  }));
+}
+
+function NormalizePluginCategory(Category: string | undefined): string {
+  return Category?.trim() || "General";
+}
+
 function SaveCheckIcon() {
   return (
     <svg aria-hidden="true" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
@@ -587,4 +611,3 @@ function SaveErrorIcon() {
     </svg>
   );
 }
-

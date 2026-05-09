@@ -39,6 +39,7 @@ type GuildGrantRow = {
 type GrantPlugin = {
   Id: string;
   DisplayName: string;
+  Category?: string;
 };
 
 type BotAccessScope = {
@@ -835,13 +836,20 @@ function UserAccessMatrix(Properties: {
                                 <button className="rounded-lg border border-slate-700 px-2 py-1 text-xs font-bold text-slate-200 hover:bg-slate-800" onClick={() => SetAllPlugins(Bot.Id, Guild.GuildId, [])} type="button">None</button>
                               </div>
                             </div>
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div className="mt-3 grid gap-3">
                               {Scope.Plugins.length === 0 ? <p className="text-sm text-slate-500">No guild plugin available.</p> : null}
-                              {Scope.Plugins.map((Plugin) => (
-                                <label className="flex items-center justify-between gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200" key={Plugin.Id}>
-                                  <span className="truncate">{Plugin.DisplayName}</span>
-                                  <input checked={GuildPluginIds.includes(Plugin.Id)} className="h-4 w-4 shrink-0 accent-blue-600" onChange={() => TogglePlugin(Bot.Id, Guild.GuildId, Plugin.Id)} type="checkbox" />
-                                </label>
+                              {BuildGrantPluginCategoryGroups(Scope.Plugins).map((Group) => (
+                                <div className="grid gap-2" key={Group.Category}>
+                                  <p className="text-[0.65rem] font-black uppercase tracking-[0.2em] text-slate-500">{Group.Category}</p>
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    {Group.Plugins.map((Plugin) => (
+                                      <label className="flex items-center justify-between gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200" key={Plugin.Id}>
+                                        <span className="truncate">{Plugin.DisplayName}</span>
+                                        <input checked={GuildPluginIds.includes(Plugin.Id)} className="h-4 w-4 shrink-0 accent-blue-600" onChange={() => TogglePlugin(Bot.Id, Guild.GuildId, Plugin.Id)} type="checkbox" />
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           </div>
@@ -941,6 +949,20 @@ function BuildUserGuildPluginAccess(DiscordId: string, BotAccessScopes: BotAcces
   }
 
   return Access;
+}
+
+function BuildGrantPluginCategoryGroups(Plugins: GrantPlugin[]): Array<{ Category: string; Plugins: GrantPlugin[] }> {
+  const Groups = new Map<string, GrantPlugin[]>();
+
+  for (const Plugin of Plugins) {
+    const Category = Plugin.Category?.trim() || "General";
+    Groups.set(Category, [...(Groups.get(Category) ?? []), Plugin]);
+  }
+
+  return Array.from(Groups.entries()).map(([Category, GroupPlugins]) => ({
+    Category,
+    Plugins: GroupPlugins
+  }));
 }
 
 async function ReadFirstError(Responses: Response[]): Promise<string> {

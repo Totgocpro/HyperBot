@@ -47,7 +47,12 @@
       "Default": "",
       "Section": "Log channel",
       "Required": true,
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildForum", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildForum",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -301,5 +306,6 @@
       "Section": "Message rewriting"
     }
   ],
-  "EntryPoint": "./ModerationPlugin.ts"
+  "EntryPoint": "./ModerationPlugin.ts",
+  "Category": "Moderation"
 }

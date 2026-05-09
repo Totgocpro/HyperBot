@@ -15,7 +15,11 @@
       "Label": "Default notification channel",
       "Default": "",
       "Section": "Defaults",
-      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "SupportedChannelTypes": [
+        "GuildText",
+        "GuildAnnouncement",
+        "GuildVoice"
+      ],
       "RequireWritable": true
     },
     {
@@ -34,5 +38,6 @@
       "Section": "Sources"
     }
   ],
-  "EntryPoint": "./NotificationsPlugin.ts"
+  "EntryPoint": "./NotificationsPlugin.ts",
+  "Category": "Automation"
 }
