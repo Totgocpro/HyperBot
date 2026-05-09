@@ -117,29 +117,17 @@ BackupDatabase() {
   cp "${BackupPath}" "${LatestPath}"
 }
 
-InstallDependencies() {
-  echo "Installing npm dependencies, including build dependencies..."
-  npm install --include=dev
-}
-
-BuildApplication() {
-  echo "Building production assets..."
-  export NODE_ENV="production"
-  npx prisma generate
-  npm run build
-  mkdir -p dist/Plugins
-  cp -R Plugins/* dist/Plugins/
-}
-
 SyncDatabaseSchema() {
   echo "Synchronizing Prisma schema..."
-  npx prisma db push
+  docker compose run --rm application npx prisma db push
+}
+
+BuildApplicationImage() {
+  echo "Building Docker application image..."
+  docker compose build application
 }
 
 StartReleaseContainers() {
-  echo "Building Docker application image..."
-  docker compose build application
-
   echo "Starting release containers..."
   docker compose up -d --remove-orphans postgresql redis application
 }
@@ -169,8 +157,6 @@ FollowApplicationLogs() {
 }
 
 RequireCommand docker
-RequireCommand npm
-RequireCommand npx
 
 trap StopRelease INT TERM HUP
 
@@ -186,8 +172,7 @@ WaitForPostgreSQL
 SyncPostgreSQLPassword
 BackupDatabase
 EnsureDatabaseExists
-InstallDependencies
-BuildApplication
+BuildApplicationImage
 SyncDatabaseSchema
 StartReleaseContainers
 PrintStatus

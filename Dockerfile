@@ -1,12 +1,14 @@
-FROM node:22-alpine AS dependencies
-WORKDIR /Application
-RUN apk add --no-cache openssl
-COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+ARG NODE_VERSION=22.12.0
 
-FROM node:22-alpine AS builder
+FROM node:${NODE_VERSION}-alpine AS dependencies
 WORKDIR /Application
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl python3
+COPY package*.json ./
+RUN if [ -f package-lock.json ]; then npm ci --include=dev; else npm install --include=dev; fi
+
+FROM node:${NODE_VERSION}-alpine AS builder
+WORKDIR /Application
+RUN apk add --no-cache openssl python3
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=dependencies /Application/node_modules ./node_modules
 COPY . .
@@ -14,11 +16,11 @@ RUN npx prisma generate
 RUN npm run build
 RUN mkdir -p dist/Plugins && cp -R Plugins/* dist/Plugins/
 
-FROM node:22-alpine AS runner
+FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /Application
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache fontconfig openssl ttf-dejavu ttf-liberation
+RUN apk add --no-cache ffmpeg fontconfig openssl python3 ttf-dejavu ttf-liberation
 COPY --from=builder /Application/package.json ./package.json
 COPY --from=builder /Application/node_modules ./node_modules
 COPY --from=builder /Application/.next ./.next

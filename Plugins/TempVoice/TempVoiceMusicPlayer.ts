@@ -258,6 +258,19 @@ export class TempVoiceMusicPlayer {
       });
 
       Session.FfmpegProcess = Ffmpeg;
+      Ffmpeg.once("error", (ErrorValue) => {
+        if (Session.FfmpegProcess === Ffmpeg) {
+          Session.FfmpegProcess = null;
+        }
+
+        this.Logger.Warn("TempVoice music ffmpeg process failed.", {
+          ChannelId,
+          Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+          TrackTitle: Track.Title,
+          TrackUrl: Track.Url
+        });
+        this.DestroySession(ChannelId, Session);
+      });
       Ffmpeg.once("close", () => {
         if (Session.FfmpegProcess === Ffmpeg) {
           Session.FfmpegProcess = null;
