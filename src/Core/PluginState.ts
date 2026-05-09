@@ -1,37 +1,47 @@
 import type { PrismaClient } from "@prisma/client";
 
-export const DisabledPluginsSettingKey = "DisabledPluginIds";
-
-export async function GetDisabledPluginIds(Prisma: PrismaClient): Promise<string[]> {
-  const Setting = await Prisma.systemSetting.findUnique({
-    where: { Key: DisabledPluginsSettingKey }
+export async function GetDisabledPluginIds(Prisma: PrismaClient, BotId: string): Promise<string[]> {
+  const DisabledPlugins = await Prisma.botDisabledPlugin.findMany({
+    where: { BotId }
   });
-  const Value = Setting?.Value;
 
-  return Array.isArray(Value) ? Value.filter((PluginId): PluginId is string => typeof PluginId === "string") : [];
+  return DisabledPlugins.map((Plugin) => Plugin.PluginId);
 }
 
-export async function IsPluginDisabled(Prisma: PrismaClient, PluginId: string): Promise<boolean> {
-  return (await GetDisabledPluginIds(Prisma)).includes(PluginId);
-}
-
-export async function SetPluginDisabled(Prisma: PrismaClient, PluginId: string, IsDisabled: boolean): Promise<void> {
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
-
-  if (IsDisabled) {
-    DisabledPluginIds.add(PluginId);
-  } else {
-    DisabledPluginIds.delete(PluginId);
-  }
-
-  await Prisma.systemSetting.upsert({
-    where: { Key: DisabledPluginsSettingKey },
-    create: {
-      Key: DisabledPluginsSettingKey,
-      Value: Array.from(DisabledPluginIds)
-    },
-    update: {
-      Value: Array.from(DisabledPluginIds)
+export async function IsPluginDisabled(Prisma: PrismaClient, BotId: string, PluginId: string): Promise<boolean> {
+  const DisabledPlugin = await Prisma.botDisabledPlugin.findUnique({
+    where: {
+      BotId_PluginId: {
+        BotId,
+        PluginId
+      }
     }
   });
+
+  return !!DisabledPlugin;
+}
+
+export async function SetPluginDisabled(Prisma: PrismaClient, BotId: string, PluginId: string, IsDisabled: boolean): Promise<void> {
+  if (IsDisabled) {
+    await Prisma.botDisabledPlugin.upsert({
+      where: {
+        BotId_PluginId: {
+          BotId,
+          PluginId
+        }
+      },
+      create: {
+        BotId,
+        PluginId
+      },
+      update: {}
+    });
+  } else {
+    await Prisma.botDisabledPlugin.deleteMany({
+      where: {
+        BotId,
+        PluginId
+      }
+    });
+  }
 }

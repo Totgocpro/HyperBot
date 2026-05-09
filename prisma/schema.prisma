@@ -29,6 +29,47 @@ model DashboardUser {
   CreatedAt         DateTime       @default(now())
   UpdatedAt         DateTime       @updatedAt
   SessionTokens     SessionToken[]
+  BotAccesses       BotAccess[]
+}
+
+model DiscordBot {
+  Id            String   @id @default(cuid())
+  ClientId      String   @unique
+  Token         String   @unique
+  Name          String
+  AvatarUrl     String?
+  IsEnabled     Boolean  @default(true)
+  CreatedAt     DateTime @default(now())
+  UpdatedAt     DateTime @updatedAt
+
+  GuildAccesses      GuildAccess[]
+  PluginConfigs      PluginGlobalConfig[]
+  UserPluginValues   UserPluginValue[]
+  GuildRoleGrants    GuildRoleGrant[]
+  DisabledPlugins    BotDisabledPlugin[]
+  BotAccesses        BotAccess[]
+}
+
+model BotAccess {
+  Id        String        @id @default(cuid())
+  UserId    String
+  BotId     String
+  CreatedAt DateTime      @default(now())
+  User      DashboardUser @relation(fields: [UserId], references: [Id], onDelete: Cascade)
+  Bot       DiscordBot    @relation(fields: [BotId], references: [Id], onDelete: Cascade)
+
+  @@unique([UserId, BotId])
+  @@index([UserId])
+}
+
+model BotDisabledPlugin {
+  Id        String     @id @default(cuid())
+  BotId     String
+  PluginId  String
+  Bot       DiscordBot @relation(fields: [BotId], references: [Id], onDelete: Cascade)
+
+  @@unique([BotId, PluginId])
+  @@index([BotId])
 }
 
 model SessionToken {
@@ -44,52 +85,64 @@ model SessionToken {
 }
 
 model GuildAccess {
-  Id               String   @id @default(cuid())
-  GuildId          String   @unique
-  IsAllowed        Boolean  @default(true)
+  Id               String      @id @default(cuid())
+  BotId            String
+  GuildId          String
+  IsAllowed        Boolean     @default(true)
   RestrictedReason String?
-  CreatedAt        DateTime @default(now())
-  UpdatedAt        DateTime @updatedAt
+  CreatedAt        DateTime    @default(now())
+  UpdatedAt        DateTime    @updatedAt
+  Bot              DiscordBot  @relation(fields: [BotId], references: [Id], onDelete: Cascade)
+
+  @@unique([BotId, GuildId])
+  @@index([BotId])
 }
 
 model GuildRoleGrant {
   Id               String          @id @default(cuid())
+  BotId            String
   GuildId          String
   DiscordId        String
   Role             GuildAccessRole
   AllowedPluginIds Json?
   CreatedAt        DateTime        @default(now())
   UpdatedAt        DateTime        @updatedAt
+  Bot              DiscordBot      @relation(fields: [BotId], references: [Id], onDelete: Cascade)
 
-  @@unique([GuildId, DiscordId])
+  @@unique([BotId, GuildId, DiscordId])
+  @@index([BotId])
   @@index([DiscordId])
 }
 
 model PluginGlobalConfig {
-  Id        String   @id @default(cuid())
+  Id        String     @id @default(cuid())
+  BotId     String
   GuildId   String
   PluginId  String
   Key       String
   Value     Json
-  CreatedAt DateTime @default(now())
-  UpdatedAt DateTime @updatedAt
+  CreatedAt DateTime   @default(now())
+  UpdatedAt DateTime   @updatedAt
+  Bot       DiscordBot @relation(fields: [BotId], references: [Id], onDelete: Cascade)
 
-  @@unique([GuildId, PluginId, Key])
-  @@index([GuildId, PluginId])
+  @@unique([BotId, GuildId, PluginId, Key])
+  @@index([BotId, GuildId, PluginId])
 }
 
 model UserPluginValue {
-  Id        String   @id @default(cuid())
+  Id        String     @id @default(cuid())
+  BotId     String
   GuildId   String
   UserId    String
   PluginId  String
   Key       String
   Value     Json
-  CreatedAt DateTime @default(now())
-  UpdatedAt DateTime @updatedAt
+  CreatedAt DateTime   @default(now())
+  UpdatedAt DateTime   @updatedAt
+  Bot       DiscordBot @relation(fields: [BotId], references: [Id], onDelete: Cascade)
 
-  @@unique([GuildId, UserId, PluginId, Key])
-  @@index([GuildId, UserId])
+  @@unique([BotId, GuildId, UserId, PluginId, Key])
+  @@index([BotId, GuildId, UserId])
 }
 
 model SystemSetting {
@@ -101,6 +154,7 @@ model SystemSetting {
 
 model AuditLog {
   Id        String   @id @default(cuid())
+  BotId     String?
   ActorId   String
   Action    String
   Target    String
@@ -108,4 +162,5 @@ model AuditLog {
   CreatedAt DateTime @default(now())
 
   @@index([ActorId])
+  @@index([BotId])
 }

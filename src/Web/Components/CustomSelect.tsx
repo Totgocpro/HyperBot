@@ -86,10 +86,10 @@ export function CustomSelect(Properties: CustomSelectProperties) {
   }
 
   return (
-    <div className={`relative ${Properties.ClassName ?? ""}`} ref={RootRef}>
+    <div className={`relative w-full ${IsOpen ? "z-40" : "z-0"} ${Properties.ClassName ?? ""}`} ref={RootRef}>
       <button
         aria-expanded={IsOpen}
-        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-sm text-white outline-none transition hover:border-slate-500 focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-12 min-w-48 w-full items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-sm text-white outline-none transition hover:border-slate-500 focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={Properties.Disabled}
         onClick={() => SetIsOpen(!IsOpen)}
         type="button"
@@ -102,8 +102,8 @@ export function CustomSelect(Properties: CustomSelectProperties) {
       </button>
 
       {IsOpen ? (
-        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl shadow-black/50">
-          <div className="max-h-64 overflow-y-auto p-1">
+        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl shadow-black/50" tabIndex={-1}>
+          <div className="max-h-64 overflow-y-auto p-1" tabIndex={-1}>
             {!Properties.Required ? (
               <button className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-slate-400 hover:bg-slate-800" onClick={() => SelectValue("")} type="button">
                 {Properties.EmptyLabel ?? "Select"}
@@ -135,7 +135,7 @@ export function CustomSelect(Properties: CustomSelectProperties) {
           </div>
 
           {CanCreate ? (
-            <div className="border-t border-slate-800 p-3">
+            <div className="border-t border-slate-800 p-3" tabIndex={-1}>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">{Properties.CreateLabel ?? "Create option"}</p>
               <div className={`mt-2 grid gap-2 ${Properties.CreateColorEnabled === false ? "" : "sm:grid-cols-[1fr_auto]"}`}>
                 <input
@@ -157,9 +157,8 @@ export function CustomSelect(Properties: CustomSelectProperties) {
               </div>
               {CreateError ? <p className="mt-2 text-xs font-semibold text-red-300">{CreateError}</p> : null}
               <button
-                className="mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={IsCreating}
-                onClick={() => void CreateOption()}
+                className={`mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white transition ${IsCreating ? "cursor-not-allowed opacity-60" : "hover:bg-blue-500"}`}
+                onClick={() => !IsCreating && void CreateOption()}
                 type="button"
               >
                 {IsCreating ? "Creating..." : Properties.CreateButtonLabel ?? "Create"}

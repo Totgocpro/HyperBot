@@ -19,13 +19,13 @@ export function GetRequestDiscordId(Request: Request): string | null {
   return Request.headers.get("X-Discord-User-Id");
 }
 
-export function CreateAccessControl(): AccessControl {
+export function CreateAccessControl(BotId?: string): AccessControl {
   const SuperAdminIds = (process.env.SUPER_ADMIN_IDS ?? "")
     .split(",")
     .map((DiscordId) => DiscordId.trim())
     .filter(Boolean);
 
-  return new AccessControl(Prisma, SuperAdminIds);
+  return new AccessControl(Prisma, SuperAdminIds, BotId);
 }
 
 export async function RequireSuperAdmin(Request: Request): Promise<string> {

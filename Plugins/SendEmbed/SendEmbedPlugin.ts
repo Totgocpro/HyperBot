@@ -57,15 +57,31 @@ export default class SendEmbedPlugin extends BasePlugin {
       return;
     }
 
+    if (!this.HasSendableEmbedContent(ParsedPayload.Embed)) {
+      throw new Error(`Send embed action failed for guild ${GuildId}: the embed has no sendable content.`);
+    }
+
     const Channel = await this.ResolveWritableChannel(GuildId, ParsedPayload.ChannelId);
 
     if (!Channel) {
-      this.Logger.Warn("Send embed channel is missing or not writable.", { GuildId, ChannelId: ParsedPayload.ChannelId, ActorId });
-      return;
+      throw new Error(`Send embed action failed for guild ${GuildId}: channel ${ParsedPayload.ChannelId} is missing or is not writable.`);
     }
 
     const BuiltEmbed = this.BuildEmbed(ParsedPayload.Embed);
     await Channel.send({ embeds: [BuiltEmbed.Embed], files: BuiltEmbed.Files });
+    this.Logger.Info("Dashboard embed sent.", { GuildId, ChannelId: ParsedPayload.ChannelId, ActorId });
+  }
+
+  private HasSendableEmbedContent(Value: EditableEmbed): boolean {
+    return Boolean(
+      Value.Title?.trim() ||
+      Value.Description?.trim() ||
+      Value.AuthorName?.trim() ||
+      Value.ImageUrl?.trim() ||
+      Value.ImageDataUrl?.trim() ||
+      Value.FooterText?.trim() ||
+      Value.Fields?.some((Field) => Field.Name.trim() && Field.Value.trim())
+    );
   }
 
   private ParsePayload(Payload: unknown): SendEmbedPayload | null {

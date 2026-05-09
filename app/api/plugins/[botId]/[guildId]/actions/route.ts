@@ -7,11 +7,11 @@ import { PluginScope, SettingsFieldType, type DiscordGuildSummary } from "@/src/
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
-  params: Promise<{ guildId: string }>;
+  params: Promise<{ botId: string; guildId: string }>;
 };
 
 async function Post(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = await ResolveGuildId(Context);
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
@@ -24,8 +24,8 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     return new Response("PluginId and ActionKey are required.", { status: 400 });
   }
 
-  const AccessControl = CreateAccessControl();
-  const Guild = BuildServerTrustedGuildSummary(GuildId);
+  const AccessControl = CreateAccessControl(botId);
+  const Guild = BuildServerTrustedGuildSummary(guildId);
 
   if (!(await AccessControl.CanManagePlugin(User.DiscordId, Guild, Body.PluginId))) {
     return new Response("Insufficient guild plugin permissions.", { status: 403 });
@@ -33,14 +33,22 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
   const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find(
-    (Entry) => Entry.Manifest.Scope !== PluginScope.Global && Entry.Manifest.Metadata.Id === Body.PluginId
+    (Entry) => Entry.Manifest.Metadata.Id === Body.PluginId
   );
 
   if (!ManifestEntry) {
     return new Response("Plugin not found.", { status: 404 });
   }
 
-  if (await IsPluginDisabled(Prisma, Body.PluginId)) {
+  if (ManifestEntry.Manifest.Scope === PluginScope.Global && guildId !== "Global") {
+      return new Response("Global plugins can only have actions in Global context.", { status: 400 });
+  }
+
+  if (ManifestEntry.Manifest.Scope === PluginScope.Guild && guildId === "Global") {
+      return new Response("Guild plugins cannot have actions in Global context.", { status: 400 });
+  }
+
+  if (await IsPluginDisabled(Prisma, botId, Body.PluginId)) {
     return new Response("Plugin is disabled.", { status: 404 });
   }
 
@@ -55,7 +63,8 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
   await RedisClient.lpush(
     "Dashboard:PluginActions",
     JSON.stringify({
-      GuildId,
+      BotId: botId,
+      GuildId: guildId,
       PluginId: Body.PluginId,
       ActionKey: Body.ActionKey,
       ActorId: User.DiscordId,
@@ -75,11 +84,6 @@ function BuildServerTrustedGuildSummary(GuildId: string): DiscordGuildSummary {
     Owner: false,
     Permissions: "0"
   };
-}
-
-async function ResolveGuildId(Context: RouteContext): Promise<string> {
-  const ResolvedParams = await Context.params;
-  return ResolvedParams.guildId;
 }
 
 async function ResolveDashboardUser(Request: Request) {

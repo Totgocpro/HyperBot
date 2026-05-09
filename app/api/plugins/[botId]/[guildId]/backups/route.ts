@@ -5,7 +5,7 @@ import type { DiscordGuildSummary } from "@/src/Core/Types";
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
-  params: Promise<{ guildId: string }>;
+  params: Promise<{ botId: string; guildId: string }>;
 };
 
 type BackupArchive = {
@@ -26,15 +26,15 @@ const PluginId = "Backups";
 const BackupsStorageKey = "Backups";
 
 async function Get(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = await ResolveGuildId(Context);
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
     return User;
   }
 
-  const AccessControl = CreateAccessControl();
-  const Guild = BuildServerTrustedGuildSummary(GuildId);
+  const AccessControl = CreateAccessControl(botId);
+  const Guild = BuildServerTrustedGuildSummary(guildId);
 
   if (!(await AccessControl.CanManagePlugin(User.DiscordId, Guild, PluginId))) {
     return new Response("Insufficient guild plugin permissions.", { status: 403 });
@@ -42,8 +42,8 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
 
   const Url = new URL(Request.url);
   const BackupId = Url.searchParams.get("backupId");
-  const Storage = new PluginStorage(Prisma, RedisClient, PluginId);
-  const Backups = await GetBackups(Storage, GuildId);
+  const Storage = new PluginStorage(Prisma, RedisClient, botId, PluginId);
+  const Backups = await GetBackups(Storage, guildId);
 
   if (BackupId) {
     const Backup = Backups.find((BackupValue) => BackupValue.Id === BackupId);
@@ -75,15 +75,15 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
 }
 
 async function Delete(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = await ResolveGuildId(Context);
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
     return User;
   }
 
-  const AccessControl = CreateAccessControl();
-  const Guild = BuildServerTrustedGuildSummary(GuildId);
+  const AccessControl = CreateAccessControl(botId);
+  const Guild = BuildServerTrustedGuildSummary(guildId);
 
   if (!(await AccessControl.CanManagePlugin(User.DiscordId, Guild, PluginId))) {
     return new Response("Insufficient guild plugin permissions.", { status: 403 });
@@ -95,15 +95,15 @@ async function Delete(Request: Request, Context: RouteContext): Promise<Response
     return new Response("BackupId is required.", { status: 400 });
   }
 
-  const Storage = new PluginStorage(Prisma, RedisClient, PluginId);
-  const Backups = await GetBackups(Storage, GuildId);
+  const Storage = new PluginStorage(Prisma, RedisClient, botId, PluginId);
+  const Backups = await GetBackups(Storage, guildId);
   const NextBackups = Backups.filter((Backup) => Backup.Id !== Body.BackupId);
 
   if (NextBackups.length === Backups.length) {
     return new Response("Backup not found.", { status: 404 });
   }
 
-  await Storage.SetGlobalConfig(GuildId, BackupsStorageKey, NextBackups);
+  await Storage.SetGlobalConfig(guildId, BackupsStorageKey, NextBackups);
 
   return NextResponse.json({ Deleted: true, BackupId: Body.BackupId });
 }
@@ -134,11 +134,6 @@ function BuildServerTrustedGuildSummary(GuildId: string): DiscordGuildSummary {
     Owner: false,
     Permissions: "0"
   };
-}
-
-async function ResolveGuildId(Context: RouteContext): Promise<string> {
-  const ResolvedParams = await Context.params;
-  return ResolvedParams.guildId;
 }
 
 async function ResolveDashboardUser(Request: Request) {

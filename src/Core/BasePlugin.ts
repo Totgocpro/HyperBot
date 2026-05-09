@@ -2,12 +2,14 @@ import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Mes
 import type { PluginContext, PluginLoggerContract, PluginManifest, PluginStorageContract } from "./Types.js";
 
 export abstract class BasePlugin {
+  protected readonly BotId: string;
   protected readonly Manifest: PluginManifest;
   protected readonly Storage: PluginStorageContract;
   protected readonly Logger: PluginLoggerContract;
   protected readonly DiscordClient: Client;
 
   public constructor(Context: PluginContext) {
+    this.BotId = Context.BotId;
     this.Manifest = Context.Manifest;
     this.Storage = Context.Storage;
     this.Logger = Context.Logger;

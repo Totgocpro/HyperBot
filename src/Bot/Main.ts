@@ -49,6 +49,7 @@ type DiscordApplicationCommandOptionBody = {
 };
 
 type DashboardPluginAction = {
+  BotId: string;
   GuildId: string;
   PluginId: string;
   ActionKey: string;
@@ -58,174 +59,400 @@ type DashboardPluginAction = {
 };
 
 type DashboardPluginControlAction = {
+  BotId: string;
   PluginId: string;
   Action: "Enable" | "Disable" | "Reload";
   ActorId: string;
   CreatedAt: string;
 };
 
-const DiscordToken = process.env.DISCORD_TOKEN;
-const DiscordClientId = process.env.DISCORD_CLIENT_ID;
-const DiscordGuildId = process.env.DISCORD_GUILD_ID;
 const EnableMessageEvents = process.env.ENABLE_MESSAGE_EVENTS === "true";
 const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
 
-if (!DiscordToken || !DiscordClientId) {
-  throw new Error("DISCORD_TOKEN and DISCORD_CLIENT_ID are required.");
-}
+class BotInstance {
+  public readonly DiscordClient: Client;
+  public readonly Loader: PluginLoader;
+  private LastCommandRegistrationHash = "";
+  private LastCommandRegistrationAt = 0;
+  private CommandRegistrationPromise: Promise<void> = Promise.resolve();
+  private readonly BotId: string;
+  private readonly Token: string;
+  private readonly ClientId: string;
 
-const DiscordClient = new Client({
-  intents: BuildGatewayIntents(),
-  partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User]
-});
+  constructor(BotId: string, Token: string, ClientId: string) {
+    this.BotId = BotId;
+    this.Token = Token;
+    this.ClientId = ClientId;
 
-const Loader = new PluginLoader(PluginDirectory, Prisma, RedisClient, DiscordClient);
-let LastCommandRegistrationHash = "";
-let LastCommandRegistrationAt = 0;
-let CommandRegistrationPromise: Promise<void> = Promise.resolve();
-
-DiscordClient.once("clientReady", () => {
-  void RunSafely("clientReady", async () => {
-    await Loader.EnableAll();
-    Loader.Watch();
-    await EnforceGuildAccess();
-    await CacheBotGuilds();
-    await CachePluginStates();
-    QueueSlashCommandRegistration();
-    await RedisClient.set("Bot:Heartbeat", new Date().toISOString(), "EX", 30);
-
-    setInterval(() => {
-      void RunSafely("bot tick", async () => {
-        await EnforceGuildAccess();
-        await RedisClient.set("Bot:Heartbeat", new Date().toISOString(), "EX", 30);
-        await CacheBotGuilds();
-        await ProcessDashboardPluginControlActions();
-        await CachePluginStates();
-        QueueSlashCommandRegistration();
-        await Loader.DispatchTick();
-        await ProcessDashboardPluginActions();
-      });
-    }, 10_000);
-
-    setInterval(() => {
-      void RunSafely("plugin control tick", async () => {
-        await ProcessDashboardPluginControlActions();
-        await CachePluginStates();
-      });
-    }, 1_000);
-
-    console.info(`Bot connected as ${DiscordClient.user?.tag ?? "Unknown"}.`);
-  });
-});
-
-DiscordClient.on("messageCreate", (Message) => {
-  void RunSafely("messageCreate", async () => {
-    if (Message.author.bot || !Message.guildId) {
-      return;
-    }
-
-    await Loader.DispatchMessage(Message);
-  });
-});
-
-DiscordClient.on("messageDelete", (Message) => {
-  void RunSafely("messageDelete", async () => {
-    await Loader.DispatchMessageDelete(Message);
-  });
-});
-
-DiscordClient.on("messageUpdate", (OldMessage, NewMessage) => {
-  void RunSafely("messageUpdate", async () => {
-    await Loader.DispatchMessageUpdate(OldMessage, NewMessage);
-  });
-});
-
-DiscordClient.on("guildMemberAdd", (Member) => {
-  void RunSafely("guildMemberAdd", async () => {
-    await Loader.DispatchGuildMemberAdd(Member);
-  });
-});
-
-DiscordClient.on("guildMemberRemove", (Member) => {
-  void RunSafely("guildMemberRemove", async () => {
-    await Loader.DispatchGuildMemberRemove(Member);
-  });
-});
-
-DiscordClient.on("voiceStateUpdate", (OldState, NewState) => {
-  void RunSafely("voiceStateUpdate", async () => {
-    await Loader.DispatchVoiceStateUpdate(OldState, NewState);
-  });
-});
-
-DiscordClient.on("interactionCreate", (Interaction) => {
-  void RunSafely("interactionCreate", async () => {
-    if (!Interaction.isChatInputCommand()) {
-      await Loader.DispatchInteraction(Interaction);
-      return;
-    }
-
-    await Loader.DispatchSlashCommand(Interaction);
-  });
-});
-
-DiscordClient.on("guildCreate", (Guild) => {
-  void RunSafely("guildCreate", async () => {
-    const GuildAccess = await Prisma.guildAccess.findUnique({
-      where: { GuildId: Guild.id }
+    this.DiscordClient = new Client({
+      intents: BuildGatewayIntents(),
+      partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User]
     });
 
-    if (GuildAccess?.IsAllowed === false) {
-      console.warn(`Leaving banned guild ${Guild.id}.`);
+    this.Loader = new PluginLoader(PluginDirectory, Prisma, RedisClient, this.DiscordClient, BotId);
+    this.RegisterEvents();
+  }
+
+  public async Start(): Promise<void> {
+    await this.DiscordClient.login(this.Token);
+  }
+
+  public async Stop(): Promise<void> {
+    await this.DiscordClient.destroy();
+  }
+
+  private RegisterEvents(): void {
+    this.DiscordClient.once("clientReady", () => {
+      void RunSafely(`clientReady:${this.BotId}`, async () => {
+        await this.Loader.EnableAll();
+        this.Loader.Watch();
+        await this.EnforceGuildAccess();
+        await this.CacheBotGuilds();
+        await this.CachePluginStates();
+        this.QueueSlashCommandRegistration();
+        await RedisClient.set(`Bot:${this.BotId}:Heartbeat`, new Date().toISOString(), "EX", 30);
+
+        setInterval(() => {
+          void RunSafely(`bot tick:${this.BotId}`, async () => {
+            await this.EnforceGuildAccess();
+            await RedisClient.set(`Bot:${this.BotId}:Heartbeat`, new Date().toISOString(), "EX", 30);
+            await this.CacheBotGuilds();
+            await this.Loader.DispatchTick();
+          });
+        }, 10_000);
+
+        console.info(`Bot ${this.BotId} connected as ${this.DiscordClient.user?.tag ?? "Unknown"}.`);
+      });
+    });
+
+    this.DiscordClient.on("messageCreate", (Message) => {
+      void RunSafely(`messageCreate:${this.BotId}`, async () => {
+        if (Message.author.bot || !Message.guildId) {
+          return;
+        }
+        await this.Loader.DispatchMessage(Message);
+      });
+    });
+
+    this.DiscordClient.on("messageDelete", (Message) => {
+      void RunSafely(`messageDelete:${this.BotId}`, async () => {
+        await this.Loader.DispatchMessageDelete(Message);
+      });
+    });
+
+    this.DiscordClient.on("messageUpdate", (OldMessage, NewMessage) => {
+      void RunSafely(`messageUpdate:${this.BotId}`, async () => {
+        await this.Loader.DispatchMessageUpdate(OldMessage, NewMessage);
+      });
+    });
+
+    this.DiscordClient.on("guildMemberAdd", (Member) => {
+      void RunSafely(`guildMemberAdd:${this.BotId}`, async () => {
+        await this.Loader.DispatchGuildMemberAdd(Member);
+      });
+    });
+
+    this.DiscordClient.on("guildMemberRemove", (Member) => {
+      void RunSafely(`guildMemberRemove:${this.BotId}`, async () => {
+        await this.Loader.DispatchGuildMemberRemove(Member);
+      });
+    });
+
+    this.DiscordClient.on("voiceStateUpdate", (OldState, NewState) => {
+      void RunSafely(`voiceStateUpdate:${this.BotId}`, async () => {
+        await this.Loader.DispatchVoiceStateUpdate(OldState, NewState);
+      });
+    });
+
+    this.DiscordClient.on("interactionCreate", (Interaction) => {
+      void RunSafely(`interactionCreate:${this.BotId}`, async () => {
+        if (!Interaction.isChatInputCommand()) {
+          await this.Loader.DispatchInteraction(Interaction);
+          return;
+        }
+        await this.Loader.DispatchSlashCommand(Interaction);
+      });
+    });
+
+    this.DiscordClient.on("guildCreate", (Guild) => {
+      void RunSafely(`guildCreate:${this.BotId}`, async () => {
+        const GuildAccess = await Prisma.guildAccess.findUnique({
+          where: { BotId_GuildId: { BotId: this.BotId, GuildId: Guild.id } }
+        });
+
+        if (GuildAccess?.IsAllowed === false) {
+          console.warn(`Bot ${this.BotId} leaving banned guild ${Guild.id}.`);
+          await Guild.leave();
+          return;
+        }
+
+        await this.CacheBotGuilds();
+        this.QueueSlashCommandRegistration();
+      });
+    });
+
+    this.DiscordClient.on("error", (ErrorValue) => {
+      console.error(`Discord client error for bot ${this.BotId}:`, ErrorValue);
+    });
+  }
+
+  public async CacheBotGuilds(): Promise<void> {
+    const Guilds: BotGuildSummary[] = this.DiscordClient.guilds.cache.map((Guild) => ({
+      Id: Guild.id,
+      Name: Guild.name,
+      Icon: Guild.iconURL(),
+      MemberCount: Guild.memberCount ?? null
+    }));
+
+    await RedisClient.set(`Bot:${this.BotId}:Guilds`, JSON.stringify(Guilds), "EX", 30);
+    await this.CacheBotChannels();
+    await this.CacheBotRoles();
+  }
+
+  public async CacheBotRoles(): Promise<void> {
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      const Roles = Guild.roles.cache
+        .filter((Role) => Role.id !== Guild.id && !Role.managed)
+        .sort((FirstRole, SecondRole) => SecondRole.position - FirstRole.position)
+        .map<BotRoleSummary>((Role) => ({
+          Id: Role.id,
+          Name: Role.name,
+          Color: Role.color,
+          Position: Role.position
+        }));
+
+      await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:Roles`, JSON.stringify(Roles), "EX", 30);
+    }
+  }
+
+  public async CacheBotChannels(): Promise<void> {
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      const Channels = Guild.channels.cache
+        .filter(IsSupportedDashboardChannel)
+        .map<BotChannelSummary>((Channel) => ({
+          Id: Channel.id,
+          Name: Channel.name,
+          Type: ChannelType[Channel.type] ?? String(Channel.type),
+          IsWritable: CanBotWriteInChannel(Channel)
+        }));
+
+      await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:Channels`, JSON.stringify(Channels), "EX", 30);
+    }
+  }
+
+  public async CachePluginStates(): Promise<void> {
+    const ManifestEntries = await ScanPluginManifests(PluginDirectory);
+    const LoadedPluginIds = new Set(this.Loader.GetLoadedPluginIds());
+    const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, this.BotId));
+    const PluginStates = ManifestEntries.map((Entry) => ({
+      Id: Entry.Manifest.Metadata.Id,
+      Loaded: LoadedPluginIds.has(Entry.Manifest.Metadata.Id),
+      Disabled: DisabledPluginIds.has(Entry.Manifest.Metadata.Id),
+      DisplayName: Entry.Manifest.Metadata.DisplayName,
+      Scope: Entry.Manifest.Scope
+    }));
+
+    await RedisClient.set(`Bot:${this.BotId}:Plugins`, JSON.stringify(PluginStates), "EX", 30);
+  }
+
+  public async EnforceGuildAccess(): Promise<void> {
+    const BannedGuilds = await Prisma.guildAccess.findMany({
+      where: { BotId: this.BotId, IsAllowed: false }
+    });
+    const BannedGuildIds = new Set(BannedGuilds.map((GuildAccess) => GuildAccess.GuildId));
+
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      if (!BannedGuildIds.has(Guild.id)) {
+        continue;
+      }
+
+      console.warn(`Bot ${this.BotId} leaving banned guild ${Guild.id}.`);
       await Guild.leave();
+    }
+  }
+
+  public QueueSlashCommandRegistration(): void {
+    this.CommandRegistrationPromise = this.CommandRegistrationPromise
+      .then(async () => this.RegisterSlashCommands(await this.Loader.GetCommandDefinitions()))
+      .catch((ErrorValue: unknown) => {
+        console.error(`Slash command registration failed for bot ${this.BotId}:`, ErrorValue);
+      });
+  }
+
+  private async RegisterSlashCommands(CommandDefinitions: CommandDefinition[]): Promise<void> {
+    const CommandBodies = CommandDefinitions.map(ConvertCommandDefinition);
+    const CommandRegistrationHash = JSON.stringify(CommandBodies);
+    const Now = Date.now();
+
+    if (CommandRegistrationHash === this.LastCommandRegistrationHash && Now - this.LastCommandRegistrationAt < 60_000) {
       return;
     }
 
-    await CacheBotGuilds();
-    QueueSlashCommandRegistration();
-  });
-});
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      await PutDiscordCommandsWithRetry(this.Token, BuildGuildCommandsRoute(this.ClientId, Guild.id), CommandBodies);
+      await Sleep(750);
+    }
 
-DiscordClient.on("error", (ErrorValue) => {
-  console.error("Discord client error:", ErrorValue);
-});
-
-await DiscordClient.login(DiscordToken);
-
-async function RegisterSlashCommands(CommandDefinitions: CommandDefinition[]): Promise<void> {
-  const CommandBodies = CommandDefinitions.map(ConvertCommandDefinition);
-  const CommandRegistrationHash = JSON.stringify(CommandBodies);
-  const Now = Date.now();
-
-  if (CommandRegistrationHash === LastCommandRegistrationHash && Now - LastCommandRegistrationAt < 60_000) {
-    console.info("Skipping slash command registration because commands were recently synced.");
-    return;
+    this.LastCommandRegistrationHash = CommandRegistrationHash;
+    this.LastCommandRegistrationAt = Date.now();
   }
-
-  if (DiscordGuildId) {
-    await PutDiscordCommandsWithRetry(BuildGuildCommandsRoute(DiscordClientId as string, DiscordGuildId), CommandBodies);
-    console.info(`Registered ${CommandBodies.length} command(s) for guild ${DiscordGuildId}.`);
-    LastCommandRegistrationHash = CommandRegistrationHash;
-    LastCommandRegistrationAt = Date.now();
-    return;
-  }
-
-  for (const Guild of DiscordClient.guilds.cache.values()) {
-    await PutDiscordCommandsWithRetry(BuildGuildCommandsRoute(DiscordClientId as string, Guild.id), CommandBodies);
-    console.info(`Registered ${CommandBodies.length} command(s) for guild ${Guild.id}.`);
-    await Sleep(750);
-  }
-
-  LastCommandRegistrationHash = CommandRegistrationHash;
-  LastCommandRegistrationAt = Date.now();
 }
 
-function QueueSlashCommandRegistration(): void {
-  CommandRegistrationPromise = CommandRegistrationPromise
-    .then(async () => RegisterSlashCommands(await Loader.GetCommandDefinitions()))
-    .catch((ErrorValue: unknown) => {
-      console.error("Slash command registration failed without stopping the bot:", ErrorValue);
+const Bots = new Map<string, BotInstance>();
+
+async function SyncBots(): Promise<void> {
+  const DBBots = await Prisma.discordBot.findMany({
+    where: { IsEnabled: true }
+  });
+
+  const ActiveBotIds = new Set(DBBots.map((B) => B.Id));
+
+  for (const [BotId, Instance] of Bots.entries()) {
+    if (!ActiveBotIds.has(BotId)) {
+      console.info(`Stopping bot ${BotId}...`);
+      await Instance.Stop();
+      Bots.delete(BotId);
+    }
+  }
+
+  for (const DBBot of DBBots) {
+    if (!Bots.has(DBBot.Id)) {
+      console.info(`Starting bot ${DBBot.Name} (${DBBot.Id})...`);
+      const Instance = new BotInstance(DBBot.Id, DBBot.Token, DBBot.ClientId);
+      Bots.set(DBBot.Id, Instance);
+      await Instance.Start();
+    }
+  }
+}
+
+async function Main(): Promise<void> {
+  await SyncBots();
+
+  setInterval(() => {
+    void RunSafely("sync bots", async () => {
+      await SyncBots();
     });
+  }, 30_000);
+
+  setInterval(() => {
+    void RunSafely("dashboard actions", async () => {
+      await ProcessDashboardPluginControlActions();
+      await ProcessDashboardPluginActions();
+    });
+  }, 1000);
+}
+
+void Main();
+
+async function ProcessDashboardPluginActions(): Promise<void> {
+  for (let Index = 0; Index < 25; Index += 1) {
+    const RawAction = await RedisClient.rpop("Dashboard:PluginActions");
+    if (!RawAction) return;
+
+    try {
+      const Action = JSON.parse(RawAction) as DashboardPluginAction;
+      const Instance = Bots.get(Action.BotId);
+      if (!Instance) {
+        console.warn("Dashboard plugin action ignored because the target bot is not running.", {
+          BotId: Action.BotId,
+          GuildId: Action.GuildId,
+          PluginId: Action.PluginId,
+          ActionKey: Action.ActionKey
+        });
+        continue;
+      }
+
+      await Instance.Loader.DispatchDashboardAction(Action.PluginId, Action.GuildId, Action.ActionKey, Action.ActorId, Action.Payload);
+    } catch (ErrorValue) {
+      console.error("Dashboard plugin action failed:", ErrorValue);
+    }
+  }
+}
+
+async function ProcessDashboardPluginControlActions(): Promise<void> {
+  for (let Index = 0; Index < 25; Index += 1) {
+    const RawAction = await RedisClient.rpop("Dashboard:PluginControlActions");
+    if (!RawAction) return;
+
+    try {
+      const Action = JSON.parse(RawAction) as DashboardPluginControlAction;
+      const Instance = Bots.get(Action.BotId);
+      if (!Instance) continue;
+
+      await ApplyDashboardPluginControlAction(Instance, Action);
+      await Prisma.auditLog.create({
+        data: {
+          ActorId: Action.ActorId,
+          Action: `Plugin${Action.Action}`,
+          Target: `${Action.BotId}:${Action.PluginId}`,
+          Metadata: {
+            Source: "SuperAdminPanel",
+            CreatedAt: Action.CreatedAt
+          }
+        }
+      });
+      Instance.QueueSlashCommandRegistration();
+      await Instance.CachePluginStates();
+    } catch (ErrorValue) {
+      console.error("Dashboard plugin control action failed:", ErrorValue);
+    }
+  }
+}
+
+async function ApplyDashboardPluginControlAction(Instance: BotInstance, Action: DashboardPluginControlAction): Promise<void> {
+  switch (Action.Action) {
+    case "Enable":
+      await SetPluginDisabled(Prisma, Action.BotId, Action.PluginId, false);
+      await Instance.Loader.EnablePlugin(Action.PluginId);
+      return;
+    case "Disable":
+      await Instance.Loader.DisablePlugin(Action.PluginId);
+      await SetPluginDisabled(Prisma, Action.BotId, Action.PluginId, true);
+      return;
+    case "Reload":
+      if (await IsPluginDisabled(Prisma, Action.BotId, Action.PluginId)) {
+        throw new Error(`Plugin ${Action.PluginId} is disabled for bot ${Action.BotId} and cannot be reloaded.`);
+      }
+      await Instance.Loader.ReloadPlugin(Action.PluginId);
+      return;
+  }
+}
+
+function BuildGatewayIntents(): number[] {
+  const Intents: number[] = [
+    DiscordGatewayIntentBits.Guilds,
+    DiscordGatewayIntentBits.GuildMessages,
+    DiscordGatewayIntentBits.GuildModeration,
+    DiscordGatewayIntentBits.GuildMembers,
+    DiscordGatewayIntentBits.GuildVoiceStates
+  ];
+  if (EnableMessageEvents) {
+    Intents.push(DiscordGatewayIntentBits.MessageContent);
+  }
+  return Intents;
+}
+
+function IsSupportedDashboardChannel(Channel: GuildBasedChannel): boolean {
+  return [
+    ChannelType.GuildText,
+    ChannelType.GuildAnnouncement,
+    ChannelType.GuildForum,
+    ChannelType.GuildVoice
+  ].includes(Channel.type);
+}
+
+function CanBotWriteInChannel(Channel: GuildBasedChannel): boolean {
+  const BotMember = Channel.guild.members.me;
+  if (!BotMember) return false;
+  const Permissions = Channel.permissionsFor(BotMember);
+  if (!Permissions) return false;
+  if (Channel.type === ChannelType.GuildForum) {
+    return Permissions.has(PermissionsBitField.Flags.ViewChannel) && Permissions.has(PermissionsBitField.Flags.CreatePublicThreads);
+  }
+  if (Channel.type === ChannelType.GuildVoice) {
+    return Permissions.has(PermissionsBitField.Flags.ViewChannel);
+  }
+  return Permissions.has(PermissionsBitField.Flags.ViewChannel) && Permissions.has(PermissionsBitField.Flags.SendMessages);
 }
 
 function ConvertCommandDefinition(CommandDefinitionValue: CommandDefinition): DiscordApplicationCommandBody {
@@ -251,72 +478,41 @@ function ConvertCommandOptionDefinition(CommandOptionDefinitionValue: CommandOpt
 
 function ConvertCommandOptionType(TypeName: CommandOptionDefinition["Type"]): DiscordApplicationCommandOptionType {
   switch (TypeName) {
-    case "String":
-      return DiscordApplicationCommandOptionType.String;
-    case "Integer":
-      return DiscordApplicationCommandOptionType.Integer;
-    case "Boolean":
-      return DiscordApplicationCommandOptionType.Boolean;
-    case "User":
-      return DiscordApplicationCommandOptionType.User;
-    case "Channel":
-      return DiscordApplicationCommandOptionType.Channel;
-    case "Role":
-      return DiscordApplicationCommandOptionType.Role;
+    case "String": return DiscordApplicationCommandOptionType.String;
+    case "Integer": return DiscordApplicationCommandOptionType.Integer;
+    case "Boolean": return DiscordApplicationCommandOptionType.Boolean;
+    case "User": return DiscordApplicationCommandOptionType.User;
+    case "Channel": return DiscordApplicationCommandOptionType.Channel;
+    case "Role": return DiscordApplicationCommandOptionType.Role;
   }
-}
-
-function BuildGlobalCommandsRoute(ApplicationId: string): `/${string}` {
-  return `/applications/${ApplicationId}/commands`;
 }
 
 function BuildGuildCommandsRoute(ApplicationId: string, GuildId: string): `/${string}` {
   return `/applications/${ApplicationId}/guilds/${GuildId}/commands`;
 }
 
-async function PutDiscordCommands(Route: `/${string}`, CommandBodies: DiscordApplicationCommandBody[]): Promise<void> {
-  const Response = await fetch(`https://discord.com/api/v10${Route}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bot ${DiscordToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(CommandBodies)
-  });
-
-  if (!Response.ok) {
-    throw new Error(`Discord command registration failed: ${Response.status} ${await Response.text()}`);
-  }
-}
-
-async function PutDiscordCommandsWithRetry(Route: `/${string}`, CommandBodies: DiscordApplicationCommandBody[]): Promise<void> {
+async function PutDiscordCommandsWithRetry(Token: string, Route: `/${string}`, CommandBodies: DiscordApplicationCommandBody[]): Promise<void> {
   for (let Attempt = 1; Attempt <= 3; Attempt += 1) {
     const Response = await fetch(`https://discord.com/api/v10${Route}`, {
       method: "PUT",
       headers: {
-        Authorization: `Bot ${DiscordToken}`,
+        Authorization: `Bot ${Token}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(CommandBodies)
     });
 
-    if (Response.ok) {
-      return;
-    }
+    if (Response.ok) return;
 
     const BodyText = await Response.text();
-
     if (Response.status === 429) {
       const RetryAfter = ParseRetryAfterMilliseconds(BodyText);
       console.warn(`Discord command registration rate limited. Retrying in ${RetryAfter}ms.`);
       await Sleep(RetryAfter);
       continue;
     }
-
     throw new Error(`Discord command registration failed: ${Response.status} ${BodyText}`);
   }
-
-  console.warn("Discord command registration is still rate limited after retries. The bot will keep running.");
 }
 
 function ParseRetryAfterMilliseconds(BodyText: string): number {
@@ -338,195 +534,4 @@ async function RunSafely(Context: string, Task: () => Promise<void>): Promise<vo
   } catch (ErrorValue) {
     console.error(`Unhandled bot task error in ${Context}:`, ErrorValue);
   }
-}
-
-async function CacheBotGuilds(): Promise<void> {
-  const Guilds: BotGuildSummary[] = DiscordClient.guilds.cache.map((Guild) => ({
-    Id: Guild.id,
-    Name: Guild.name,
-    Icon: Guild.iconURL(),
-    MemberCount: Guild.memberCount ?? null
-  }));
-
-  await RedisClient.set("Bot:Guilds", JSON.stringify(Guilds), "EX", 30);
-  await CacheBotChannels();
-  await CacheBotRoles();
-}
-
-async function ProcessDashboardPluginActions(): Promise<void> {
-  for (let Index = 0; Index < 25; Index += 1) {
-    const RawAction = await RedisClient.rpop("Dashboard:PluginActions");
-
-    if (!RawAction) {
-      return;
-    }
-
-    try {
-      const Action = JSON.parse(RawAction) as DashboardPluginAction;
-      await Loader.DispatchDashboardAction(Action.PluginId, Action.GuildId, Action.ActionKey, Action.ActorId, Action.Payload);
-    } catch (ErrorValue) {
-      console.error("Dashboard plugin action failed:", ErrorValue);
-    }
-  }
-}
-
-async function ProcessDashboardPluginControlActions(): Promise<void> {
-  for (let Index = 0; Index < 25; Index += 1) {
-    const RawAction = await RedisClient.rpop("Dashboard:PluginControlActions");
-
-    if (!RawAction) {
-      return;
-    }
-
-    try {
-      const Action = JSON.parse(RawAction) as DashboardPluginControlAction;
-      await ApplyDashboardPluginControlAction(Action);
-      await Prisma.auditLog.create({
-        data: {
-          ActorId: Action.ActorId,
-          Action: `Plugin${Action.Action}`,
-          Target: Action.PluginId,
-          Metadata: {
-            Source: "SuperAdminPanel",
-            CreatedAt: Action.CreatedAt
-          }
-        }
-      });
-      QueueSlashCommandRegistration();
-      await CachePluginStates();
-    } catch (ErrorValue) {
-      console.error("Dashboard plugin control action failed:", ErrorValue);
-    }
-  }
-}
-
-async function ApplyDashboardPluginControlAction(Action: DashboardPluginControlAction): Promise<void> {
-  switch (Action.Action) {
-    case "Enable":
-      await SetPluginDisabled(Prisma, Action.PluginId, false);
-      await Loader.EnablePlugin(Action.PluginId);
-      return;
-    case "Disable":
-      await Loader.DisablePlugin(Action.PluginId);
-      await SetPluginDisabled(Prisma, Action.PluginId, true);
-      return;
-    case "Reload":
-      if (await IsPluginDisabled(Prisma, Action.PluginId)) {
-        throw new Error(`Plugin ${Action.PluginId} is disabled and cannot be reloaded.`);
-      }
-
-      await Loader.ReloadPlugin(Action.PluginId);
-      return;
-  }
-}
-
-async function CachePluginStates(): Promise<void> {
-  const ManifestEntries = await ScanPluginManifests(PluginDirectory);
-  const LoadedPluginIds = new Set(Loader.GetLoadedPluginIds());
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
-  const PluginStates = ManifestEntries.map((Entry) => ({
-    Id: Entry.Manifest.Metadata.Id,
-    Loaded: LoadedPluginIds.has(Entry.Manifest.Metadata.Id),
-    Disabled: DisabledPluginIds.has(Entry.Manifest.Metadata.Id),
-    DisplayName: Entry.Manifest.Metadata.DisplayName,
-    Scope: Entry.Manifest.Scope
-  }));
-
-  await RedisClient.set("Bot:Plugins", JSON.stringify(PluginStates), "EX", 30);
-}
-
-async function CacheBotRoles(): Promise<void> {
-  for (const Guild of DiscordClient.guilds.cache.values()) {
-    const Roles = Guild.roles.cache
-      .filter((Role) => Role.id !== Guild.id && !Role.managed)
-      .sort((FirstRole, SecondRole) => SecondRole.position - FirstRole.position)
-      .map<BotRoleSummary>((Role) => ({
-        Id: Role.id,
-        Name: Role.name,
-        Color: Role.color,
-        Position: Role.position
-      }));
-
-    await RedisClient.set(`Bot:Guild:${Guild.id}:Roles`, JSON.stringify(Roles), "EX", 30);
-  }
-}
-
-async function CacheBotChannels(): Promise<void> {
-  for (const Guild of DiscordClient.guilds.cache.values()) {
-    const Channels = Guild.channels.cache
-      .filter(IsSupportedDashboardChannel)
-      .map<BotChannelSummary>((Channel) => ({
-        Id: Channel.id,
-        Name: Channel.name,
-        Type: ChannelType[Channel.type] ?? String(Channel.type),
-        IsWritable: CanBotWriteInChannel(Channel)
-      }));
-
-    await RedisClient.set(`Bot:Guild:${Guild.id}:Channels`, JSON.stringify(Channels), "EX", 30);
-  }
-}
-
-async function EnforceGuildAccess(): Promise<void> {
-  const BannedGuilds = await Prisma.guildAccess.findMany({
-    where: { IsAllowed: false }
-  });
-  const BannedGuildIds = new Set(BannedGuilds.map((GuildAccess) => GuildAccess.GuildId));
-
-  for (const Guild of DiscordClient.guilds.cache.values()) {
-    if (!BannedGuildIds.has(Guild.id)) {
-      continue;
-    }
-
-    console.warn(`Leaving banned guild ${Guild.id}.`);
-    await Guild.leave();
-  }
-}
-
-function BuildGatewayIntents(): number[] {
-  const Intents: number[] = [
-    DiscordGatewayIntentBits.Guilds,
-    DiscordGatewayIntentBits.GuildMessages,
-    DiscordGatewayIntentBits.GuildModeration,
-    DiscordGatewayIntentBits.GuildMembers,
-    DiscordGatewayIntentBits.GuildVoiceStates
-  ];
-
-  if (EnableMessageEvents) {
-    Intents.push(DiscordGatewayIntentBits.MessageContent);
-  }
-
-  return Intents;
-}
-
-function IsSupportedDashboardChannel(Channel: GuildBasedChannel): boolean {
-  return [
-    ChannelType.GuildText,
-    ChannelType.GuildAnnouncement,
-    ChannelType.GuildForum,
-    ChannelType.GuildVoice
-  ].includes(Channel.type);
-}
-
-function CanBotWriteInChannel(Channel: GuildBasedChannel): boolean {
-  const BotMember = Channel.guild.members.me;
-
-  if (!BotMember) {
-    return false;
-  }
-
-  const Permissions = Channel.permissionsFor(BotMember);
-
-  if (!Permissions) {
-    return false;
-  }
-
-  if (Channel.type === ChannelType.GuildForum) {
-    return Permissions.has(PermissionsBitField.Flags.ViewChannel) && Permissions.has(PermissionsBitField.Flags.CreatePublicThreads);
-  }
-
-  if (Channel.type === ChannelType.GuildVoice) {
-    return Permissions.has(PermissionsBitField.Flags.ViewChannel);
-  }
-
-  return Permissions.has(PermissionsBitField.Flags.ViewChannel) && Permissions.has(PermissionsBitField.Flags.SendMessages);
 }

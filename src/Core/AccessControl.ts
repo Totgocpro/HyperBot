@@ -7,10 +7,12 @@ const ManageGuildPermission = BigInt(0x20);
 export class AccessControl {
   private readonly Prisma: PrismaClient;
   private readonly SuperAdminIds: Set<string>;
+  private readonly BotId?: string;
 
-  public constructor(Prisma: PrismaClient, SuperAdminIds: string[]) {
+  public constructor(Prisma: PrismaClient, SuperAdminIds: string[], BotId?: string) {
     this.Prisma = Prisma;
     this.SuperAdminIds = new Set(SuperAdminIds.filter(Boolean));
+    this.BotId = BotId;
   }
 
   public async IsSuperAdmin(DiscordId: string): Promise<boolean> {
@@ -25,6 +27,18 @@ export class AccessControl {
     return DashboardUser?.Role === "SuperAdmin";
   }
 
+  public async CanManageBot(UserId: string, BotId: string): Promise<boolean> {
+      const User = await this.Prisma.dashboardUser.findUnique({
+          where: { Id: UserId }
+      });
+      if (User?.Role === "SuperAdmin") return true;
+
+      const Access = await this.Prisma.botAccess.findUnique({
+          where: { UserId_BotId: { UserId, BotId } }
+      });
+      return !!Access;
+  }
+
   public HasDiscordGuildManagementPermission(Guild: DiscordGuildSummary): boolean {
     if (Guild.Owner) {
       return true;
@@ -35,8 +49,9 @@ export class AccessControl {
   }
 
   public async CanUseGuild(GuildId: string): Promise<boolean> {
+    if (!this.BotId) return true;
     const GuildAccess = await this.Prisma.guildAccess.findUnique({
-      where: { GuildId }
+      where: { BotId_GuildId: { BotId: this.BotId, GuildId } }
     });
 
     return GuildAccess?.IsAllowed ?? true;
@@ -51,17 +66,20 @@ export class AccessControl {
       return null;
     }
 
-    const GuildRoleGrant = await this.Prisma.guildRoleGrant.findUnique({
-      where: {
-        GuildId_DiscordId: {
-          GuildId: Guild.Id,
-          DiscordId
-        }
-      }
-    });
-
-    if (GuildRoleGrant?.Role === "GuildAdmin") {
-      return AccessLevel.GuildAdmin;
+    if (this.BotId) {
+        const GuildRoleGrant = await this.Prisma.guildRoleGrant.findUnique({
+            where: {
+              BotId_GuildId_DiscordId: {
+                BotId: this.BotId,
+                GuildId: Guild.Id,
+                DiscordId
+              }
+            }
+          });
+      
+          if (GuildRoleGrant?.Role === "GuildAdmin") {
+            return AccessLevel.GuildAdmin;
+          }
     }
 
     if (!this.HasDiscordGuildManagementPermission(Guild)) {
@@ -82,13 +100,14 @@ export class AccessControl {
       return true;
     }
 
-    if (AccessLevelValue !== AccessLevel.GuildAdmin) {
+    if (AccessLevelValue !== AccessLevel.GuildAdmin || !this.BotId) {
       return false;
     }
 
     const GuildRoleGrant = await this.Prisma.guildRoleGrant.findUnique({
       where: {
-        GuildId_DiscordId: {
+        BotId_GuildId_DiscordId: {
+          BotId: this.BotId,
           GuildId: Guild.Id,
           DiscordId
         }
@@ -100,10 +119,11 @@ export class AccessControl {
   }
 
   public async SetGuildAllowed(GuildId: string, IsAllowed: boolean, RestrictedReason?: string): Promise<void> {
+    if (!this.BotId) throw new Error("BotId is required to set guild allowed status.");
     await this.Prisma.guildAccess.upsert({
-      where: { GuildId },
+      where: { BotId_GuildId: { BotId: this.BotId, GuildId } },
       update: { IsAllowed, RestrictedReason },
-      create: { GuildId, IsAllowed, RestrictedReason }
+      create: { BotId: this.BotId, GuildId, IsAllowed, RestrictedReason }
     });
   }
 }

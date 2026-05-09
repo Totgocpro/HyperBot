@@ -13,8 +13,15 @@ async function Get(Request: Request): Promise<Response> {
     return ResponseValue as Response;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, BotId));
   const Plugins = (await ScanPluginManifests(PluginDirectory))
     .filter((Entry) => Entry.Manifest.Scope === PluginScope.Guild && !DisabledPluginIds.has(Entry.Manifest.Metadata.Id))
     .map((Entry) => ({
@@ -22,6 +29,7 @@ async function Get(Request: Request): Promise<Response> {
       DisplayName: Entry.Manifest.Metadata.DisplayName
     }));
   const Grants = await Prisma.guildRoleGrant.findMany({
+    where: { BotId },
     orderBy: [{ GuildId: "asc" }, { DiscordId: "asc" }]
   });
 
@@ -38,6 +46,13 @@ async function Put(Request: Request): Promise<Response> {
     return ActorId;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const Body = (await Request.json()) as {
     GuildId?: string;
     DiscordId?: string;
@@ -48,12 +63,13 @@ async function Put(Request: Request): Promise<Response> {
     return new Response("GuildId, DiscordId and AllowedPluginIds are required.", { status: 400 });
   }
 
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, BotId));
   const AllowedPluginIds = Body.AllowedPluginIds.filter((PluginId) => !DisabledPluginIds.has(PluginId));
 
   const Grant = await Prisma.guildRoleGrant.upsert({
     where: {
-      GuildId_DiscordId: {
+      BotId_GuildId_DiscordId: {
+        BotId,
         GuildId: Body.GuildId,
         DiscordId: Body.DiscordId
       }
@@ -63,6 +79,7 @@ async function Put(Request: Request): Promise<Response> {
       AllowedPluginIds
     },
     create: {
+      BotId,
       GuildId: Body.GuildId,
       DiscordId: Body.DiscordId,
       Role: "GuildAdmin",
@@ -74,7 +91,7 @@ async function Put(Request: Request): Promise<Response> {
     data: {
       ActorId,
       Action: "GuildRoleGrantUpdated",
-      Target: `${Body.GuildId}:${Body.DiscordId}`,
+      Target: `${BotId}:${Body.GuildId}:${Body.DiscordId}`,
       Metadata: { AllowedPluginIds }
     }
   });
@@ -89,6 +106,13 @@ async function Delete(Request: Request): Promise<Response> {
     return ActorId;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const Body = (await Request.json()) as { GuildId?: string; DiscordId?: string };
 
   if (!Body.GuildId || !Body.DiscordId) {
@@ -97,6 +121,7 @@ async function Delete(Request: Request): Promise<Response> {
 
   await Prisma.guildRoleGrant.deleteMany({
     where: {
+      BotId,
       GuildId: Body.GuildId,
       DiscordId: Body.DiscordId
     }
@@ -105,7 +130,7 @@ async function Delete(Request: Request): Promise<Response> {
     data: {
       ActorId,
       Action: "GuildRoleGrantDeleted",
-      Target: `${Body.GuildId}:${Body.DiscordId}`
+      Target: `${BotId}:${Body.GuildId}:${Body.DiscordId}`
     }
   });
 

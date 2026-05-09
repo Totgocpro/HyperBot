@@ -244,7 +244,7 @@ export default class BackupsPlugin extends BasePlugin {
 
   private async CapturePluginConfigs(GuildId: string): Promise<BackupPluginConfig[]> {
     const Configs = await Prisma.pluginGlobalConfig.findMany({
-      where: { GuildId },
+      where: { BotId: this.BotId, GuildId },
       select: {
         PluginId: true,
         Key: true,
@@ -400,6 +400,7 @@ export default class BackupsPlugin extends BasePlugin {
   private async RestorePluginConfigs(GuildId: string, Configs: BackupPluginConfig[]): Promise<void> {
     await Prisma.pluginGlobalConfig.deleteMany({
       where: {
+        BotId: this.BotId,
         GuildId,
         NOT: {
           PluginId: "Backups",
@@ -415,7 +416,8 @@ export default class BackupsPlugin extends BasePlugin {
 
       await Prisma.pluginGlobalConfig.upsert({
         where: {
-          GuildId_PluginId_Key: {
+          BotId_GuildId_PluginId_Key: {
+            BotId: this.BotId,
             GuildId,
             PluginId: Config.PluginId,
             Key: Config.Key
@@ -423,6 +425,7 @@ export default class BackupsPlugin extends BasePlugin {
         },
         update: { Value: Config.Value as never },
         create: {
+          BotId: this.BotId,
           GuildId,
           PluginId: Config.PluginId,
           Key: Config.Key,

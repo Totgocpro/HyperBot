@@ -25,11 +25,18 @@ async function Get(Request: Request): Promise<Response> {
     return ResponseValue as Response;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
   const AllManifestEntries = await ScanPluginManifests(PluginDirectory);
   const ManifestEntries = AllManifestEntries.filter((ManifestEntry) => ManifestEntry.Manifest.Scope === PluginScope.Global);
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
-  const BotPluginStates = await GetBotPluginStates();
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, BotId));
+  const BotPluginStates = await GetBotPluginStates(BotId);
   const Commands = AllManifestEntries.flatMap((ManifestEntry) =>
     ManifestEntry.Manifest.Scope !== PluginScope.Global && DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id)
       ? []
@@ -42,7 +49,7 @@ async function Get(Request: Request): Promise<Response> {
   );
   const Plugins = await Promise.all(
     ManifestEntries.map(async (ManifestEntry) => {
-      const Storage = new PluginStorage(Prisma, RedisClient, ManifestEntry.Manifest.Metadata.Id);
+      const Storage = new PluginStorage(Prisma, RedisClient, BotId, ManifestEntry.Manifest.Metadata.Id);
       const Fields = await Promise.all(
         ManifestEntry.Manifest.WebInterface.map(async (Field) => ({
           ...Field,
@@ -85,6 +92,13 @@ async function Put(Request: Request): Promise<Response> {
     return ActorId;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const Body = (await Request.json()) as { PluginId?: string; Values?: Record<string, unknown> };
 
   if (!Body.PluginId || !Body.Values) {
@@ -98,7 +112,7 @@ async function Put(Request: Request): Promise<Response> {
     return new Response("Global plugin not found.", { status: 404 });
   }
 
-  const Storage = new PluginStorage(Prisma, RedisClient, Body.PluginId);
+  const Storage = new PluginStorage(Prisma, RedisClient, BotId, Body.PluginId);
 
   for (const [Key, Value] of Object.entries(Body.Values)) {
     await Storage.SetGlobalConfig(GlobalConfigGuildId, Key, Value);
@@ -108,7 +122,7 @@ async function Put(Request: Request): Promise<Response> {
     data: {
       ActorId,
       Action: "GlobalPluginConfigUpdated",
-      Target: Body.PluginId,
+      Target: `${BotId}:${Body.PluginId}`,
       Metadata: Body.Values as PrismaNamespace.InputJsonObject
     }
   });
@@ -121,6 +135,13 @@ async function Post(Request: Request): Promise<Response> {
 
   if (ActorId instanceof Response) {
     return ActorId;
+  }
+
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
   }
 
   const Body = (await Request.json()) as { PluginId?: string; Action?: PluginControlAction };
@@ -145,14 +166,15 @@ async function Post(Request: Request): Promise<Response> {
   }
 
   if (Body.Action === "Disable") {
-    await SetPluginDisabled(Prisma, Body.PluginId, true);
+    await SetPluginDisabled(Prisma, BotId, Body.PluginId, true);
   } else if (Body.Action === "Enable") {
-    await SetPluginDisabled(Prisma, Body.PluginId, false);
+    await SetPluginDisabled(Prisma, BotId, Body.PluginId, false);
   }
 
   await RedisClient.lpush(
     "Dashboard:PluginControlActions",
     JSON.stringify({
+      BotId,
       PluginId: Body.PluginId,
       Action: Body.Action,
       ActorId,
@@ -164,7 +186,7 @@ async function Post(Request: Request): Promise<Response> {
     data: {
       ActorId,
       Action: `Plugin${Body.Action}Queued`,
-      Target: Body.PluginId,
+      Target: `${BotId}:${Body.PluginId}`,
       Metadata: {
         DisplayName: ManifestEntry.Manifest.Metadata.DisplayName
       }
@@ -182,8 +204,8 @@ async function ResolveSuperAdmin(Request: Request): Promise<string | Response> {
   }
 }
 
-async function GetBotPluginStates(): Promise<Map<string, BotPluginState>> {
-  const RawPluginStates = await RedisClient.get("Bot:Plugins");
+async function GetBotPluginStates(BotId: string): Promise<Map<string, BotPluginState>> {
+  const RawPluginStates = await RedisClient.get(`Bot:${BotId}:Plugins`);
 
   if (!RawPluginStates) {
     return new Map();

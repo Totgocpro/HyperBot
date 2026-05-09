@@ -10,10 +10,18 @@ async function Get(Request: Request): Promise<Response> {
     return ResponseValue as Response;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const AccessRows = await Prisma.guildAccess.findMany({
+    where: { BotId },
     orderBy: { UpdatedAt: "desc" }
   });
-  const RawBotGuilds = await RedisClient.get("Bot:Guilds");
+  const RawBotGuilds = await RedisClient.get(`Bot:${BotId}:Guilds`);
   const BotGuilds = RawBotGuilds ? (JSON.parse(RawBotGuilds) as BotGuildSummary[]) : [];
   const AccessByGuildId = new Map(AccessRows.map((AccessRow) => [AccessRow.GuildId, AccessRow]));
   const GuildIds = new Set([...BotGuilds.map((Guild) => Guild.Id), ...AccessRows.map((AccessRow) => AccessRow.GuildId)]);
@@ -43,19 +51,26 @@ async function Put(Request: Request): Promise<Response> {
     return ActorId;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
+  if (!BotId) {
+    return new Response("BotId is required.", { status: 400 });
+  }
+
   const Body = (await Request.json()) as { GuildId?: string; IsAllowed?: boolean; RestrictedReason?: string };
 
   if (!Body.GuildId || typeof Body.IsAllowed !== "boolean") {
     return new Response("GuildId and IsAllowed are required.", { status: 400 });
   }
 
-  const AccessControl = CreateAccessControl();
+  const AccessControl = CreateAccessControl(BotId);
   await AccessControl.SetGuildAllowed(Body.GuildId, Body.IsAllowed, Body.RestrictedReason ?? undefined);
   await Prisma.auditLog.create({
     data: {
       ActorId,
       Action: "GuildAccessUpdated",
-      Target: Body.GuildId,
+      Target: `${BotId}:${Body.GuildId}`,
       Metadata: { IsAllowed: Body.IsAllowed, RestrictedReason: Body.RestrictedReason ?? null }
     }
   });

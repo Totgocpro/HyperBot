@@ -4,7 +4,7 @@ import { type BotRoleSummary, type DiscordGuildSummary } from "@/src/Core/Types"
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
-  params: Promise<{ guildId: string }>;
+  params: Promise<{ botId: string; guildId: string }>;
 };
 
 type DiscordRoleResponse = {
@@ -16,15 +16,15 @@ type DiscordRoleResponse = {
 };
 
 async function Post(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = (await Context.params).guildId;
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
     return User;
   }
 
-  const AccessControl = CreateAccessControl();
-  const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, BuildServerTrustedGuildSummary(GuildId));
+  const AccessControl = CreateAccessControl(botId);
+  const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, BuildServerTrustedGuildSummary(guildId));
 
   if (!AccessLevel) {
     return new Response("Insufficient guild permissions.", { status: 403 });
@@ -37,24 +37,24 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     return new Response("Role name is required.", { status: 400 });
   }
 
-  if (Name.length > 100) {
-    return new Response("Role name must be 100 characters or fewer.", { status: 400 });
-  }
-
   const Color = ParseHexColor(Body.Color ?? "#5865f2");
 
   if (Color === null) {
     return new Response("Role color must be a valid hex color.", { status: 400 });
   }
 
-  if (!process.env.DISCORD_TOKEN) {
-    return new Response("DISCORD_TOKEN is not configured.", { status: 500 });
+  const Bot = await Prisma.discordBot.findUnique({
+    where: { Id: botId }
+  });
+
+  if (!Bot) {
+    return new Response("Bot not found.", { status: 404 });
   }
 
-  const DiscordResponse = await fetch(`https://discord.com/api/v10/guilds/${GuildId}/roles`, {
+  const DiscordResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
     method: "POST",
     headers: {
-      Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+      Authorization: `Bot ${Bot.Token}`,
       "Content-Type": "application/json",
       "X-Audit-Log-Reason": encodeURIComponent(`Role created from HyperBot dashboard by ${User.DiscordId}`)
     },
@@ -76,13 +76,13 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     Position: Role.position
   };
 
-  await CacheCreatedRole(GuildId, RoleSummary);
+  await CacheCreatedRole(botId, guildId, RoleSummary);
   await Prisma.auditLog.create({
     data: {
       ActorId: User.DiscordId,
       Action: "DiscordRoleCreated",
-      Target: Role.id,
-      Metadata: { GuildId, RoleId: Role.id, RoleName: Role.name, Color: Role.color }
+      Target: `${botId}:${Role.id}`,
+      Metadata: { GuildId: guildId, RoleId: Role.id, RoleName: Role.name, Color: Role.color }
     }
   });
 
@@ -97,8 +97,8 @@ function ParseHexColor(Value: string): number | null {
   return Number.parseInt(Value.slice(1), 16);
 }
 
-async function CacheCreatedRole(GuildId: string, Role: BotRoleSummary): Promise<void> {
-  const CacheKey = `Bot:Guild:${GuildId}:Roles`;
+async function CacheCreatedRole(BotId: string, GuildId: string, Role: BotRoleSummary): Promise<void> {
+  const CacheKey = `Bot:${BotId}:Guild:${GuildId}:Roles`;
   const RawRoles = await RedisClient.get(CacheKey);
   const Roles = RawRoles ? (JSON.parse(RawRoles) as BotRoleSummary[]) : [];
   const NextRoles = [Role, ...Roles.filter((ExistingRole) => ExistingRole.Id !== Role.Id)].sort((FirstRole, SecondRole) => SecondRole.Position - FirstRole.Position);

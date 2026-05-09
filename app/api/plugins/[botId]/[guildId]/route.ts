@@ -8,48 +8,66 @@ import { SettingsFieldType, PluginScope, type BotChannelSummary, type BotRoleSum
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
-  params: Promise<{ guildId: string }>;
+  params: Promise<{ botId: string; guildId: string }>;
 };
 
 async function Get(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = await ResolveGuildId(Context);
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
     return User;
   }
 
-  const AccessControl = CreateAccessControl();
-  const Guild = BuildServerTrustedGuildSummary(GuildId);
-  const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, Guild);
+  const AccessControl = CreateAccessControl(botId);
+  const IsGlobal = guildId === "Global";
 
-  if (!AccessLevel) {
-    return new Response("Insufficient guild permissions.", { status: 403 });
+  if (IsGlobal) {
+      if (!(await AccessControl.CanManageBot(User.Id, botId))) {
+          return new Response("Insufficient bot management permissions.", { status: 403 });
+      }
+  } else {
+      const Guild = BuildServerTrustedGuildSummary(guildId);
+      const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, Guild);
+      if (!AccessLevel) {
+          return new Response("Insufficient guild permissions.", { status: 403 });
+      }
   }
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
-  const ManifestEntries = (await ScanPluginManifests(PluginDirectory)).filter(
-    (ManifestEntry) => ManifestEntry.Manifest.Scope !== PluginScope.Global && !DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id)
-  );
-  const AvailablePluginIds = new Set(ManifestEntries.map((ManifestEntry) => ManifestEntry.Manifest.Metadata.Id));
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, botId));
+  
+  const AllManifestEntries = await ScanPluginManifests(PluginDirectory);
+  const ManifestEntries = AllManifestEntries.filter((ManifestEntry) => {
+      const MatchesScope = IsGlobal 
+        ? ManifestEntry.Manifest.Scope === PluginScope.Global 
+        : ManifestEntry.Manifest.Scope !== PluginScope.Global;
+      return MatchesScope && !DisabledPluginIds.has(ManifestEntry.Manifest.Metadata.Id);
+  });
+
+  const AvailablePluginIds = new Set(AllManifestEntries.map((ManifestEntry) => ManifestEntry.Manifest.Metadata.Id));
   const AllowedManifestEntries = [];
 
   for (const ManifestEntry of ManifestEntries) {
-    if (await AccessControl.CanManagePlugin(User.DiscordId, Guild, ManifestEntry.Manifest.Metadata.Id)) {
-      AllowedManifestEntries.push(ManifestEntry);
+    if (IsGlobal) {
+        AllowedManifestEntries.push(ManifestEntry);
+    } else {
+        const Guild = BuildServerTrustedGuildSummary(guildId);
+        if (await AccessControl.CanManagePlugin(User.DiscordId, Guild, ManifestEntry.Manifest.Metadata.Id)) {
+            AllowedManifestEntries.push(ManifestEntry);
+        }
     }
   }
 
   const Plugins = await Promise.all(
     AllowedManifestEntries.map(async (ManifestEntry) => {
-      const Storage = new PluginStorage(Prisma, RedisClient, ManifestEntry.Manifest.Metadata.Id);
+      const Storage = new PluginStorage(Prisma, RedisClient, botId, ManifestEntry.Manifest.Metadata.Id);
       const Fields = await Promise.all(
         ManifestEntry.Manifest.WebInterface.map(async (Field) => {
-          const StoredValue = await Storage.GetGlobalConfig(GuildId, Field.Key);
+          const StoredValue = await Storage.GetGlobalConfig(guildId, Field.Key);
 
           return {
-            ...(await HydrateSettingsField(GuildId, Field)),
+            ...(await HydrateSettingsField(botId, guildId, Field)),
             Value: StoredValue ?? Field.Default
           };
         })
@@ -64,42 +82,57 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
         DashboardElements: await Promise.all(
           (ManifestEntry.Manifest.DashboardElements ?? []).map(async (Element) => ({
             ...Element,
-            Value: (await Storage.GetGlobalConfig(GuildId, Element.DataSourceKey)) ?? {}
+            Value: (await Storage.GetGlobalConfig(guildId, Element.DataSourceKey)) ?? {}
           }))
         )
       };
     })
   );
 
-  return NextResponse.json({ GuildId, Plugins });
+  return NextResponse.json({ GuildId: guildId, Plugins });
 }
 
 async function Put(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = await ResolveGuildId(Context);
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
     return User;
   }
 
-  const AccessControl = CreateAccessControl();
-  const Guild = BuildServerTrustedGuildSummary(GuildId);
+  const AccessControl = CreateAccessControl(botId);
+  const IsGlobal = guildId === "Global";
   const Body = (await Request.json()) as { PluginId?: string; Values?: Record<string, unknown> };
 
   if (!Body.PluginId || !Body.Values) {
     return new Response("PluginId and Values are required.", { status: 400 });
   }
 
-  if (!(await AccessControl.CanManagePlugin(User.DiscordId, Guild, Body.PluginId))) {
-    return new Response("Insufficient guild plugin permissions.", { status: 403 });
+  if (IsGlobal) {
+      if (!(await AccessControl.CanManageBot(User.Id, botId))) {
+          return new Response("Insufficient bot management permissions.", { status: 403 });
+      }
+  } else {
+      const Guild = BuildServerTrustedGuildSummary(guildId);
+      if (!(await AccessControl.CanManagePlugin(User.DiscordId, Guild, Body.PluginId))) {
+        return new Response("Insufficient guild plugin permissions.", { status: 403 });
+      }
   }
 
   const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma));
+  const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, botId));
   const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
 
   if (!ManifestEntry || DisabledPluginIds.has(Body.PluginId)) {
     return new Response("Plugin not found.", { status: 404 });
+  }
+
+  if (IsGlobal && ManifestEntry.Manifest.Scope !== PluginScope.Global) {
+      return new Response("Only global plugins can be updated in global context.", { status: 400 });
+  }
+
+  if (!IsGlobal && ManifestEntry.Manifest.Scope === PluginScope.Global) {
+      return new Response("Global plugins cannot be updated in guild context.", { status: 400 });
   }
 
   const AvailablePluginIds = new Set(
@@ -119,7 +152,7 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
     }
   }
 
-  const Storage = new PluginStorage(Prisma, RedisClient, Body.PluginId);
+  const Storage = new PluginStorage(Prisma, RedisClient, botId, Body.PluginId);
   const PersistableKeys = new Set(
     ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button).map((Field) => Field.Key)
   );
@@ -129,10 +162,10 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
       continue;
     }
 
-    await Storage.SetGlobalConfig(GuildId, Key, Value);
+    await Storage.SetGlobalConfig(guildId, Key, Value);
   }
 
-  return NextResponse.json({ GuildId, PluginId: Body.PluginId, Saved: true });
+  return NextResponse.json({ GuildId: guildId, PluginId: Body.PluginId, Saved: true });
 }
 
 function BuildDependencyErrors(Dependencies: string[], AvailablePluginIds: Set<string>): string[] {
@@ -141,7 +174,7 @@ function BuildDependencyErrors(Dependencies: string[], AvailablePluginIds: Set<s
     .map((DependencyId) => `Missing required plugin dependency: ${DependencyId}.`);
 }
 
-async function HydrateSettingsField(GuildId: string, Field: SettingsField): Promise<SettingsField> {
+async function HydrateSettingsField(BotId: string, GuildId: string, Field: SettingsField): Promise<SettingsField> {
   if (
     Field.Type !== SettingsFieldType.ChannelPicker &&
     Field.Type !== SettingsFieldType.RolePicker &&
@@ -151,7 +184,7 @@ async function HydrateSettingsField(GuildId: string, Field: SettingsField): Prom
   }
 
   if (Field.Type === SettingsFieldType.RolePicker || (Field.Type === SettingsFieldType.List && Field.ItemType === "RolePicker")) {
-    const RawRoles = await RedisClient.get(`Bot:Guild:${GuildId}:Roles`);
+    const RawRoles = await RedisClient.get(`Bot:${BotId}:Guild:${GuildId}:Roles`);
     const Roles = RawRoles ? (JSON.parse(RawRoles) as BotRoleSummary[]) : [];
 
     return {
@@ -165,7 +198,7 @@ async function HydrateSettingsField(GuildId: string, Field: SettingsField): Prom
     };
   }
 
-  const RawChannels = await RedisClient.get(`Bot:Guild:${GuildId}:Channels`);
+  const RawChannels = await RedisClient.get(`Bot:${BotId}:Guild:${GuildId}:Channels`);
   const Channels = RawChannels ? (JSON.parse(RawChannels) as BotChannelSummary[]) : [];
   const SupportedChannelTypes = new Set(Field.SupportedChannelTypes ?? []);
   const Options = Channels.map((Channel) => {
@@ -200,11 +233,6 @@ function BuildServerTrustedGuildSummary(GuildId: string): DiscordGuildSummary {
     Owner: false,
     Permissions: "0"
   };
-}
-
-async function ResolveGuildId(Context: RouteContext): Promise<string> {
-  const ResolvedParams = await Context.params;
-  return ResolvedParams.guildId;
 }
 
 async function ResolveDashboardUser(Request: Request) {

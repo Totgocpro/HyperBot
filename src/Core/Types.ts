@@ -120,6 +120,7 @@ export type LoadedPlugin = {
 export type PluginConstructor = new (Context: PluginContext) => BasePlugin;
 
 export type PluginContext = {
+  BotId: string;
   Manifest: PluginManifest;
   Storage: PluginStorageContract;
   Logger: PluginLoggerContract;

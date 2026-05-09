@@ -93,6 +93,9 @@ export function AppShell(Properties: { children: ReactNode }) {
               <Link className="hidden text-xs font-semibold text-slate-300 hover:text-white sm:inline sm:text-sm" href="/">
                 Servers
               </Link>
+              <Link className="hidden text-xs font-semibold text-slate-300 hover:text-white sm:inline sm:text-sm" href="/bots">
+                Bots
+              </Link>
               {User?.Role === "SuperAdmin" ? (
                 <Link className="hidden text-xs font-semibold text-slate-300 hover:text-white sm:inline sm:text-sm" href="/admin">
                   Admin
@@ -131,6 +134,12 @@ export function AppShell(Properties: { children: ReactNode }) {
               </div>
               <Link className="rounded-2xl px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800" href="/" onClick={() => SetMobileMenuOpen(false)}>
                 Servers
+              </Link>
+              <Link className="rounded-2xl px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800" href="/" onClick={() => SetMobileMenuOpen(false)}>
+                Servers
+              </Link>
+              <Link className="rounded-2xl px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800" href="/bots" onClick={() => SetMobileMenuOpen(false)}>
+                Bots
               </Link>
               {User?.Role === "SuperAdmin" ? (
                 <Link className="rounded-2xl px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800" href="/admin" onClick={() => SetMobileMenuOpen(false)}>

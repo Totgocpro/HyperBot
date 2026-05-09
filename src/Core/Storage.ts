@@ -5,12 +5,14 @@ import type { PluginStorageContract } from "./Types.js";
 export class PluginStorage implements PluginStorageContract {
   private readonly Prisma: PrismaClient;
   private readonly RedisClient: Redis;
+  private readonly BotId: string;
   private readonly PluginId: string;
   private readonly CacheTtlSeconds = 60;
 
-  public constructor(Prisma: PrismaClient, RedisClient: Redis, PluginId: string) {
+  public constructor(Prisma: PrismaClient, RedisClient: Redis, BotId: string, PluginId: string) {
     this.Prisma = Prisma;
     this.RedisClient = RedisClient;
+    this.BotId = BotId;
     this.PluginId = PluginId;
   }
 
@@ -24,7 +26,8 @@ export class PluginStorage implements PluginStorageContract {
 
     const StoredValue = await this.Prisma.userPluginValue.findUnique({
       where: {
-        GuildId_UserId_PluginId_Key: {
+        BotId_GuildId_UserId_PluginId_Key: {
+          BotId: this.BotId,
           GuildId,
           UserId,
           PluginId: this.PluginId,
@@ -46,7 +49,8 @@ export class PluginStorage implements PluginStorageContract {
 
     await this.Prisma.userPluginValue.upsert({
       where: {
-        GuildId_UserId_PluginId_Key: {
+        BotId_GuildId_UserId_PluginId_Key: {
+          BotId: this.BotId,
           GuildId,
           UserId,
           PluginId: this.PluginId,
@@ -55,6 +59,7 @@ export class PluginStorage implements PluginStorageContract {
       },
       update: { Value: this.SerializeJsonValue(Value) },
       create: {
+        BotId: this.BotId,
         GuildId,
         UserId,
         PluginId: this.PluginId,
@@ -76,7 +81,8 @@ export class PluginStorage implements PluginStorageContract {
 
     const StoredValue = await this.Prisma.pluginGlobalConfig.findUnique({
       where: {
-        GuildId_PluginId_Key: {
+        BotId_GuildId_PluginId_Key: {
+          BotId: this.BotId,
           GuildId,
           PluginId: this.PluginId,
           Key
@@ -97,7 +103,8 @@ export class PluginStorage implements PluginStorageContract {
 
     await this.Prisma.pluginGlobalConfig.upsert({
       where: {
-        GuildId_PluginId_Key: {
+        BotId_GuildId_PluginId_Key: {
+          BotId: this.BotId,
           GuildId,
           PluginId: this.PluginId,
           Key
@@ -105,6 +112,7 @@ export class PluginStorage implements PluginStorageContract {
       },
       update: { Value: this.SerializeJsonValue(Value) },
       create: {
+        BotId: this.BotId,
         GuildId,
         PluginId: this.PluginId,
         Key,
@@ -116,11 +124,11 @@ export class PluginStorage implements PluginStorageContract {
   }
 
   private BuildUserCacheKey(GuildId: string, UserId: string, Key: string): string {
-    return `Plugin:${this.PluginId}:Guild:${GuildId}:User:${UserId}:Key:${Key}`;
+    return `Bot:${this.BotId}:Plugin:${this.PluginId}:Guild:${GuildId}:User:${UserId}:Key:${Key}`;
   }
 
   private BuildGlobalCacheKey(GuildId: string, Key: string): string {
-    return `Plugin:${this.PluginId}:Guild:${GuildId}:Global:${Key}`;
+    return `Bot:${this.BotId}:Plugin:${this.PluginId}:Guild:${GuildId}:Global:${Key}`;
   }
 
   private SerializeJsonValue(Value: unknown): PrismaNamespace.InputJsonValue | typeof PrismaNamespace.JsonNull {

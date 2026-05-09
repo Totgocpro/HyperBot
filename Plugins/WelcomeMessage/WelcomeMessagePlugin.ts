@@ -271,11 +271,19 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     const Config = await this.GetConfig(GuildId);
 
     if (ActionKey === "PublishCaptchaPanel") {
+      if (!Config.CaptchaChannelId) {
+        throw new Error(`Welcome captcha panel action failed for guild ${GuildId}: CaptchaChannelId is not configured.`);
+      }
+
       await this.SendCaptchaMessage(Member, Config, false);
       return;
     }
 
     if (ActionKey === "TestWelcome") {
+      if (!Config.WelcomeChannelId) {
+        throw new Error(`Welcome test action failed for guild ${GuildId}: WelcomeChannelId is not configured.`);
+      }
+
       await this.SendMemberMessage({
         ChannelId: Config.WelcomeChannelId,
         Color: Config.WelcomeColor,
@@ -287,6 +295,10 @@ export default class WelcomeMessagePlugin extends BasePlugin {
         Type: "Welcome"
       });
       return;
+    }
+
+    if (!Config.LeaveChannelId) {
+      throw new Error(`Leave test action failed for guild ${GuildId}: LeaveChannelId is not configured.`);
     }
 
     await this.SendMemberMessage({
@@ -316,8 +328,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     const Channel = await this.ResolveWritableChannel(Member.guild.id, Config.CaptchaChannelId);
 
     if (!Channel) {
-      this.Logger.Warn("Captcha channel is missing or not writable.", { GuildId: Member.guild.id, ChannelId: Config.CaptchaChannelId });
-      return;
+      throw new Error(`Captcha panel action failed for guild ${Member.guild.id}: channel ${Config.CaptchaChannelId} is missing or is not writable.`);
     }
 
     const BuiltEmbed = this.BuildConfiguredEmbed(Config.CaptchaEmbed, Member, {
@@ -681,8 +692,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     const Channel = await this.ResolveWritableChannel(Options.Member.guild.id, Options.ChannelId);
 
     if (!Channel) {
-      this.Logger.Warn("Welcome channel is missing or not writable.", { GuildId: Options.Member.guild.id, ChannelId: Options.ChannelId });
-      return;
+      throw new Error(`${Options.Type} message action failed for guild ${Options.Member.guild.id}: channel ${Options.ChannelId} is missing or is not writable.`);
     }
 
     const Title = this.ApplyTemplate(Options.Title, Options.Member);

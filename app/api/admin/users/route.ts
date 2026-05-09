@@ -19,7 +19,12 @@ async function Get(Request: Request): Promise<Response> {
       DisplayName: true,
       Role: true,
       IsDashboardBanned: true,
-      CreatedAt: true
+      CreatedAt: true,
+      BotAccesses: {
+        select: {
+          BotId: true
+        }
+      }
     }
   });
 
@@ -42,6 +47,7 @@ async function Patch(Request: Request): Promise<Response> {
     Role?: "SuperAdmin" | "User";
     IsDashboardBanned?: boolean;
     Password?: string;
+    AllowedBotIds?: string[];
   };
 
   if (!Body.DiscordId && !Body.Username) {
@@ -85,6 +91,18 @@ async function Patch(Request: Request): Promise<Response> {
     }
   });
 
+  if (Body.AllowedBotIds) {
+      await Prisma.botAccess.deleteMany({ where: { UserId: User.Id } });
+      if (Body.AllowedBotIds.length > 0) {
+          await Prisma.botAccess.createMany({
+              data: Body.AllowedBotIds.map(botId => ({
+                  UserId: User.Id,
+                  BotId: botId
+              }))
+          });
+      }
+  }
+
   if (Password) {
     await Prisma.sessionToken.updateMany({
       where: { UserId: User.Id, RevokedAt: null },
@@ -97,7 +115,7 @@ async function Patch(Request: Request): Promise<Response> {
       ActorId,
       Action: "DashboardUserUpdated",
       Target: User.DiscordId,
-      Metadata: { Role: User.Role, IsDashboardBanned: User.IsDashboardBanned, PasswordChanged: Boolean(Password) }
+      Metadata: { Role: User.Role, IsDashboardBanned: User.IsDashboardBanned, PasswordChanged: Boolean(Password), AllowedBotIds: Body.AllowedBotIds }
     }
   });
 
@@ -120,6 +138,7 @@ async function Post(Request: Request): Promise<Response> {
     DisplayName?: string;
     Role?: "SuperAdmin" | "User";
     IsDashboardBanned?: boolean;
+    AllowedBotIds?: string[];
   };
 
   if (!Body.Username || !Body.Password || Body.Password.length < 8) {
@@ -127,6 +146,7 @@ async function Post(Request: Request): Promise<Response> {
   }
 
   const Password = HashPassword(Body.Password);
+  
   const User = await Prisma.dashboardUser.create({
     data: {
       Username: Body.Username.trim(),
@@ -139,12 +159,21 @@ async function Post(Request: Request): Promise<Response> {
     }
   });
 
+  if (Body.AllowedBotIds && Body.AllowedBotIds.length > 0) {
+      await Prisma.botAccess.createMany({
+          data: Body.AllowedBotIds.map(botId => ({
+              UserId: User.Id,
+              BotId: botId
+          }))
+      });
+  }
+
   await Prisma.auditLog.create({
     data: {
       ActorId,
       Action: "DashboardUserCreated",
       Target: User.DiscordId,
-      Metadata: { Username: User.Username, Role: User.Role }
+      Metadata: { Username: User.Username, Role: User.Role, AllowedBotIds: Body.AllowedBotIds }
     }
   });
 
@@ -183,6 +212,9 @@ async function Delete(Request: Request): Promise<Response> {
   await Prisma.$transaction([
     Prisma.guildRoleGrant.deleteMany({
       where: { DiscordId: ExistingUser.DiscordId }
+    }),
+    Prisma.botAccess.deleteMany({
+        where: { UserId: ExistingUser.Id }
     }),
     Prisma.dashboardUser.delete({
       where: { Id: ExistingUser.Id }

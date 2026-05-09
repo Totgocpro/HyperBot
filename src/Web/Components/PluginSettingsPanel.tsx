@@ -4,57 +4,22 @@ import Link from "next/link";
 import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type ReactNode } from "react";
 import type { BotGuildSummary, DashboardElement, SettingsField } from "../../Core/Types";
 import { CustomSelect } from "./CustomSelect";
-
-type DashboardPlugin = {
-  Metadata: {
-    Id: string;
-    DisplayName: string;
-    Version: string;
-    Author: string;
-    Icon: string;
-  };
-  Commands: Array<{
-    Name: string;
-    Description: string;
-  }>;
-  Dependencies?: string[];
-  DependencyErrors?: string[];
-  WebInterface: Array<SettingsField & { Value: unknown }>;
-  DashboardElements?: Array<DashboardElement & { Value: unknown }>;
-};
+import {
+  BuildConfigSections,
+  IsFieldVisible,
+  AnimatedVisibility,
+  RenderField,
+  ParseEditableEmbed,
+  type DashboardPlugin,
+  type PluginConfigSection,
+  type EditableEmbedField,
+  type EditableEmbed,
+  type BotPreviewIdentity
+} from "./PluginInterfaceRenderer";
 
 type PluginSettingsPanelProperties = {
+  BotId: string;
   GuildId: string;
-};
-
-type PluginConfigSection = {
-  Id: string;
-  Label: string;
-  Fields: Array<SettingsField & { Value: unknown }>;
-};
-
-type EditableEmbedField = {
-  Name: string;
-  Value: string;
-  Inline: boolean;
-};
-
-type EditableEmbed = {
-  Name: string;
-  Title: string;
-  Description: string;
-  Color: string;
-  Url: string;
-  AuthorName: string;
-  AuthorIconUrl: string;
-  ThumbnailUrl: string;
-  ImageUrl: string;
-  FooterText: string;
-  FooterIconUrl: string;
-  Timestamp: boolean;
-  Fields: EditableEmbedField[];
-  ImageDataUrl: string;
-  ImageName: string;
 };
 
 type BackupSummary = {
@@ -149,9 +114,14 @@ type ChannelCounterDraft = {
   Template: string;
 };
 
+function BuildGuildHeaders(): HeadersInit {
+  return {};
+}
+
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
+  const [BotIdentity, SetBotIdentity] = UseState<BotPreviewIdentity | null>(null);
   const [SelectedPluginId, SetSelectedPluginId] = UseState("");
   const [PluginMenuOpen, SetPluginMenuOpen] = UseState(false);
   const [SectionMenuOpen, SetSectionMenuOpen] = UseState(true);
@@ -172,13 +142,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   UseEffect(() => {
     void LoadPlugins();
     void LoadGuild();
+    void LoadBotIdentity();
 
     const RefreshInterval = window.setInterval(() => {
       void LoadPlugins(true);
     }, 5_000);
 
     return () => window.clearInterval(RefreshInterval);
-  }, [Properties.GuildId]);
+  }, [Properties.BotId, Properties.GuildId]);
 
   UseEffect(() => {
     return () => {
@@ -189,7 +160,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }, []);
 
   async function LoadGuild(): Promise<void> {
-    const Response = await fetch("/api/guilds");
+    const Response = await fetch(`/api/guilds?botId=${Properties.BotId}`);
 
     if (!Response.ok) {
       return;
@@ -199,8 +170,23 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     SetGuild(Payload.Guilds.find((GuildValue) => GuildValue.Id === Properties.GuildId) ?? null);
   }
 
+  async function LoadBotIdentity(): Promise<void> {
+    const Response = await fetch(`/api/bots/${Properties.BotId}`);
+
+    if (!Response.ok) {
+      SetBotIdentity(null);
+      return;
+    }
+
+    const Payload = (await Response.json()) as BotPreviewIdentity;
+    SetBotIdentity({
+      Name: Payload.Name,
+      AvatarUrl: Payload.AvatarUrl
+    });
+  }
+
   async function LoadPlugins(PreserveDraftValues = false): Promise<void> {
-    const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
+    const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}`, {
       headers: BuildGuildHeaders()
     });
 
@@ -234,7 +220,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     const PersistableValues = BuildPersistablePluginValues(Plugin, PluginDraftValues);
 
     try {
-      const Response = await fetch(`/api/plugins/${Properties.GuildId}`, {
+      const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}`, {
         method: "PUT",
         headers: {
           ...BuildGuildHeaders(),
@@ -265,7 +251,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }
 
   async function CreateRole(Name: string, Color: string): Promise<string | null> {
-    const Response = await fetch(`/api/plugins/${Properties.GuildId}/roles`, {
+    const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/roles`, {
       method: "POST",
       headers: {
         ...BuildGuildHeaders(),
@@ -285,7 +271,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }
 
   async function CreateChannel(Name: string): Promise<string | null> {
-    const Response = await fetch(`/api/plugins/${Properties.GuildId}/channels`, {
+    const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/channels`, {
       method: "POST",
       headers: {
         ...BuildGuildHeaders(),
@@ -492,6 +478,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   ) : null}
                   {SelectedPlugin.Metadata.Id === "SendEmbed" ? (
                     <SendEmbedEditor
+                      BotIdentity={BotIdentity}
+                      BotId={Properties.BotId}
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
@@ -501,6 +489,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     />
                   ) : SelectedPlugin.Metadata.Id === "Backups" ? (
                     <BackupsManager
+                      BotId={Properties.BotId}
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
                       Plugin={SelectedPlugin}
@@ -509,6 +498,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     />
                   ) : SelectedPlugin.Metadata.Id === "CustomCommands" ? (
                     <CustomCommandsEditor
+                      BotIdentity={BotIdentity}
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
@@ -519,7 +509,10 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     />
                   ) : SelectedPlugin.Metadata.Id === "Reminders" ? (
                     <RemindersEditor
+                      BotIdentity={BotIdentity}
+                      BotId={Properties.BotId}
                       DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
                       Plugin={SelectedPlugin}
                       SetStatus={SetStatus}
@@ -527,7 +520,10 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     />
                   ) : SelectedPlugin.Metadata.Id === "Notifications" ? (
                     <NotificationsEditor
+                      BotIdentity={BotIdentity}
+                      BotId={Properties.BotId}
                       DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
                       Plugin={SelectedPlugin}
                       SetStatus={SetStatus}
@@ -535,6 +531,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     />
                   ) : SelectedPlugin.Metadata.Id === "Statistics" ? (
                     <StatisticsEditor
+                      BotIdentity={BotIdentity}
+                      BotId={Properties.BotId}
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
@@ -575,7 +573,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                           <div className="grid gap-4">
                             {Section.Fields.map((Field) => (
                               <AnimatedVisibility IsVisible={IsFieldVisible(Field, SelectedPluginDraftValues)} key={Field.Key}>
-                                {RenderField(Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus, CreateRole, CreateChannel)}
+                                {RenderField(Properties.BotId, Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus, CreateRole, CreateChannel, BotIdentity)}
                               </AnimatedVisibility>
                             ))}
                           </div>
@@ -685,6 +683,7 @@ function SaveErrorIcon() {
 }
 
 function CustomCommandsEditor(Properties: {
+  BotIdentity?: BotPreviewIdentity | null;
   DraftValues: Record<string, Record<string, unknown>>;
   GuildId: string;
   OnCreateChannel: (Name: string) => Promise<string | null>;
@@ -823,7 +822,7 @@ function CustomCommandsEditor(Properties: {
                     Command name
                     <input className={EmbedInputClassName} onChange={(Event) => UpdateCommand(Command.Id, { Name: SanitizeCommandDraftName(Event.target.value) })} value={Command.Name} />
                   </label>
-                  <div className="block text-sm font-bold text-slate-200">
+                  <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                     Match mode
                     <CustomSelect
                       ClassName="mt-2"
@@ -906,6 +905,7 @@ function CustomCommandsEditor(Properties: {
                           {ActionNeedsEmbed(Action.Type) ? (
                             <div className="mt-3">
                               <AdvancedEmbedEditor
+                                BotIdentity={Properties.BotIdentity}
                                 EmbedValue={Action.Embed}
                                 OnChange={(Embed) => UpdateAction(Command.Id, Action.Id, { Embed })}
                                 PlaceholderText="Use %mention%, %user%, %args%, %server%, %channel% in text fields."
@@ -985,7 +985,10 @@ function DashboardElementRenderer(Properties: { Element: DashboardElement & { Va
 }
 
 function RemindersEditor(Properties: {
+  BotIdentity?: BotPreviewIdentity | null;
+  BotId: string;
   DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
   OnCreateChannel: (Name: string) => Promise<string | null>;
   Plugin: DashboardPlugin;
   SetStatus: (Status: string) => void;
@@ -1087,12 +1090,12 @@ function RemindersEditor(Properties: {
       <div className="grid gap-5">
         <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultEmbed") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultInterval") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultColor") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "FooterText") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "MaxReminders") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultEmbed") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultInterval") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultColor") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "FooterText") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "MaxReminders") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
           </div>
         </section>
 
@@ -1121,7 +1124,7 @@ function RemindersEditor(Properties: {
                 Name
                 <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { Name: Event.target.value })} value={ReminderValue.Name} />
               </label>
-              <div className="block text-sm font-bold text-slate-200">
+              <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                 Channel
                 <CustomSelect
                   ClassName="mt-2"
@@ -1136,7 +1139,7 @@ function RemindersEditor(Properties: {
                   Value={ReminderValue.ChannelId}
                 />
               </div>
-              <div className="block text-sm font-bold text-slate-200">
+              <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                 Mode
                 <CustomSelect
                   ClassName="mt-2"
@@ -1149,7 +1152,7 @@ function RemindersEditor(Properties: {
                   Value={ReminderValue.Mode}
                 />
               </div>
-              <div className="block text-sm font-bold text-slate-200">
+              <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                 Schedule
                 <CustomSelect
                   ClassName="mt-2"
@@ -1194,6 +1197,7 @@ function RemindersEditor(Properties: {
               {ReminderValue.Mode === "Embed" ? (
                 <div className="lg:col-span-2">
                   <AdvancedEmbedEditor
+                    BotIdentity={Properties.BotIdentity}
                     EmbedValue={ReminderValue.Embed}
                     OnChange={(NextEmbed) => UpdateReminder(ReminderValue.Id, { Embed: NextEmbed, Title: NextEmbed.Title, Message: NextEmbed.Description, Color: NextEmbed.Color })}
                     PlaceholderText="Use placeholders like %server%, %name%, %runCount%, %interval%, %nextRun%."
@@ -1214,7 +1218,10 @@ function RemindersEditor(Properties: {
 }
 
 function NotificationsEditor(Properties: {
+  BotIdentity?: BotPreviewIdentity | null;
+  BotId: string;
   DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
   OnCreateChannel: (Name: string) => Promise<string | null>;
   Plugin: DashboardPlugin;
   SetStatus: (Status: string) => void;
@@ -1289,8 +1296,8 @@ function NotificationsEditor(Properties: {
       <div className="grid gap-5">
         <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
-            {RenderField("", PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultIntervalMinutes") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultChannelId") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
+            {RenderField(Properties.BotId, Properties.GuildId, PluginId, Properties.Plugin.WebInterface.find((Field) => Field.Key === "DefaultIntervalMinutes") as SettingsField & { Value: unknown }, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}
           </div>
         </section>
 
@@ -1320,7 +1327,7 @@ function NotificationsEditor(Properties: {
                     Name
                     <input className={EmbedInputClassName} onChange={(Event) => UpdateSource(Source.Id, { Name: Event.target.value })} value={Source.Name} />
                   </label>
-                  <div className="block text-sm font-bold text-slate-200">
+                  <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                     Type
                     <CustomSelect
                       ClassName="mt-2"
@@ -1345,7 +1352,7 @@ function NotificationsEditor(Properties: {
                 </div>
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="block text-sm font-bold text-slate-200">
+                  <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                     Target channel
                     <CustomSelect
                       ClassName="mt-2"
@@ -1465,6 +1472,7 @@ function NotificationsEditor(Properties: {
 
                 <div className="mt-4">
                   <AdvancedEmbedEditor
+                    BotIdentity={Properties.BotIdentity}
                     EmbedValue={Source.Embed}
                     OnChange={(Embed) => UpdateSource(Source.Id, { Embed })}
                     PlaceholderText="Available tags: %source%, %type%, %title%, %url%, %author%, %publishedAt%, %summary%, %image%."
@@ -1487,6 +1495,8 @@ function NotificationsEditor(Properties: {
 }
 
 function StatisticsEditor(Properties: {
+  BotIdentity?: BotPreviewIdentity | null;
+  BotId: string;
   DraftValues: Record<string, Record<string, unknown>>;
   GuildId: string;
   OnCreateChannel: (Name: string) => Promise<string | null>;
@@ -1553,7 +1563,7 @@ function StatisticsEditor(Properties: {
             <h4 className="text-xl font-black text-white">{Section.Label}</h4>
             <div className="mt-4 grid gap-4">
               {Section.Fields.map((Field) => (
-                <div key={Field.Key}>{RenderField(Properties.GuildId, PluginId, Field, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel)}</div>
+                <div key={Field.Key}>{RenderField(Properties.BotId, Properties.GuildId, PluginId, Field, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}</div>
               ))}
             </div>
           </section>
@@ -1583,7 +1593,7 @@ function StatisticsEditor(Properties: {
                     Channel name template
                     <input className={EmbedInputClassName} onChange={(Event) => UpdateCounter(Counter.Id, { Template: Event.target.value })} value={Counter.Template} />
                   </label>
-                  <div className="block text-sm font-bold text-slate-200">
+                  <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                     Existing voice channel
                     <CustomSelect
                       ClassName="mt-2"
@@ -1621,6 +1631,7 @@ function StatisticsEditor(Properties: {
 }
 
 function AdvancedEmbedEditor(Properties: {
+  BotIdentity?: BotPreviewIdentity | null;
   EmbedValue: EditableEmbed;
   OnChange: (EmbedValue: EditableEmbed) => void;
   PlaceholderText?: string;
@@ -1668,7 +1679,7 @@ function AdvancedEmbedEditor(Properties: {
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="grid content-start gap-3">
         {Properties.PlaceholderText ? <p className="rounded-2xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400">{Properties.PlaceholderText}</p> : null}
-        <DiscordEmbedPreview Embed={CurrentEmbed} OnSelectPart={SetSelectedPart} SelectedPart={SelectedPart} />
+        <DiscordEmbedPreview BotIdentity={Properties.BotIdentity} Embed={CurrentEmbed} OnSelectPart={SetSelectedPart} SelectedPart={SelectedPart} />
       </div>
       <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
         <div className="mb-4 flex flex-wrap gap-2">
@@ -1780,6 +1791,8 @@ function AdvancedEmbedEditor(Properties: {
 }
 
 function SendEmbedEditor(Properties: {
+  BotIdentity?: BotPreviewIdentity | null;
+  BotId: string;
   DraftValues: Record<string, Record<string, unknown>>;
   GuildId: string;
   OnCreateChannel: (Name: string) => Promise<string | null>;
@@ -1843,7 +1856,7 @@ function SendEmbedEditor(Properties: {
     Properties.SetStatus("Sending embed...");
 
     try {
-      const Response = await fetch(`/api/plugins/${Properties.GuildId}/actions`, {
+      const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/actions`, {
         method: "POST",
         headers: {
           ...BuildGuildHeaders(),
@@ -1880,7 +1893,7 @@ function SendEmbedEditor(Properties: {
                 Template name
                 <input className={EmbedInputClassName} onChange={(Event) => UpdateEmbed({ Name: Event.target.value })} value={CurrentEmbed.Name} />
               </label>
-              <div className="block text-sm font-bold text-slate-200">
+              <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
                 Target channel
                 <CustomSelect
                   ClassName="mt-2"
@@ -1901,6 +1914,7 @@ function SendEmbedEditor(Properties: {
           </section>
 
           <AdvancedEmbedEditor
+            BotIdentity={Properties.BotIdentity}
             EmbedValue={CurrentEmbed}
             OnChange={SetCurrentEmbed}
             PlaceholderText="Build the embed from the preview. Select a part of the Discord preview, then edit only that section."
@@ -1941,19 +1955,24 @@ function SendEmbedEditor(Properties: {
   );
 }
 
-function DiscordEmbedPreview(Properties: { Embed: EditableEmbed; OnSelectPart?: (Part: "Content" | "Author" | "Media" | "Footer" | "Fields") => void; SelectedPart?: string }) {
+function DiscordEmbedPreview(Properties: { BotIdentity?: BotPreviewIdentity | null; Embed: EditableEmbed; OnSelectPart?: (Part: "Content" | "Author" | "Media" | "Footer" | "Fields") => void; SelectedPart?: string }) {
   const Color = NormalizeEmbedColor(Properties.Embed.Color);
   const SelectClassName = "rounded-md outline outline-2 outline-transparent transition hover:outline-blue-400";
   const ActiveClassName = "outline-blue-500";
+  const BotName = Properties.BotIdentity?.Name?.trim() || "HyperBot";
+  const BotInitials = BuildBotInitials(BotName);
 
   return (
     <section className="rounded-3xl border border-slate-800 bg-[#313338] p-4 shadow-xl shadow-black/20">
       <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Discord preview</p>
       <div className="flex gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-black text-white">HB</div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-600 text-sm font-black text-white">
+          {Properties.BotIdentity?.AvatarUrl ? <img alt="" className="h-10 w-10 rounded-full object-cover" src={Properties.BotIdentity.AvatarUrl} /> : BotInitials}
+        </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white">
-            HyperBot <span className="rounded bg-[#5865f2] px-1 py-0.5 text-[10px] uppercase text-white">Bot</span>
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-white">
+            <span className="min-w-0 max-w-[240px] truncate">{BotName}</span>
+            <span className="shrink-0 rounded bg-[#5865f2] px-1 py-0.5 text-[10px] uppercase text-white">Bot</span>
           </p>
           <div className="mt-2 max-w-[520px] overflow-hidden rounded bg-[#2b2d31]" style={{ borderLeft: `4px solid ${Color}` }}>
             <div className="p-4">
@@ -2000,6 +2019,7 @@ function DiscordEmbedPreview(Properties: { Embed: EditableEmbed; OnSelectPart?: 
 }
 
 function BackupsManager(Properties: {
+  BotId: string;
   DraftValues: Record<string, Record<string, unknown>>;
   GuildId: string;
   Plugin: DashboardPlugin;
@@ -2022,7 +2042,7 @@ function BackupsManager(Properties: {
   }, [Properties.GuildId]);
 
   async function LoadBackups(): Promise<void> {
-    const Response = await fetch(`/api/plugins/${Properties.GuildId}/backups`, {
+    const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/backups`, {
       headers: BuildGuildHeaders()
     });
 
@@ -2041,7 +2061,7 @@ function BackupsManager(Properties: {
     SetIsBusy(true);
 
     try {
-      const Response = await fetch(`/api/plugins/${Properties.GuildId}/actions`, {
+      const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/actions`, {
         method: "POST",
         headers: {
           ...BuildGuildHeaders(),
@@ -2064,7 +2084,7 @@ function BackupsManager(Properties: {
     SetIsBusy(true);
 
     try {
-      const Response = await fetch(`/api/plugins/${Properties.GuildId}/backups`, {
+      const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/backups`, {
         method: "DELETE",
         headers: {
           ...BuildGuildHeaders(),
@@ -2088,7 +2108,7 @@ function BackupsManager(Properties: {
   }
 
   function DownloadBackup(BackupId: string): void {
-    window.open(`/api/plugins/${Properties.GuildId}/backups?backupId=${encodeURIComponent(BackupId)}`, "_blank", "noopener,noreferrer");
+    window.open(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/backups?backupId=${encodeURIComponent(BackupId)}`, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -2166,13 +2186,20 @@ function BackupsManager(Properties: {
             </div>
           ) : (
             Backups.map((Backup) => (
-              <button
+              <div
                 className={`rounded-3xl border p-4 text-left transition ${
                   SelectedBackup?.Id === Backup.Id ? "border-blue-500 bg-blue-500/10" : "border-slate-800 bg-slate-950 hover:border-slate-700"
                 }`}
                 key={Backup.Id}
                 onClick={() => SetSelectedBackupId(Backup.Id)}
-                type="button"
+                onKeyDown={(Event) => {
+                  if (Event.key === "Enter" || Event.key === " ") {
+                    Event.preventDefault();
+                    SetSelectedBackupId(Backup.Id);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
@@ -2221,7 +2248,7 @@ function BackupsManager(Properties: {
                     Delete
                   </button>
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>
@@ -2397,90 +2424,6 @@ function PluginHamburgerIcon() {
   );
 }
 
-function BuildGuildHeaders(): HeadersInit {
-  return {};
-}
-
-function AnimatedVisibility(Properties: {
-  ClassName?: string;
-  Id?: string;
-  IsVisible: boolean;
-  children?: ReactNode;
-}) {
-  const [ShouldRender, SetShouldRender] = UseState(Properties.IsVisible);
-
-  UseEffect(() => {
-    if (Properties.IsVisible) {
-      SetShouldRender(true);
-      return;
-    }
-
-    const Timeout = window.setTimeout(() => SetShouldRender(false), 300);
-    return () => window.clearTimeout(Timeout);
-  }, [Properties.IsVisible]);
-
-  if (!ShouldRender) {
-    return null;
-  }
-
-  return (
-    <div
-      aria-hidden={!Properties.IsVisible}
-      className={`${Properties.ClassName ?? ""} overflow-hidden transition-[max-height,opacity,transform,margin] duration-300 ease-out ${Properties.IsVisible ? "max-h-[6000px] translate-y-0 opacity-100" : "pointer-events-none max-h-0 -translate-y-2 opacity-0"}`}
-      id={Properties.Id}
-    >
-      {Properties.children}
-    </div>
-  );
-}
-
-function BuildConfigSections(Plugin: DashboardPlugin, Values: Record<string, unknown> = {}, OnlyVisible = false): PluginConfigSection[] {
-  const Sections = new Map<string, PluginConfigSection>();
-
-  for (const Field of Plugin.WebInterface.filter((FieldValue) => !OnlyVisible || IsFieldVisible(FieldValue, Values))) {
-    const Label = Field.Section ?? "General";
-    const Id = BuildSectionId(Label);
-    const ExistingSection = Sections.get(Id);
-
-    if (ExistingSection) {
-      ExistingSection.Fields.push(Field);
-      continue;
-    }
-
-    Sections.set(Id, {
-      Id,
-      Label,
-      Fields: [Field]
-    });
-  }
-
-  return Array.from(Sections.values());
-}
-
-function IsFieldVisible(Field: SettingsField, Values: Record<string, unknown>): boolean {
-  const AllRules = Array.isArray(Field.VisibleWhen) ? Field.VisibleWhen : Field.VisibleWhen ? [Field.VisibleWhen] : [];
-
-  if (AllRules.length > 0 && !AllRules.every((Rule) => MatchesVisibilityRule(Rule, Values))) {
-    return false;
-  }
-
-  if (Field.VisibleWhenAny?.length && !Field.VisibleWhenAny.some((Rule) => MatchesVisibilityRule(Rule, Values))) {
-    return false;
-  }
-
-  return true;
-}
-
-function MatchesVisibilityRule(Rule: NonNullable<SettingsField["VisibleWhenAny"]>[number], Values: Record<string, unknown>): boolean {
-  const CurrentValue = Values[Rule.Key];
-  const Matches = String(CurrentValue) === String(Rule.Value);
-
-  return Rule.Operator === "NotEquals" ? !Matches : Matches;
-}
-
-function BuildSectionId(Label: string): string {
-  return Label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "general";
-}
 
 function ScrollToPluginSection(SectionId: string): void {
   document.getElementById(SectionId)?.scrollIntoView({
@@ -2743,36 +2686,6 @@ function ComputeReminderNextRun(ScheduleMode: ReminderDraft["ScheduleMode"], Rem
   return (BestDate ?? new Date(Date.now() + ReminderValue.IntervalMs)).toISOString();
 }
 
-function ParseEditableEmbed(Value: unknown): EditableEmbed {
-  const DefaultEmbed = CreateDefaultEmbed();
-
-  if (!IsRecord(Value)) {
-    return DefaultEmbed;
-  }
-
-  return {
-    Name: typeof Value.Name === "string" ? Value.Name : DefaultEmbed.Name,
-    Title: typeof Value.Title === "string" ? Value.Title : DefaultEmbed.Title,
-    Description: typeof Value.Description === "string" ? Value.Description : DefaultEmbed.Description,
-    Color: typeof Value.Color === "string" ? Value.Color : DefaultEmbed.Color,
-    Url: typeof Value.Url === "string" ? Value.Url : "",
-    AuthorName: typeof Value.AuthorName === "string" ? Value.AuthorName : "",
-    AuthorIconUrl: typeof Value.AuthorIconUrl === "string" ? Value.AuthorIconUrl : "",
-    ThumbnailUrl: typeof Value.ThumbnailUrl === "string" ? Value.ThumbnailUrl : "",
-    ImageUrl: typeof Value.ImageUrl === "string" ? Value.ImageUrl : "",
-    FooterText: typeof Value.FooterText === "string" ? Value.FooterText : "",
-    FooterIconUrl: typeof Value.FooterIconUrl === "string" ? Value.FooterIconUrl : "",
-    Timestamp: Boolean(Value.Timestamp),
-    Fields: Array.isArray(Value.Fields) ? Value.Fields.filter(IsRecord).map((Field) => ({
-      Name: typeof Field.Name === "string" ? Field.Name : "",
-      Value: typeof Field.Value === "string" ? Field.Value : "",
-      Inline: Boolean(Field.Inline)
-    })) : [],
-    ImageDataUrl: typeof Value.ImageDataUrl === "string" ? Value.ImageDataUrl : "",
-    ImageName: typeof Value.ImageName === "string" ? Value.ImageName : ""
-  };
-}
-
 function ParseReminderDuration(Value: string): number | null {
   const Match = Value.trim().toLowerCase().match(/^(\d+)\s*([mhdw])$/u);
 
@@ -2928,7 +2841,11 @@ function MultiSelectField(Properties: {
             {IsChannelCreate ? null : <input aria-label="Role color" className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 p-1 sm:w-14" onChange={(Event) => SetNewColor(Event.target.value)} type="color" value={NewColor} />}
           </div>
           {CreateError ? <p className="mt-2 text-xs font-semibold text-red-300">{CreateError}</p> : null}
-          <button className="mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60" disabled={IsCreating} onClick={() => void CreateRole()} type="button">
+          <button
+            className={`mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white transition ${IsCreating ? "cursor-not-allowed opacity-60" : "hover:bg-blue-500"}`}
+            onClick={() => !IsCreating && void CreateRole()}
+            type="button"
+          >
             {IsCreating ? "Creating..." : IsChannelCreate ? "Create channel" : "Create role"}
           </button>
         </div>
@@ -2957,325 +2874,12 @@ function NormalizeEmbedColor(Color: string): string {
   return /^#[0-9a-f]{6}$/iu.test(Color) ? Color : "#5865f2";
 }
 
-function RenderField(
-  GuildId: string,
-  PluginId: string,
-  Field: SettingsField & { Value: unknown },
-  DraftValues: Record<string, Record<string, unknown>>,
-  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void,
-  SetStatus: (Status: string) => void,
-  OnCreateRole: (Name: string, Color: string) => Promise<string | null>,
-  OnCreateChannel: (Name: string) => Promise<string | null>
-) {
-  const Value = DraftValues[PluginId]?.[Field.Key] ?? Field.Default;
-  const BaseClassName = "mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
+function BuildBotInitials(Name: string): string {
+  const Words = Name.trim().split(/\s+/u).filter(Boolean);
 
-  if (Field.Type === "Boolean") {
-    return (
-      <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 p-4 font-semibold text-slate-100">
-        {Field.Label}
-        <input checked={Boolean(Value)} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.checked)} type="checkbox" />
-      </label>
-    );
+  if (Words.length >= 2) {
+    return `${Words[0][0] ?? ""}${Words[1][0] ?? ""}`.toUpperCase();
   }
 
-  if (Field.Type === "Select" || Field.Type === "ChannelPicker" || Field.Type === "RolePicker") {
-    return (
-      <div className="block text-sm font-bold text-slate-200">
-        {Field.Label}
-        <CustomSelect
-          ClassName="mt-2"
-          CreateButtonLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
-          CreateColorEnabled={Field.Type !== "ChannelPicker"}
-          CreateErrorMessage={Field.Type === "ChannelPicker" ? "Channel creation failed." : "Role creation failed."}
-          CreateInputPlaceholder={Field.Type === "ChannelPicker" ? "channel-name" : "Role name"}
-          CreateLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
-          EmptyCreateError={Field.Type === "ChannelPicker" ? "Channel name is required." : "Role name is required."}
-          EmptyLabel={Field.Required ? "Select a required value" : "Select"}
-          OnChange={(NextValue) => UpdateDraftValue(PluginId, Field.Key, NextValue)}
-          OnCreate={Field.Type === "RolePicker" ? OnCreateRole : Field.Type === "ChannelPicker" ? OnCreateChannel : undefined}
-          Options={Field.Options ?? []}
-          Required={Field.Required}
-          Value={String(Value ?? "")}
-        />
-        {Field.Type === "ChannelPicker" ? <p className="mt-2 text-xs text-slate-500">Only supported writable channels can be selected.</p> : null}
-        {Field.Type === "RolePicker" ? <p className="mt-2 text-xs text-slate-500">Only selectable server roles are listed.</p> : null}
-      </div>
-    );
-  }
-
-  if (Field.Type === "List") {
-    return (
-      <ListField
-        Field={Field}
-        OnCreateChannel={OnCreateChannel}
-        OnCreateRole={OnCreateRole}
-        PluginId={PluginId}
-        UpdateDraftValue={UpdateDraftValue}
-        Value={Array.isArray(Value) ? Value : []}
-      />
-    );
-  }
-
-  if (Field.Type === "EmbedEditor") {
-    return (
-      <div>
-        <p className="mb-2 text-sm font-bold text-slate-200">{Field.Label}</p>
-        <AdvancedEmbedEditor
-          EmbedValue={ParseEditableEmbed(Value)}
-          OnChange={(NextEmbed) => UpdateDraftValue(PluginId, Field.Key, NextEmbed)}
-          PlaceholderText={Field.Description}
-        />
-      </div>
-    );
-  }
-
-  if (Field.Type === "Button") {
-    return <ActionButton Field={Field} GuildId={GuildId} PluginId={PluginId} SetStatus={SetStatus} />;
-  }
-
-  if (PluginId === "WelcomeMessage" && IsWelcomeImageField(Field.Key)) {
-    return (
-      <ImageUploadField
-        Field={Field}
-        PluginId={PluginId}
-        SetStatus={SetStatus}
-        UpdateDraftValue={UpdateDraftValue}
-        Value={String(Value ?? "")}
-      />
-    );
-  }
-
-  return (
-    <label className="block text-sm font-bold text-slate-200">
-      {Field.Label}
-      <input
-        className={BaseClassName}
-        onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Field.Type === "Number" ? Number(Event.target.value) : Event.target.value)}
-        type={Field.Type === "Number" ? "number" : "text"}
-        value={String(Value ?? "")}
-      />
-    </label>
-  );
-}
-
-function IsWelcomeImageField(Key: string): boolean {
-  return Key === "ImageBackgroundImage" || Key === "WelcomeImageBackgroundImage" || Key === "LeaveImageBackgroundImage";
-}
-
-function ImageUploadField(Properties: {
-  Field: SettingsField & { Value: unknown };
-  PluginId: string;
-  SetStatus: (Status: string) => void;
-  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
-  Value: string;
-}) {
-  const MaxImageBytes = 1_500_000;
-  const IsPreviewable = Properties.Value.startsWith("data:image/") || /^https?:\/\//iu.test(Properties.Value);
-
-  function UpdateValue(Value: string): void {
-    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, Value);
-  }
-
-  function UploadFile(FileValue: File | undefined): void {
-    if (!FileValue) {
-      return;
-    }
-
-    if (!FileValue.type.startsWith("image/")) {
-      Properties.SetStatus("Select an image file.");
-      return;
-    }
-
-    if (FileValue.size > MaxImageBytes) {
-      Properties.SetStatus("Image is too large. Maximum size is 1.5 MB.");
-      return;
-    }
-
-    const Reader = new FileReader();
-    Reader.onload = () => {
-      UpdateValue(String(Reader.result ?? ""));
-      Properties.SetStatus(`${Properties.Field.Label} uploaded in draft. Use Save to persist it.`);
-    };
-    Reader.onerror = () => Properties.SetStatus("Image upload failed.");
-    Reader.readAsDataURL(FileValue);
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
-      <p className="mt-1 text-xs text-slate-500">Paste an image URL or upload a PNG/JPG/WebP file. Uploaded images are stored with this plugin configuration.</p>
-      <input
-        className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
-        onChange={(Event) => UpdateValue(Event.target.value)}
-        placeholder="https://example.com/background.png"
-        type="text"
-        value={Properties.Value}
-      />
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500">
-          Upload image
-          <input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(Event) => UploadFile(Event.target.files?.[0])} type="file" />
-        </label>
-        <button className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800" onClick={() => UpdateValue("")} type="button">
-          Clear
-        </button>
-      </div>
-      {IsPreviewable ? <img alt="" className="mt-4 max-h-44 w-full rounded-2xl border border-slate-800 object-cover" src={Properties.Value} /> : null}
-    </div>
-  );
-}
-
-function ActionButton(Properties: {
-  Field: SettingsField & { Value: unknown };
-  GuildId: string;
-  PluginId: string;
-  SetStatus: (Status: string) => void;
-}) {
-  const [IsSending, SetIsSending] = UseState(false);
-
-  async function SendAction(): Promise<void> {
-    SetIsSending(true);
-    Properties.SetStatus(`Sending ${Properties.Field.Label}...`);
-
-    try {
-      const Response = await fetch(`/api/plugins/${Properties.GuildId}/actions`, {
-        method: "POST",
-        headers: {
-          ...BuildGuildHeaders(),
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          PluginId: Properties.PluginId,
-          ActionKey: Properties.Field.ActionKey ?? Properties.Field.Key
-        })
-      });
-
-      Properties.SetStatus(Response.ok ? `${Properties.Field.Label} queued.` : await Response.text());
-    } finally {
-      SetIsSending(false);
-    }
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
-      <p className="mt-1 text-xs text-slate-500">Runs a dashboard action without changing saved settings.</p>
-      <button
-        className="mt-4 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={IsSending}
-        onClick={() => void SendAction()}
-        type="button"
-      >
-        {IsSending ? "Sending..." : Properties.Field.ButtonLabel ?? Properties.Field.Label}
-      </button>
-    </div>
-  );
-}
-
-function ListField(Properties: {
-  Field: SettingsField & { Value: unknown };
-  OnCreateChannel: (Name: string) => Promise<string | null>;
-  OnCreateRole: (Name: string, Color: string) => Promise<string | null>;
-  PluginId: string;
-  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
-  Value: unknown[];
-}) {
-  const BaseClassName = "w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
-
-  function UpdateItem(Index: number, Value: unknown): void {
-    const NextValue = [...Properties.Value];
-    NextValue[Index] = Value;
-    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, NextValue);
-  }
-
-  function AddItem(): void {
-    const EmptyValue = Properties.Field.ItemType === "Number" ? 0 : "";
-    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, [...Properties.Value, EmptyValue]);
-  }
-
-  function RemoveItem(Index: number): void {
-    Properties.UpdateDraftValue(Properties.PluginId, Properties.Field.Key, Properties.Value.filter((_, ItemIndex) => ItemIndex !== Index));
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
-          <p className="mt-1 text-xs text-slate-500">Add one value per row.</p>
-        </div>
-        <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddItem} type="button">
-          Add
-        </button>
-      </div>
-      <div className="mt-4 grid gap-2">
-        {Properties.Value.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-3 text-sm text-slate-500">No value configured.</p> : null}
-        {Properties.Value.map((ItemValue, Index) => (
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]" key={Index}>
-            {Properties.Field.ItemType === "ChannelPicker" || Properties.Field.ItemType === "RolePicker" ? (
-              <CustomSelect
-                CreateButtonLabel={Properties.Field.ItemType === "ChannelPicker" ? "Create channel" : "Create role"}
-                CreateColorEnabled={Properties.Field.ItemType !== "ChannelPicker"}
-                CreateErrorMessage={Properties.Field.ItemType === "ChannelPicker" ? "Channel creation failed." : "Role creation failed."}
-                CreateInputPlaceholder={Properties.Field.ItemType === "ChannelPicker" ? "channel-name" : "Role name"}
-                CreateLabel={Properties.Field.ItemType === "ChannelPicker" ? "Create channel" : "Create role"}
-                EmptyCreateError={Properties.Field.ItemType === "ChannelPicker" ? "Channel name is required." : "Role name is required."}
-                EmptyLabel="Select"
-                OnChange={(Value) => UpdateItem(Index, Value)}
-                OnCreate={Properties.Field.ItemType === "RolePicker" ? Properties.OnCreateRole : Properties.Field.ItemType === "ChannelPicker" ? Properties.OnCreateChannel : undefined}
-                Options={Properties.Field.Options ?? []}
-                Value={String(ItemValue ?? "")}
-              />
-            ) : (
-              <ValidatedListInput
-                BaseClassName={BaseClassName}
-                Field={Properties.Field}
-                ItemValue={ItemValue}
-                OnChange={(Value) => UpdateItem(Index, Value)}
-              />
-            )}
-            <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveItem(Index)} type="button">
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ValidatedListInput(Properties: {
-  BaseClassName: string;
-  Field: SettingsField & { Value: unknown };
-  ItemValue: unknown;
-  OnChange: (Value: unknown) => void;
-}) {
-  const StringValue = String(Properties.ItemValue ?? "");
-  const RegexError = Properties.Field.ValidateAs === "Regex" ? GetRegexError(StringValue) : null;
-
-  return (
-    <div>
-      <input
-        className={`${Properties.BaseClassName} ${RegexError ? "border-red-500 text-red-100 focus:border-red-400" : ""}`}
-        onChange={(Event) => Properties.OnChange(Properties.Field.ItemType === "Number" ? Number(Event.target.value) : Event.target.value)}
-        type={Properties.Field.ItemType === "Number" ? "number" : "text"}
-        value={StringValue}
-      />
-      {RegexError ? <p className="mt-1 text-xs font-semibold text-red-300">{RegexError}</p> : null}
-    </div>
-  );
-}
-
-function GetRegexError(Value: string): string | null {
-  if (!Value.trim()) {
-    return null;
-  }
-
-  try {
-    new RegExp(Value, "iu");
-    return null;
-  } catch (ErrorValue) {
-    return ErrorValue instanceof Error ? ErrorValue.message : "Invalid regex";
-  }
+  return Name.slice(0, 2).toUpperCase() || "HB";
 }

@@ -4,10 +4,12 @@ import { GetSessionUser } from "@/src/Web/Auth";
 
 async function Get(Request: Request): Promise<Response> {
   const UserCount = await Prisma.dashboardUser.count();
+  const BotCount = await Prisma.discordBot.count();
   const User = await GetSessionUser(Request);
 
   return NextResponse.json({
     NeedsSetup: UserCount === 0,
+    NeedsBot: BotCount === 0 && UserCount > 0,
     Authenticated: Boolean(User),
     User: User
       ? {

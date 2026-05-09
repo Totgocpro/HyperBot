@@ -105,5 +105,5 @@ export async function ScanPluginManifests(PluginDirectory: string): Promise<Arra
     Manifests.push({ Manifest: ParsedManifest, Directory });
   }
 
-  return Manifests;
+  return Manifests.sort((First, Second) => First.Manifest.Metadata.DisplayName.localeCompare(Second.Manifest.Metadata.DisplayName));
 }

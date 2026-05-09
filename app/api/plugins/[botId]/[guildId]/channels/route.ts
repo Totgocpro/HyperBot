@@ -4,7 +4,7 @@ import { type BotChannelSummary, type DiscordGuildSummary } from "@/src/Core/Typ
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
 
 type RouteContext = {
-  params: Promise<{ guildId: string }>;
+  params: Promise<{ botId: string; guildId: string }>;
 };
 
 type DiscordChannelResponse = {
@@ -23,15 +23,15 @@ const DiscordChannelTypeNames: Record<number, string> = {
 };
 
 async function Post(Request: Request, Context: RouteContext): Promise<Response> {
-  const GuildId = (await Context.params).guildId;
+  const { botId, guildId } = await Context.params;
   const User = await ResolveDashboardUser(Request);
 
   if (User instanceof Response) {
     return User;
   }
 
-  const AccessControl = CreateAccessControl();
-  const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, BuildServerTrustedGuildSummary(GuildId));
+  const AccessControl = CreateAccessControl(botId);
+  const AccessLevel = await AccessControl.GetAccessLevel(User.DiscordId, BuildServerTrustedGuildSummary(guildId));
 
   if (!AccessLevel) {
     return new Response("Insufficient guild permissions.", { status: 403 });
@@ -44,14 +44,18 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     return new Response("Channel name is required.", { status: 400 });
   }
 
-  if (!process.env.DISCORD_TOKEN) {
-    return new Response("DISCORD_TOKEN is not configured.", { status: 500 });
+  const Bot = await Prisma.discordBot.findUnique({
+    where: { Id: botId }
+  });
+
+  if (!Bot) {
+    return new Response("Bot not found.", { status: 404 });
   }
 
-  const DiscordResponse = await fetch(`https://discord.com/api/v10/guilds/${GuildId}/channels`, {
+  const DiscordResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
     method: "POST",
     headers: {
-      Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+      Authorization: `Bot ${Bot.Token}`,
       "Content-Type": "application/json",
       "X-Audit-Log-Reason": encodeURIComponent(`Channel created from HyperBot dashboard by ${User.DiscordId}`)
     },
@@ -73,13 +77,13 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     IsWritable: true
   };
 
-  await CacheCreatedChannel(GuildId, ChannelSummary);
+  await CacheCreatedChannel(botId, guildId, ChannelSummary);
   await Prisma.auditLog.create({
     data: {
       ActorId: User.DiscordId,
       Action: "DiscordChannelCreated",
-      Target: Channel.id,
-      Metadata: { GuildId, ChannelId: Channel.id, ChannelName: Channel.name, ChannelType: ChannelSummary.Type }
+      Target: `${botId}:${Channel.id}`,
+      Metadata: { GuildId: guildId, ChannelId: Channel.id, ChannelName: Channel.name, ChannelType: ChannelSummary.Type }
     }
   });
 
@@ -95,8 +99,8 @@ function SanitizeChannelName(Value: string): string {
     .slice(0, 100);
 }
 
-async function CacheCreatedChannel(GuildId: string, Channel: BotChannelSummary): Promise<void> {
-  const CacheKey = `Bot:Guild:${GuildId}:Channels`;
+async function CacheCreatedChannel(BotId: string, GuildId: string, Channel: BotChannelSummary): Promise<void> {
+  const CacheKey = `Bot:${BotId}:Guild:${GuildId}:Channels`;
   const RawChannels = await RedisClient.get(CacheKey);
   const Channels = RawChannels ? (JSON.parse(RawChannels) as BotChannelSummary[]) : [];
   const NextChannels = [Channel, ...Channels.filter((ExistingChannel) => ExistingChannel.Id !== Channel.Id)];

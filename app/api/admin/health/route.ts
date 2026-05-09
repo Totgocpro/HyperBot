@@ -10,6 +10,9 @@ async function Get(Request: Request): Promise<Response> {
     return ResponseValue as Response;
   }
 
+  const { searchParams } = new URL(Request.url);
+  const BotId = searchParams.get("botId");
+
   const HealthReportValue: HealthReport = {
     Database: "Unhealthy",
     Redis: "Unhealthy",
@@ -26,7 +29,12 @@ async function Get(Request: Request): Promise<Response> {
   try {
     const RedisPong = await RedisClient.ping();
     HealthReportValue.Redis = RedisPong === "PONG" ? "Healthy" : "Unhealthy";
-    HealthReportValue.Bot = (await RedisClient.get("Bot:Heartbeat")) ? "Healthy" : "Unhealthy";
+    
+    if (BotId) {
+      HealthReportValue.Bot = (await RedisClient.get(`Bot:${BotId}:Heartbeat`)) ? "Healthy" : "Unhealthy";
+    } else {
+      HealthReportValue.Bot = "Healthy"; // General health if no specific bot requested
+    }
   } catch {
     HealthReportValue.Redis = "Unhealthy";
   }

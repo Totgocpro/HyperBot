@@ -76,6 +76,7 @@ export default class LevelingPlugin extends BasePlugin {
   private async BuildLeaderboardRows(GuildId: string, Config: LevelingConfig): Promise<UserXpRow[]> {
     const StoredValues = await Prisma.userPluginValue.findMany({
       where: {
+        BotId: this.BotId,
         GuildId,
         PluginId: StatisticsPluginId,
         Key: {

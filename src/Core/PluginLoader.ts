@@ -16,20 +16,22 @@ export class PluginLoader {
   private readonly Prisma: PrismaClient;
   private readonly RedisClient: Redis;
   private readonly DiscordClient: Client;
+  private readonly BotId: string;
   private readonly Plugins = new Map<string, LoadedPlugin>();
 
-  public constructor(PluginDirectory: string, Prisma: PrismaClient, RedisClient: Redis, DiscordClient: Client) {
+  public constructor(PluginDirectory: string, Prisma: PrismaClient, RedisClient: Redis, DiscordClient: Client, BotId: string) {
     this.PluginDirectory = PluginDirectory;
     this.Prisma = Prisma;
     this.RedisClient = RedisClient;
     this.DiscordClient = DiscordClient;
+    this.BotId = BotId;
   }
 
   public async EnableAll(): Promise<void> {
     const ManifestEntries = await ScanPluginManifests(this.PluginDirectory);
 
     for (const ManifestEntry of ManifestEntries) {
-      if (ManifestEntry.Manifest.Scope !== PluginScope.Global && await IsPluginDisabled(this.Prisma, ManifestEntry.Manifest.Metadata.Id)) {
+      if (ManifestEntry.Manifest.Scope !== PluginScope.Global && await IsPluginDisabled(this.Prisma, this.BotId, ManifestEntry.Manifest.Metadata.Id)) {
         continue;
       }
 
@@ -65,6 +67,7 @@ export class PluginLoader {
       depth: 3
     });
 
+    Watcher.on("swan", (ChangedPath) => this.ReloadFromChangedPath(ChangedPath));
     Watcher.on("add", (ChangedPath) => this.ReloadFromChangedPath(ChangedPath));
     Watcher.on("change", (ChangedPath) => this.ReloadFromChangedPath(ChangedPath));
     Watcher.on("unlink", (ChangedPath) => this.ReloadFromChangedPath(ChangedPath));
@@ -139,14 +142,22 @@ export class PluginLoader {
     }
   }
 
-  public async DispatchDashboardAction(PluginId: string, GuildId: string, ActionKey: string, ActorId: string, Payload?: unknown): Promise<void> {
+  public async DispatchDashboardAction(PluginId: string, GuildId: string, ActionKey: string, ActorId: string, Payload?: unknown): Promise<boolean> {
     const LoadedPluginValue = this.Plugins.get(PluginId);
 
     if (!LoadedPluginValue) {
-      return;
+      console.warn("Dashboard plugin action ignored because the plugin is not loaded.", {
+        BotId: this.BotId,
+        GuildId,
+        PluginId,
+        ActionKey,
+        ActorId
+      });
+      return false;
     }
 
     await LoadedPluginValue.Instance.OnDashboardAction(GuildId, ActionKey, ActorId, Payload);
+    return true;
   }
 
   public async DispatchInteraction(InteractionValue: Interaction): Promise<void> {
@@ -189,7 +200,7 @@ export class PluginLoader {
   }
 
   private async GetAliasDefinitions(): Promise<CommandAliasDefinition[]> {
-    const Storage = new PluginStorage(this.Prisma, this.RedisClient, "CommandAliases");
+    const Storage = new PluginStorage(this.Prisma, this.RedisClient, this.BotId, "CommandAliases");
     const Aliases = await Storage.GetGlobalConfig<unknown>("Global", "Aliases");
 
     if (!Array.isArray(Aliases)) {
@@ -239,8 +250,9 @@ export class PluginLoader {
     }
 
     const Instance = new PluginClass({
+      BotId: this.BotId,
       Manifest: ManifestEntry.Manifest,
-      Storage: new PluginStorage(this.Prisma, this.RedisClient, PluginId),
+      Storage: new PluginStorage(this.Prisma, this.RedisClient, this.BotId, PluginId),
       Logger: new PluginLogger(ManifestEntry.Manifest.Metadata.DisplayName),
       DiscordClient: this.DiscordClient
     });
@@ -279,7 +291,7 @@ export class PluginLoader {
       return;
     }
 
-    if (await IsPluginDisabled(this.Prisma, ManifestEntry.Manifest.Metadata.Id)) {
+    if (await IsPluginDisabled(this.Prisma, this.BotId, ManifestEntry.Manifest.Metadata.Id)) {
       await this.DisableLoadedPlugin(ManifestEntry.Manifest.Metadata.Id);
       return;
     }
