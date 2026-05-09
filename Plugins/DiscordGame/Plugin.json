@@ -77,6 +77,18 @@
           "Required": true
         }
       ]
+    },
+    {
+      "Name": "askyes",
+      "Description": "Ask a yes/no question and get a random image answer.",
+      "Options": [
+        {
+          "Name": "question",
+          "Description": "Question to answer.",
+          "Type": "String",
+          "Required": true
+        }
+      ]
     }
   ],
   "WebInterface": [
@@ -399,6 +411,55 @@
       "Label": "Perfect compatibility color",
       "Default": "#f43f5e",
       "Section": "Love design"
+    },
+    {
+      "Key": "AskYesTitle",
+      "Type": "String",
+      "Label": "AskYes embed title",
+      "Default": "Ask Yes",
+      "Section": "AskYes"
+    },
+    {
+      "Key": "AskYesDescription",
+      "Type": "String",
+      "Label": "AskYes embed description",
+      "Default": "**Question:** %question%\n**Answer:** %answer%",
+      "Section": "AskYes"
+    },
+    {
+      "Key": "AskYesImageTitle",
+      "Type": "String",
+      "Label": "AskYes image title",
+      "Default": "The answer is...",
+      "Section": "AskYes image"
+    },
+    {
+      "Key": "AskYesYesLabel",
+      "Type": "String",
+      "Label": "Yes answer label",
+      "Default": "YES",
+      "Section": "AskYes image"
+    },
+    {
+      "Key": "AskYesNoLabel",
+      "Type": "String",
+      "Label": "No answer label",
+      "Default": "NO",
+      "Section": "AskYes image"
+    },
+    {
+      "Key": "AskYesYesColor",
+      "Type": "String",
+      "Label": "Yes color",
+      "Default": "#22c55e",
+      "Section": "AskYes design"
+    },
+    {
+      "Key": "AskYesNoColor",
+      "Type": "String",
+      "Label": "No color",
+      "Default": "#ef4444",
+      "Section": "AskYes design"
     }
   ],
   "EntryPoint": "./DiscordGamePlugin.ts",

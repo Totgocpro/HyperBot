@@ -10,6 +10,7 @@ import {
   type MessageEditOptions
 } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
+import { DiscordAskYesFeature } from "./DiscordAskYesFeature.js";
 import { DiscordLoveFeature } from "./DiscordLoveFeature.js";
 
 type MinesweeperDifficulty = "Easy" | "Medium" | "Hard";
@@ -132,6 +133,7 @@ const DefaultTicTacToeConfig: TicTacToeConfig = {
 };
 
 export default class DiscordGamePlugin extends BasePlugin {
+  private readonly AskYesFeature = new DiscordAskYesFeature(this.Storage);
   private readonly LoveFeature = new DiscordLoveFeature(this.Storage, this.Logger);
 
   public async OnEnable(): Promise<void> {
@@ -143,6 +145,11 @@ export default class DiscordGamePlugin extends BasePlugin {
   }
 
   public async OnSlashCommand(CommandName: string, InteractionValue: ChatInputCommandInteraction): Promise<void> {
+    if (CommandName === "askyes") {
+      await this.AskYesFeature.HandleAskYesCommand(InteractionValue);
+      return;
+    }
+
     if (CommandName === "love") {
       await this.LoveFeature.HandleLoveCommand(InteractionValue);
       return;
