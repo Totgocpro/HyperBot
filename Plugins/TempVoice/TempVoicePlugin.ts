@@ -33,6 +33,20 @@ type TempVoiceConfig = {
   ControlPanelTitle: string;
   ControlPanelDescription: string;
   ControlPanelColor: string;
+  MusicButtonPlayLabel: string;
+  MusicButtonPauseLabel: string;
+  MusicButtonResumeLabel: string;
+  MusicButtonSkipLabel: string;
+  MusicButtonStopLabel: string;
+  MusicModalTitle: string;
+  MusicModalUrlLabel: string;
+  MusicStartedMessage: string;
+  MusicBusyMessage: string;
+  MusicControlAppliedMessage: string;
+  MusicPlaybackFailedMessage: string;
+  MusicIdleStatus: string;
+  MusicPlayingStatus: string;
+  MusicPausedStatus: string;
 };
 
 type TempVoiceSession = {
@@ -59,7 +73,21 @@ const DefaultConfig: TempVoiceConfig = {
   ProtectedRoleIds: [],
   ControlPanelTitle: "Temporary voice control panel",
   ControlPanelDescription: "Only the current room owner can use these controls.",
-  ControlPanelColor: "#38bdf8"
+  ControlPanelColor: "#38bdf8",
+  MusicButtonPlayLabel: "Play music",
+  MusicButtonPauseLabel: "Pause",
+  MusicButtonResumeLabel: "Resume",
+  MusicButtonSkipLabel: "Skip",
+  MusicButtonStopLabel: "Stop",
+  MusicModalTitle: "Play YouTube music",
+  MusicModalUrlLabel: "YouTube video or playlist URL",
+  MusicStartedMessage: "Music started: %title%%queued_suffix%.",
+  MusicBusyMessage: "Music is already playing in %channel%.",
+  MusicControlAppliedMessage: "Music control applied.",
+  MusicPlaybackFailedMessage: "Music playback failed: %error%",
+  MusicIdleStatus: "Idle",
+  MusicPlayingStatus: "Playing: %title%",
+  MusicPausedStatus: "Paused: %title%"
 };
 
 const SessionsStorageKey = "TempVoiceSessions";
@@ -479,14 +507,15 @@ export default class TempVoicePlugin extends BasePlugin {
   }
 
   private async ShowMusicModal(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Config = await this.GetConfig(InteractionValue.guildId);
     const Modal = new ModalBuilder()
       .setCustomId(`TempVoiceModal:MusicPlay:${Session.ChannelId}`)
-      .setTitle("Play YouTube music")
+      .setTitle(Config.MusicModalTitle.slice(0, 45))
       .addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
             .setCustomId("Url")
-            .setLabel("YouTube video or playlist URL")
+            .setLabel(Config.MusicModalUrlLabel.slice(0, 45))
             .setMaxLength(500)
             .setRequired(true)
             .setStyle(TextInputStyle.Short)
@@ -499,6 +528,7 @@ export default class TempVoicePlugin extends BasePlugin {
   private async HandleMusicModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
     const Url = InteractionValue.fields.getTextInputValue("Url").trim();
+    const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
       await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
@@ -509,11 +539,21 @@ export default class TempVoicePlugin extends BasePlugin {
 
     try {
       const Result = await this.MusicPlayer.Play(Channel, Url);
-      await InteractionValue.editReply(`Music started: ${Result.FirstTitle}${Result.Count > 1 ? ` (+${Result.Count - 1} queued)` : ""}.`);
-      await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+      await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicStartedMessage, {
+        ChannelId: Session.ChannelId,
+        Count: Result.Count,
+        Error: "",
+        Title: Result.FirstTitle
+      }));
+      await this.SendControlPanel(Channel, Session, Config);
     } catch (ErrorValue) {
       if (ErrorValue instanceof TempVoiceMusicBusyError) {
-        await InteractionValue.editReply(ErrorValue.message);
+        await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicBusyMessage, {
+          ChannelId: ErrorValue.ChannelId,
+          Count: 0,
+          Error: ErrorValue.message,
+          Title: ""
+        }));
         return;
       }
 
@@ -522,12 +562,19 @@ export default class TempVoicePlugin extends BasePlugin {
         return;
       }
 
-      await InteractionValue.editReply(ErrorValue instanceof Error ? `Music playback failed: ${ErrorValue.message}` : "Music playback failed.");
+      const ErrorMessage = ErrorValue instanceof Error ? ErrorValue.message : "Unknown error";
+      await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicPlaybackFailedMessage, {
+        ChannelId: Session.ChannelId,
+        Count: 0,
+        Error: ErrorMessage,
+        Title: ""
+      }));
     }
   }
 
   private async HandleMusicButton(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Action: string): Promise<void> {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+    const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
       await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
@@ -540,12 +587,13 @@ export default class TempVoicePlugin extends BasePlugin {
     if (Action === "MusicToggle") this.MusicPlayer.TogglePause(Session.ChannelId);
     if (Action === "MusicSkip") await this.MusicPlayer.Skip(Session.ChannelId);
 
-    await InteractionValue.reply({ content: "Music control applied.", ephemeral: true });
-    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+    await InteractionValue.reply({ content: Config.MusicControlAppliedMessage, ephemeral: true });
+    await this.SendControlPanel(Channel, Session, Config);
   }
 
   private async SendControlPanel(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig): Promise<void> {
     const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
+    const MusicStatus = this.GetMusicStatus(MusicState, Config, Session.ChannelId);
     const Embed = new EmbedBuilder()
       .setTitle(Config.ControlPanelTitle)
       .setDescription(this.ApplyControlTemplate(Config.ControlPanelDescription, Channel, Session))
@@ -556,7 +604,7 @@ export default class TempVoicePlugin extends BasePlugin {
         { name: "Soundboard", value: Session.SoundboardDisabled ? "Disabled" : "Enabled", inline: true },
         { name: "User limit", value: String(Session.UserLimit || "Unlimited"), inline: true },
         { name: "Bans", value: String(Session.BannedUserIds.length), inline: true },
-        { name: "Music", value: MusicState.Status.slice(0, 1024), inline: false }
+        { name: "Music", value: MusicStatus.slice(0, 1024), inline: false }
       )
       .setFooter({ text: "Use the buttons below to manage this temporary room." })
       .setTimestamp(new Date());
@@ -586,22 +634,22 @@ export default class TempVoicePlugin extends BasePlugin {
       new ButtonBuilder().setCustomId(`TempVoice:LimitUp:${Session.ChannelId}`).setLabel("+ limit").setStyle(ButtonStyle.Secondary)
     );
     const MusicButtons = [
-      new ButtonBuilder().setCustomId(`TempVoice:MusicPlay:${Session.ChannelId}`).setLabel("Play music").setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId(`TempVoice:MusicPlay:${Session.ChannelId}`).setLabel(Config.MusicButtonPlayLabel.slice(0, 80)).setStyle(ButtonStyle.Success)
     ];
 
     if (MusicState.Active) {
       MusicButtons.push(
         new ButtonBuilder()
           .setCustomId(`TempVoice:MusicToggle:${Session.ChannelId}`)
-          .setLabel(MusicState.Paused ? "Resume" : "Pause")
+          .setLabel((MusicState.Paused ? Config.MusicButtonResumeLabel : Config.MusicButtonPauseLabel).slice(0, 80))
           .setStyle(ButtonStyle.Secondary)
       );
 
       if (MusicState.CanSkip) {
-        MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicSkip:${Session.ChannelId}`).setLabel("Skip").setStyle(ButtonStyle.Secondary));
+        MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicSkip:${Session.ChannelId}`).setLabel(Config.MusicButtonSkipLabel.slice(0, 80)).setStyle(ButtonStyle.Secondary));
       }
 
-      MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicStop:${Session.ChannelId}`).setLabel("Stop").setStyle(ButtonStyle.Danger));
+      MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicStop:${Session.ChannelId}`).setLabel(Config.MusicButtonStopLabel.slice(0, 80)).setStyle(ButtonStyle.Danger));
     }
 
     const ThirdRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...MusicButtons);
@@ -680,7 +728,21 @@ export default class TempVoicePlugin extends BasePlugin {
       ProtectedRoleIds: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "ProtectedRoleIds")) ?? DefaultConfig.ProtectedRoleIds,
       ControlPanelTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "ControlPanelTitle")) ?? DefaultConfig.ControlPanelTitle,
       ControlPanelDescription: (await this.Storage.GetGlobalConfig<string>(GuildId, "ControlPanelDescription")) ?? DefaultConfig.ControlPanelDescription,
-      ControlPanelColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "ControlPanelColor")) ?? DefaultConfig.ControlPanelColor
+      ControlPanelColor: (await this.Storage.GetGlobalConfig<string>(GuildId, "ControlPanelColor")) ?? DefaultConfig.ControlPanelColor,
+      MusicButtonPlayLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonPlayLabel")) ?? DefaultConfig.MusicButtonPlayLabel,
+      MusicButtonPauseLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonPauseLabel")) ?? DefaultConfig.MusicButtonPauseLabel,
+      MusicButtonResumeLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonResumeLabel")) ?? DefaultConfig.MusicButtonResumeLabel,
+      MusicButtonSkipLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonSkipLabel")) ?? DefaultConfig.MusicButtonSkipLabel,
+      MusicButtonStopLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonStopLabel")) ?? DefaultConfig.MusicButtonStopLabel,
+      MusicModalTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicModalTitle")) ?? DefaultConfig.MusicModalTitle,
+      MusicModalUrlLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicModalUrlLabel")) ?? DefaultConfig.MusicModalUrlLabel,
+      MusicStartedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicStartedMessage")) ?? DefaultConfig.MusicStartedMessage,
+      MusicBusyMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicBusyMessage")) ?? DefaultConfig.MusicBusyMessage,
+      MusicControlAppliedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicControlAppliedMessage")) ?? DefaultConfig.MusicControlAppliedMessage,
+      MusicPlaybackFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPlaybackFailedMessage")) ?? DefaultConfig.MusicPlaybackFailedMessage,
+      MusicIdleStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicIdleStatus")) ?? DefaultConfig.MusicIdleStatus,
+      MusicPlayingStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPlayingStatus")) ?? DefaultConfig.MusicPlayingStatus,
+      MusicPausedStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPausedStatus")) ?? DefaultConfig.MusicPausedStatus
     };
   }
 
@@ -745,6 +807,35 @@ export default class TempVoicePlugin extends BasePlugin {
       .replaceAll("%locked%", Session.Locked ? "locked" : "open")
       .replaceAll("%soundboard%", Session.SoundboardDisabled ? "disabled" : "enabled")
       .replaceAll("%limit%", String(Session.UserLimit || "unlimited"));
+  }
+
+  private GetMusicStatus(MusicState: ReturnType<TempVoiceMusicPlayer["GetState"]>, Config: TempVoiceConfig, ChannelId: string): string {
+    if (!MusicState.Active) {
+      return this.ApplyMusicTemplate(Config.MusicIdleStatus, {
+        ChannelId,
+        Count: 0,
+        Error: "",
+        Title: ""
+      });
+    }
+
+    return this.ApplyMusicTemplate(MusicState.Paused ? Config.MusicPausedStatus : Config.MusicPlayingStatus, {
+      ChannelId,
+      Count: 0,
+      Error: "",
+      Title: MusicState.TrackTitle
+    });
+  }
+
+  private ApplyMusicTemplate(Template: string, Values: { ChannelId: string; Count: number; Error: string; Title: string }): string {
+    const QueuedCount = Math.max(Values.Count - 1, 0);
+    return Template
+      .replaceAll("%title%", Values.Title)
+      .replaceAll("%count%", String(Values.Count))
+      .replaceAll("%queued%", String(QueuedCount))
+      .replaceAll("%queued_suffix%", QueuedCount > 0 ? ` (+${QueuedCount} queued)` : "")
+      .replaceAll("%channel%", `<#${Values.ChannelId}>`)
+      .replaceAll("%error%", Values.Error);
   }
 
   private ParseColor(ColorValue: string): number {

@@ -203,12 +203,12 @@ async function HydrateSettingsField(BotId: string, GuildId: string, Field: Setti
   const Channels = RawChannels ? (JSON.parse(RawChannels) as BotChannelSummary[]) : [];
   const SupportedChannelTypes = new Set(Field.SupportedChannelTypes ?? []);
   const Options = Channels.map((Channel) => {
-    const TypeAllowed = SupportedChannelTypes.size === 0 || SupportedChannelTypes.has(Channel.Type);
+    const TypeAllowed = IsChannelTypeAllowed(SupportedChannelTypes, Channel);
     const WritableAllowed = !Field.RequireWritable || Channel.IsWritable;
     const Disabled = !TypeAllowed || !WritableAllowed;
     const Description = Disabled
       ? !TypeAllowed
-        ? `Unsupported channel type: ${Channel.Type}`
+        ? GetUnsupportedChannelDescription(SupportedChannelTypes, Channel)
         : "The bot cannot write in this channel."
       : Channel.Type;
 
@@ -224,6 +224,30 @@ async function HydrateSettingsField(BotId: string, GuildId: string, Field: Setti
     ...Field,
     Options
   };
+}
+
+function IsChannelTypeAllowed(SupportedChannelTypes: Set<string>, Channel: BotChannelSummary): boolean {
+  if (SupportedChannelTypes.size === 0 || SupportedChannelTypes.has(Channel.Type)) {
+    return true;
+  }
+
+  if (SupportedChannelTypes.has("GuildText") && IsAnnouncementChannelType(Channel.Type)) {
+    return Channel.IsWritable;
+  }
+
+  return false;
+}
+
+function GetUnsupportedChannelDescription(SupportedChannelTypes: Set<string>, Channel: BotChannelSummary): string {
+  if (SupportedChannelTypes.has("GuildText") && IsAnnouncementChannelType(Channel.Type) && !Channel.IsWritable) {
+    return "The bot cannot write in this announcement channel.";
+  }
+
+  return `Unsupported channel type: ${Channel.Type}`;
+}
+
+function IsAnnouncementChannelType(ChannelType: string): boolean {
+  return ChannelType === "GuildAnnouncement" || ChannelType === "GuildNews";
 }
 
 function BuildServerTrustedGuildSummary(GuildId: string): DiscordGuildSummary {

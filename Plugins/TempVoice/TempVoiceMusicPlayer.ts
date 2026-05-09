@@ -52,6 +52,7 @@ export type TempVoiceMusicState = {
   Active: boolean;
   CanSkip: boolean;
   Paused: boolean;
+  TrackTitle: string;
   Status: string;
 };
 
@@ -73,6 +74,7 @@ export class TempVoiceMusicPlayer {
         Active: false,
         CanSkip: false,
         Paused: false,
+        TrackTitle: "",
         Status: "Idle"
       };
     }
@@ -82,6 +84,7 @@ export class TempVoiceMusicPlayer {
       Active: true,
       CanSkip: Session.Queue.length > 0,
       Paused,
+      TrackTitle: Session.CurrentTrack.Title,
       Status: `${Paused ? "Paused" : "Playing"}: ${Session.CurrentTrack.Title}`
     };
   }

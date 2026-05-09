@@ -69,6 +69,104 @@
       "Label": "Control panel color",
       "Default": "#38bdf8",
       "Section": "Control panel"
+    },
+    {
+      "Key": "MusicButtonPlayLabel",
+      "Type": "String",
+      "Label": "Play button label",
+      "Default": "Play music",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicButtonPauseLabel",
+      "Type": "String",
+      "Label": "Pause button label",
+      "Default": "Pause",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicButtonResumeLabel",
+      "Type": "String",
+      "Label": "Resume button label",
+      "Default": "Resume",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicButtonSkipLabel",
+      "Type": "String",
+      "Label": "Skip button label",
+      "Default": "Skip",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicButtonStopLabel",
+      "Type": "String",
+      "Label": "Stop button label",
+      "Default": "Stop",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicModalTitle",
+      "Type": "String",
+      "Label": "Music modal title",
+      "Default": "Play YouTube music",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicModalUrlLabel",
+      "Type": "String",
+      "Label": "Music URL input label",
+      "Default": "YouTube video or playlist URL",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicStartedMessage",
+      "Type": "String",
+      "Label": "Music started message",
+      "Default": "Music started: %title%%queued_suffix%.",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicBusyMessage",
+      "Type": "String",
+      "Label": "Music already playing message",
+      "Default": "Music is already playing in %channel%.",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicControlAppliedMessage",
+      "Type": "String",
+      "Label": "Music control applied message",
+      "Default": "Music control applied.",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicPlaybackFailedMessage",
+      "Type": "String",
+      "Label": "Music playback failed message",
+      "Default": "Music playback failed: %error%",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicIdleStatus",
+      "Type": "String",
+      "Label": "Music idle status",
+      "Default": "Idle",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicPlayingStatus",
+      "Type": "String",
+      "Label": "Music playing status",
+      "Default": "Playing: %title%",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicPausedStatus",
+      "Type": "String",
+      "Label": "Music paused status",
+      "Default": "Paused: %title%",
+      "Section": "Music messages"
     }
   ],
   "EntryPoint": "./TempVoicePlugin.ts",
