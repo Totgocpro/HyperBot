@@ -17,6 +17,7 @@ import {
   type MessageCreateOptions,
   type MessageEditOptions,
   type ModalSubmitInteraction,
+  type NonThreadGuildBasedChannel,
   type StringSelectMenuInteraction,
   type VoiceChannel,
   type VoiceState
@@ -154,7 +155,6 @@ export default class TempVoicePlugin extends BasePlugin {
       name: ChannelName.slice(0, 100),
       type: ChannelType.GuildVoice,
       parent: CreatorChannel.parentId,
-      position: CreatorChannel.position + 1,
       bitrate: this.Clamp(Config.DefaultBitrateKbps, 8, 384) * 1000,
       userLimit: this.Clamp(Config.DefaultUserLimit, 0, 99),
       permissionOverwrites: [
@@ -171,6 +171,8 @@ export default class TempVoicePlugin extends BasePlugin {
     });
 
     const VoiceChannelValue = Channel as VoiceChannel;
+    await this.MoveTemporaryChannelToCategoryBottom(VoiceChannelValue);
+
     const Session: TempVoiceSession = {
       GuildId: Guild.id,
       ChannelId: VoiceChannelValue.id,
@@ -189,6 +191,33 @@ export default class TempVoicePlugin extends BasePlugin {
     await this.SaveSession(Session);
     await Member.voice.setChannel(VoiceChannelValue, "Temporary voice channel created.");
     await this.SendControlPanel(VoiceChannelValue, Session, Config);
+  }
+
+  private async MoveTemporaryChannelToCategoryBottom(Channel: VoiceChannel): Promise<void> {
+    if (!Channel.parentId) {
+      return;
+    }
+
+    const Channels = await Channel.guild.channels.fetch(undefined, { force: true }).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Could not refresh guild channels before moving temporary voice channel.", ErrorValue);
+      return null;
+    });
+
+    const CategoryChannels = Array.from((Channels ?? Channel.guild.channels.cache).values())
+      .filter((Candidate): Candidate is NonThreadGuildBasedChannel => {
+        return Candidate !== null && "parentId" in Candidate && "rawPosition" in Candidate && Candidate.parentId === Channel.parentId;
+      })
+      .sort((Left, Right) => Left.rawPosition - Right.rawPosition);
+
+    const BottomChannel = CategoryChannels.at(-1);
+
+    if (!BottomChannel || BottomChannel.id === Channel.id) {
+      return;
+    }
+
+    await Channel.guild.channels.setPositions([{ channel: Channel, position: BottomChannel.rawPosition + 1 }]).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Could not move temporary voice channel to category bottom.", ErrorValue);
+    });
   }
 
   private async TrackMemberJoin(State: VoiceState): Promise<void> {
