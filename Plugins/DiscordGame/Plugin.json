@@ -59,6 +59,24 @@
           ]
         }
       ]
+    },
+    {
+      "Name": "love",
+      "Description": "Generate a love compatibility image for two server members.",
+      "Options": [
+        {
+          "Name": "first_member",
+          "Description": "First member.",
+          "Type": "User",
+          "Required": true
+        },
+        {
+          "Name": "second_member",
+          "Description": "Second member.",
+          "Type": "User",
+          "Required": true
+        }
+      ]
     }
   ],
   "WebInterface": [
@@ -281,6 +299,106 @@
       "Label": "Empty tile label",
       "Default": "​",
       "Section": "Tic-Tac-Toe emojis"
+    },
+    {
+      "Key": "LoveTitle",
+      "Type": "String",
+      "Label": "Love embed title",
+      "Default": "%name1% + %name2%",
+      "Section": "Love"
+    },
+    {
+      "Key": "LoveDescription",
+      "Type": "String",
+      "Label": "Love embed description",
+      "Default": "Love compatibility result: **%percent%**.",
+      "Section": "Love"
+    },
+    {
+      "Key": "LoveImageTitle",
+      "Type": "String",
+      "Label": "Love image title",
+      "Default": "Love meter",
+      "Section": "Love image"
+    },
+    {
+      "Key": "LoveProgressLabel",
+      "Type": "String",
+      "Label": "Love progress label",
+      "Default": "Compatibility",
+      "Section": "Love image"
+    },
+    {
+      "Key": "LoveLowMessages",
+      "Type": "List",
+      "Label": "Low compatibility messages",
+      "Default": [
+        "%user1% and %user2% are better as chaotic friends.",
+        "%user1% and %user2% need a little more magic."
+      ],
+      "Section": "Love messages",
+      "ItemType": "String"
+    },
+    {
+      "Key": "LoveMediumMessages",
+      "Type": "List",
+      "Label": "Medium compatibility messages",
+      "Default": [
+        "%user1% and %user2% have a real spark.",
+        "%user1% and %user2% could become something interesting."
+      ],
+      "Section": "Love messages",
+      "ItemType": "String"
+    },
+    {
+      "Key": "LoveHighMessages",
+      "Type": "List",
+      "Label": "High compatibility messages",
+      "Default": [
+        "%user1% and %user2% are dangerously compatible.",
+        "%user1% and %user2% have serious main-character energy."
+      ],
+      "Section": "Love messages",
+      "ItemType": "String"
+    },
+    {
+      "Key": "LovePerfectMessages",
+      "Type": "List",
+      "Label": "Perfect compatibility messages",
+      "Default": [
+        "%user1% and %user2% are a legendary match.",
+        "%user1% and %user2% just broke the love meter."
+      ],
+      "Section": "Love messages",
+      "ItemType": "String"
+    },
+    {
+      "Key": "LoveLowColor",
+      "Type": "String",
+      "Label": "Low compatibility color",
+      "Default": "#64748b",
+      "Section": "Love design"
+    },
+    {
+      "Key": "LoveMediumColor",
+      "Type": "String",
+      "Label": "Medium compatibility color",
+      "Default": "#f59e0b",
+      "Section": "Love design"
+    },
+    {
+      "Key": "LoveHighColor",
+      "Type": "String",
+      "Label": "High compatibility color",
+      "Default": "#ec4899",
+      "Section": "Love design"
+    },
+    {
+      "Key": "LovePerfectColor",
+      "Type": "String",
+      "Label": "Perfect compatibility color",
+      "Default": "#f43f5e",
+      "Section": "Love design"
     }
   ],
   "EntryPoint": "./DiscordGamePlugin.ts",

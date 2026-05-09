@@ -10,6 +10,7 @@ import {
   type MessageEditOptions
 } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
+import { DiscordLoveFeature } from "./DiscordLoveFeature.js";
 
 type MinesweeperDifficulty = "Easy" | "Medium" | "Hard";
 type MinesweeperStatus = "Playing" | "Won" | "Lost" | "TimedOut";
@@ -131,6 +132,8 @@ const DefaultTicTacToeConfig: TicTacToeConfig = {
 };
 
 export default class DiscordGamePlugin extends BasePlugin {
+  private readonly LoveFeature = new DiscordLoveFeature(this.Storage, this.Logger);
+
   public async OnEnable(): Promise<void> {
     this.Logger.Info("Discord Game plugin enabled.");
   }
@@ -140,6 +143,11 @@ export default class DiscordGamePlugin extends BasePlugin {
   }
 
   public async OnSlashCommand(CommandName: string, InteractionValue: ChatInputCommandInteraction): Promise<void> {
+    if (CommandName === "love") {
+      await this.LoveFeature.HandleLoveCommand(InteractionValue);
+      return;
+    }
+
     if (CommandName === "tictactoe") {
       await this.HandleTicTacToeCommand(InteractionValue);
       return;
