@@ -22,6 +22,7 @@ import {
   type VoiceState
 } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
+import { TempVoiceMusicBusyError, TempVoiceMusicError, TempVoiceMusicPlayer } from "./TempVoiceMusicPlayer.js";
 
 type TempVoiceConfig = {
   CreatorChannelId: string;
@@ -64,6 +65,10 @@ const DefaultConfig: TempVoiceConfig = {
 const SessionsStorageKey = "TempVoiceSessions";
 
 export default class TempVoicePlugin extends BasePlugin {
+  private readonly MusicPlayer = new TempVoiceMusicPlayer(this.Logger, async (ChannelId) => {
+    await this.RefreshControlPanel(ChannelId);
+  });
+
   public async OnEnable(): Promise<void> {
     this.Logger.Info("Temp Voice plugin enabled.");
   }
@@ -76,9 +81,8 @@ export default class TempVoicePlugin extends BasePlugin {
     const GuildId = NewState.guild.id;
     const Config = await this.GetConfig(GuildId);
 
-    if (NewState.channelId === Config.CreatorChannelId && OldState.channelId !== Config.CreatorChannelId && NewState.member) {
+    if (NewState.channelId === Config.CreatorChannelId && OldState.channelId !== Config.CreatorChannelId && NewState.member && !NewState.member.user.bot) {
       await this.CreateTemporaryChannel(NewState.guild, NewState.member, Config);
-      return;
     }
 
     if (NewState.channelId) {
@@ -162,7 +166,7 @@ export default class TempVoicePlugin extends BasePlugin {
   private async TrackMemberJoin(State: VoiceState): Promise<void> {
     const Session = await this.GetSession(State.channelId);
 
-    if (!Session || !State.member) {
+    if (!Session || !State.member || State.member.user.bot) {
       return;
     }
 
@@ -250,6 +254,16 @@ export default class TempVoicePlugin extends BasePlugin {
       return;
     }
 
+    if (Action === "MusicPlay") {
+      await this.ShowMusicModal(InteractionValue, Session);
+      return;
+    }
+
+    if (["MusicStop", "MusicPause", "MusicResume", "MusicSkip", "MusicToggle"].includes(Action)) {
+      await this.HandleMusicButton(InteractionValue, Session, Action);
+      return;
+    }
+
     if (Action === "LimitUp" || Action === "LimitDown") {
       await this.ChangeUserLimit(InteractionValue, Session, Action === "LimitUp" ? 1 : -1);
     }
@@ -307,7 +321,7 @@ export default class TempVoicePlugin extends BasePlugin {
   private async HandleModal(InteractionValue: ModalSubmitInteraction<"cached">): Promise<void> {
     const [Prefix, Action, ChannelId] = InteractionValue.customId.split(":");
 
-    if (Prefix !== "TempVoiceModal" || Action !== "Rename" || !ChannelId) {
+    if (Prefix !== "TempVoiceModal" || !Action || !ChannelId) {
       return;
     }
 
@@ -317,9 +331,17 @@ export default class TempVoicePlugin extends BasePlugin {
       return;
     }
 
+    if (Action === "MusicPlay") {
+      await this.HandleMusicModal(InteractionValue, Session);
+      return;
+    }
+
+    if (Action !== "Rename") {
+      return;
+    }
+
     const Channel = await InteractionValue.guild.channels.fetch(ChannelId).catch(() => null);
     const Name = InteractionValue.fields.getTextInputValue("Name").trim();
-
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Name) {
       await InteractionValue.reply({ content: "Invalid channel name.", ephemeral: true });
       return;
@@ -456,7 +478,74 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.showModal(Modal);
   }
 
+  private async ShowMusicModal(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Modal = new ModalBuilder()
+      .setCustomId(`TempVoiceModal:MusicPlay:${Session.ChannelId}`)
+      .setTitle("Play YouTube music")
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId("Url")
+            .setLabel("YouTube video or playlist URL")
+            .setMaxLength(500)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short)
+        )
+      );
+
+    await InteractionValue.showModal(Modal);
+  }
+
+  private async HandleMusicModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+    const Url = InteractionValue.fields.getTextInputValue("Url").trim();
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      return;
+    }
+
+    await InteractionValue.deferReply({ ephemeral: true });
+
+    try {
+      const Result = await this.MusicPlayer.Play(Channel, Url);
+      await InteractionValue.editReply(`Music started: ${Result.FirstTitle}${Result.Count > 1 ? ` (+${Result.Count - 1} queued)` : ""}.`);
+      await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+    } catch (ErrorValue) {
+      if (ErrorValue instanceof TempVoiceMusicBusyError) {
+        await InteractionValue.editReply(ErrorValue.message);
+        return;
+      }
+
+      if (ErrorValue instanceof TempVoiceMusicError) {
+        await InteractionValue.editReply(ErrorValue.message);
+        return;
+      }
+
+      await InteractionValue.editReply(ErrorValue instanceof Error ? `Music playback failed: ${ErrorValue.message}` : "Music playback failed.");
+    }
+  }
+
+  private async HandleMusicButton(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Action: string): Promise<void> {
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      return;
+    }
+
+    if (Action === "MusicStop") this.MusicPlayer.Stop(Session.ChannelId);
+    if (Action === "MusicPause") this.MusicPlayer.Pause(Session.ChannelId);
+    if (Action === "MusicResume") this.MusicPlayer.Resume(Session.ChannelId);
+    if (Action === "MusicToggle") this.MusicPlayer.TogglePause(Session.ChannelId);
+    if (Action === "MusicSkip") await this.MusicPlayer.Skip(Session.ChannelId);
+
+    await InteractionValue.reply({ content: "Music control applied.", ephemeral: true });
+    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+  }
+
   private async SendControlPanel(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig): Promise<void> {
+    const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
     const Embed = new EmbedBuilder()
       .setTitle(Config.ControlPanelTitle)
       .setDescription(this.ApplyControlTemplate(Config.ControlPanelDescription, Channel, Session))
@@ -466,7 +555,8 @@ export default class TempVoicePlugin extends BasePlugin {
         { name: "Lock", value: Session.Locked ? "Locked" : "Open", inline: true },
         { name: "Soundboard", value: Session.SoundboardDisabled ? "Disabled" : "Enabled", inline: true },
         { name: "User limit", value: String(Session.UserLimit || "Unlimited"), inline: true },
-        { name: "Bans", value: String(Session.BannedUserIds.length), inline: true }
+        { name: "Bans", value: String(Session.BannedUserIds.length), inline: true },
+        { name: "Music", value: MusicState.Status.slice(0, 1024), inline: false }
       )
       .setFooter({ text: "Use the buttons below to manage this temporary room." })
       .setTimestamp(new Date());
@@ -495,9 +585,29 @@ export default class TempVoicePlugin extends BasePlugin {
       new ButtonBuilder().setCustomId(`TempVoice:LimitDown:${Session.ChannelId}`).setLabel("- limit").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`TempVoice:LimitUp:${Session.ChannelId}`).setLabel("+ limit").setStyle(ButtonStyle.Secondary)
     );
+    const MusicButtons = [
+      new ButtonBuilder().setCustomId(`TempVoice:MusicPlay:${Session.ChannelId}`).setLabel("Play music").setStyle(ButtonStyle.Success)
+    ];
 
-    const Payload: MessageCreateOptions = { embeds: [Embed], components: [FirstRow, SecondRow] };
-    const EditPayload: MessageEditOptions = { embeds: [Embed], components: [FirstRow, SecondRow] };
+    if (MusicState.Active) {
+      MusicButtons.push(
+        new ButtonBuilder()
+          .setCustomId(`TempVoice:MusicToggle:${Session.ChannelId}`)
+          .setLabel(MusicState.Paused ? "Resume" : "Pause")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      if (MusicState.CanSkip) {
+        MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicSkip:${Session.ChannelId}`).setLabel("Skip").setStyle(ButtonStyle.Secondary));
+      }
+
+      MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicStop:${Session.ChannelId}`).setLabel("Stop").setStyle(ButtonStyle.Danger));
+    }
+
+    const ThirdRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...MusicButtons);
+
+    const Payload: MessageCreateOptions = { embeds: [Embed], components: [FirstRow, SecondRow, ThirdRow] };
+    const EditPayload: MessageEditOptions = { embeds: [Embed], components: [FirstRow, SecondRow, ThirdRow] };
     const TextChannel = Channel as VoiceChannel & {
       messages: {
         fetch(MessageId: string): Promise<Message>;
@@ -525,6 +635,23 @@ export default class TempVoicePlugin extends BasePlugin {
       Session.ControlPanelMessageId = MessageValue.id;
       await this.SaveSession(Session);
     }
+  }
+
+  private async RefreshControlPanel(ChannelId: string): Promise<void> {
+    const Session = await this.GetSession(ChannelId);
+
+    if (!Session) {
+      return;
+    }
+
+    const Guild = this.DiscordClient.guilds.cache.get(Session.GuildId);
+    const Channel = await Guild?.channels.fetch(ChannelId).catch(() => null);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+      return;
+    }
+
+    await this.SendControlPanel(Channel, Session, await this.GetConfig(Session.GuildId));
   }
 
   private async RequireOwner(InteractionValue: ButtonInteraction<"cached"> | StringSelectMenuInteraction<"cached"> | ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<boolean> {
@@ -584,6 +711,8 @@ export default class TempVoicePlugin extends BasePlugin {
   }
 
   private async DeleteSession(ChannelId: string): Promise<void> {
+    this.MusicPlayer.Stop(ChannelId);
+
     for (const Guild of this.DiscordClient.guilds.cache.values()) {
       const Sessions = await this.GetSessions(Guild.id);
 
