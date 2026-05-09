@@ -35,9 +35,6 @@ services:
     environment:
       DATABASE_URL: postgresql://hyperbot:${POSTGRES_PASSWORD_URL_ENCODED:?Run Dev.sh, Release.sh, or scripts/EnsureEnv.sh}@postgresql:5432/hyperbot?schema=public
       REDIS_URL: redis://:${REDIS_PASSWORD_URL_ENCODED:?Run Dev.sh, Release.sh, or scripts/EnsureEnv.sh}@redis:6379
-      DISCORD_TOKEN: ${DISCORD_TOKEN}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
-      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       SUPER_ADMIN_IDS: ${SUPER_ADMIN_IDS:-}
       PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:-true}
       PLUGIN_DIRECTORY: dist/Plugins

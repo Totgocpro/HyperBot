@@ -121,9 +121,6 @@ Set-HyperBotEnvValue "REDIS_PASSWORD" $RedisPassword
 Set-HyperBotEnvValue "POSTGRES_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $PostgresPassword)
 Set-HyperBotEnvValue "REDIS_PASSWORD_URL_ENCODED" (ConvertTo-HyperBotUrlEncoded $RedisPassword)
 Set-HyperBotEnvValue "APP_HOST_PORT" $AppHostPort
-Add-HyperBotEnvValue "DISCORD_TOKEN" ""
-Add-HyperBotEnvValue "DISCORD_CLIENT_ID" ""
-Add-HyperBotEnvValue "DISCORD_GUILD_ID" ""
 Add-HyperBotEnvValue "SUPER_ADMIN_IDS" ""
 Add-HyperBotEnvValue "PUBLIC_REGISTRATION_ENABLED" "true"
 Add-HyperBotEnvValue "PLUGIN_DIRECTORY" "Plugins"

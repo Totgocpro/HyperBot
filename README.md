@@ -91,19 +91,16 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 - Node.js 22 or newer
 - npm
 - Docker Desktop or Docker Engine with Docker Compose
-- A Discord application with a bot token
+- A Discord application
 - PostgreSQL and Redis, or the provided `docker-compose.yml`
 
 The bot needs the Discord intents required by the plugins you enable, especially `Guilds`, `Guild Members`, `Guild Messages`, `Message Content`, and `Guild Voice States`.
 
 ## Configuration
 
-The provided scripts create `.env` automatically and generate random database passwords on first run. For a manual setup, copy `.env.example` to `.env` and fill the Discord values:
+The provided scripts create `.env` automatically and generate random database passwords on first run. For a manual setup, copy `.env.example` to `.env` and fill the dashboard/application values. Bot tokens are configured from the bot interface.
 
 ```env
-DISCORD_TOKEN=your_bot_token
-DISCORD_CLIENT_ID=your_discord_application_id
-DISCORD_GUILD_ID=
 SUPER_ADMIN_IDS=
 PUBLIC_REGISTRATION_ENABLED=true
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -114,9 +111,6 @@ TWITCH_CLIENT_SECRET=
 
 Useful variables:
 
-- `DISCORD_TOKEN`: Discord bot token, required.
-- `DISCORD_CLIENT_ID`: Discord application ID, required.
-- `DISCORD_GUILD_ID`: optional. If set, slash commands are synchronized only for this guild.
 - `SUPER_ADMIN_IDS`: optional. Comma-separated list of Discord user IDs.
 - `POSTGRES_PASSWORD`: generated automatically by the scripts when missing.
 - `REDIS_PASSWORD`: generated automatically by the scripts when missing.
