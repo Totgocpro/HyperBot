@@ -28,9 +28,20 @@ async function Get(Request: Request): Promise<Response> {
       const Heartbeat = await RedisClient.get(`Bot:${Bot.Id}:Heartbeat`);
       const RawGuilds = await RedisClient.get(`Bot:${Bot.Id}:Guilds`);
       const Guilds = RawGuilds ? JSON.parse(RawGuilds) : [];
+      const SafeBot = User.Role === "SuperAdmin"
+        ? Bot
+        : {
+            Id: Bot.Id,
+            ClientId: Bot.ClientId,
+            Name: Bot.Name,
+            AvatarUrl: Bot.AvatarUrl,
+            IsEnabled: Bot.IsEnabled,
+            CreatedAt: Bot.CreatedAt,
+            UpdatedAt: Bot.UpdatedAt
+          };
 
       return {
-        ...Bot,
+        ...SafeBot,
         IsOnline: Boolean(Heartbeat),
         GuildCount: Guilds.length,
         Guilds: Guilds

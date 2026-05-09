@@ -31,12 +31,7 @@ export class AccessControl {
       const User = await this.Prisma.dashboardUser.findUnique({
           where: { Id: UserId }
       });
-      if (User?.Role === "SuperAdmin") return true;
-
-      const Access = await this.Prisma.botAccess.findUnique({
-          where: { UserId_BotId: { UserId, BotId } }
-      });
-      return !!Access;
+      return User?.Role === "SuperAdmin";
   }
 
   public HasDiscordGuildManagementPermission(Guild: DiscordGuildSummary): boolean {

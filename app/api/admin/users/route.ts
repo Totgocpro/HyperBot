@@ -141,17 +141,25 @@ async function Post(Request: Request): Promise<Response> {
     AllowedBotIds?: string[];
   };
 
-  if (!Body.Username || !Body.Password || Body.Password.length < 8) {
-    return new Response("Username and password with at least 8 characters are required.", { status: 400 });
+  const Username = Body.Username?.trim() ?? "";
+  const DiscordId = Body.DiscordId?.trim() || Username;
+  const DisplayName = Body.DisplayName?.trim() || Username;
+
+  if (!Username) {
+    return new Response("Username is required.", { status: 400 });
+  }
+
+  if (!Body.Password || Body.Password.length < 8) {
+    return new Response("Password must contain at least 8 characters.", { status: 400 });
   }
 
   const Password = HashPassword(Body.Password);
   
   const User = await Prisma.dashboardUser.create({
     data: {
-      Username: Body.Username.trim(),
-      DiscordId: Body.DiscordId?.trim() || Body.Username.trim(),
-      DisplayName: Body.DisplayName?.trim() || Body.Username.trim(),
+      Username,
+      DiscordId,
+      DisplayName,
       PasswordHash: Password.PasswordHash,
       PasswordSalt: Password.PasswordSalt,
       Role: Body.Role ?? "User",

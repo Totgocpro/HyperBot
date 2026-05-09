@@ -27,6 +27,7 @@ export default function BotsPage() {
   const [ShowAddModal, SetShowAddModal] = useState(false);
   const [NewBot, SetNewBot] = useState({ ClientId: "", Token: "" });
   const [Error, SetError] = useState("");
+  const IsSuperAdmin = User?.Role === "SuperAdmin";
 
   useEffect(() => {
     void LoadData();
@@ -89,9 +90,9 @@ export default function BotsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-white">Discord Bots</h1>
-            <p className="text-slate-400">Manage your Discord applications and their status.</p>
+            <p className="text-slate-400">{IsSuperAdmin ? "Manage your Discord applications and their status." : "Invite the bots assigned to your account."}</p>
           </div>
-          {User?.Role === "SuperAdmin" && (
+          {IsSuperAdmin && (
             <button
                 onClick={() => SetShowAddModal(true)}
                 className="rounded-2xl bg-blue-600 px-6 py-3 font-bold text-white hover:bg-blue-500 transition-colors"
@@ -142,7 +143,7 @@ export default function BotsPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  {User?.Role === "SuperAdmin" && (
+                  {IsSuperAdmin && (
                     <button
                         onClick={() => ToggleBot(Bot)}
                         className={`rounded-xl py-2 text-sm font-bold transition-colors ${
@@ -152,21 +153,23 @@ export default function BotsPage() {
                         {Bot.IsEnabled ? "Disable" : "Enable"}
                     </button>
                   )}
-                  <Link
-                    href={`/bots/${Bot.Id}`}
-                    className="flex items-center justify-center rounded-xl bg-slate-800 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors"
-                  >
-                    Manage
-                  </Link>
+                  {IsSuperAdmin ? (
+                    <Link
+                      href={`/bots/${Bot.Id}`}
+                      className="flex items-center justify-center rounded-xl bg-slate-800 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors"
+                    >
+                      Manage
+                    </Link>
+                  ) : null}
                   <a
                     href={`https://discord.com/oauth2/authorize?client_id=${Bot.ClientId}&scope=bot%20applications.commands&permissions=8`}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center justify-center rounded-xl bg-blue-600/20 py-2 text-sm font-bold text-blue-400 hover:bg-blue-600/30 transition-colors"
+                    className={`flex items-center justify-center rounded-xl bg-blue-600/20 py-2 text-sm font-bold text-blue-400 hover:bg-blue-600/30 transition-colors ${IsSuperAdmin ? "" : "col-span-2"}`}
                   >
                     Invite
                   </a>
-                  {User?.Role === "SuperAdmin" && (
+                  {IsSuperAdmin && (
                     <button
                         onClick={() => DeleteBot(Bot.Id)}
                         className="rounded-xl bg-red-600/10 py-2 text-sm font-bold text-red-500 hover:bg-red-600/20 transition-colors"

@@ -5,6 +5,7 @@ import { AppShell } from "@/src/Web/Components/AppShell";
 import { CustomSelect } from "@/src/Web/Components/CustomSelect";
 import type { SettingsField } from "@/src/Core/Types";
 import { BuildConfigSections, RenderField, type DashboardPlugin, IsFieldVisible, AnimatedVisibility } from "@/src/Web/Components/PluginInterfaceRenderer";
+import Link from "next/link";
 
 type Bot = {
   Id: string;
@@ -51,16 +52,39 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
   }, [id]);
 
   async function LoadData() {
-    const [BotsRes, PluginsRes, AdminPluginsRes, UserRes] = await Promise.all([
+    const UserRes = await fetch("/api/auth/me");
+
+    if (!UserRes.ok) {
+      SetStatus(await UserRes.text());
+      SetLoading(false);
+      return;
+    }
+
+    const userPayload = await UserRes.json();
+    SetUser(userPayload.User);
+
+    if (userPayload.User.Role !== "SuperAdmin") {
+      SetStatus("SuperAdmin access required.");
+      SetLoading(false);
+      return;
+    }
+
+    const [BotsRes, PluginsRes, AdminPluginsRes] = await Promise.all([
         fetch("/api/bots"),
         fetch(`/api/plugins/${id}/Global`),
-        fetch(`/api/admin/plugins?botId=${id}`),
-        fetch("/api/auth/me")
+        fetch(`/api/admin/plugins?botId=${id}`)
     ]);
 
-    if (BotsRes.ok && PluginsRes.ok && AdminPluginsRes.ok && UserRes.ok) {
+    if (BotsRes.ok && PluginsRes.ok && AdminPluginsRes.ok) {
       const Bots = await BotsRes.json();
       const CurrentBot = Bots.find((b: Bot) => b.Id === id);
+
+      if (!CurrentBot) {
+        SetStatus("Bot not found.");
+        SetLoading(false);
+        return;
+      }
+
       SetBot(CurrentBot);
       SetBotConfig({ ClientId: CurrentBot.ClientId, Token: CurrentBot.Token });
 
@@ -80,9 +104,8 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
           drafts[p.Metadata.Id] = Object.fromEntries(p.WebInterface.map(f => [f.Key, f.Value ?? f.Default]));
       });
       SetDraftValues(drafts);
-
-      const userPayload = await UserRes.json();
-      SetUser(userPayload.User);
+    } else {
+      SetStatus(await ReadFirstResponseError([BotsRes, PluginsRes, AdminPluginsRes]));
     }
     SetLoading(false);
   }
@@ -169,6 +192,7 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
   const SelectedGlobalPlugin = Plugins.find(p => p.Metadata.Id === SelectedGlobalPluginId);
   const SelectedPluginDraftValues = SelectedGlobalPlugin ? DraftValues[SelectedGlobalPlugin.Metadata.Id] ?? {} : {};
   const ConfigSections = SelectedGlobalPlugin ? BuildConfigSections(SelectedGlobalPlugin, SelectedPluginDraftValues) : [];
+  const IsSuperAdmin = User?.Role === "SuperAdmin";
 
   return (
     <AppShell>
@@ -185,6 +209,14 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
              <div className="flex justify-center py-20">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
              </div>
+        ) : !IsSuperAdmin ? (
+          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-8 text-center">
+            <h2 className="text-2xl font-black text-white">SuperAdmin access required</h2>
+            <p className="mt-2 text-slate-400">Users can invite assigned bots, but cannot manage bot settings.</p>
+            <Link className="mt-6 inline-flex rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-500" href="/bots">
+              Back to bots
+            </Link>
+          </section>
         ) : (
         <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
           <div className="space-y-8">
@@ -453,6 +485,16 @@ function CommandAliasesEditor(Properties: {
       </div>
     </section>
   );
+}
+
+async function ReadFirstResponseError(Responses: Response[]): Promise<string> {
+  for (const ResponseValue of Responses) {
+    if (!ResponseValue.ok) {
+      return await ResponseValue.text();
+    }
+  }
+
+  return "Bot settings loading failed.";
 }
 
 function ParseCommandAliases(Value: unknown): CommandAliasDraft[] {

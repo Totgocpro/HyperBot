@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
-import { RequireDashboardUser } from "@/src/Web/Auth";
+import { RequireDashboardUser, RequireSuperAdmin } from "@/src/Web/Auth";
 
 type RouteParams = {
   params: Promise<{
@@ -45,24 +45,13 @@ async function Get(Request: Request, { params }: RouteParams): Promise<Response>
 }
 
 async function Patch(Request: Request, { params }: RouteParams): Promise<Response> {
-  let User;
   try {
-    User = await RequireDashboardUser(Request);
+    await RequireSuperAdmin(Request);
   } catch (ResponseValue) {
     return ResponseValue as Response;
   }
 
   const { id } = await params;
-
-  // Authorization check
-  if (User.Role !== "SuperAdmin") {
-      const Access = await Prisma.botAccess.findUnique({
-          where: { UserId_BotId: { UserId: User.Id, BotId: id } }
-      });
-      if (!Access) {
-          return new Response("Unauthorized", { status: 403 });
-      }
-  }
 
   const Body = await Request.json();
   const UpdateData: any = {};

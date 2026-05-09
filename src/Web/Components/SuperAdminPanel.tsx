@@ -148,12 +148,28 @@ export function SuperAdminPanel() {
   }
 
   async function CreateUser(): Promise<void> {
+    const Username = CreateUserForm.Username.trim();
+    const Password = CreateUserForm.Password;
+
+    if (!Username) {
+      SetStatus("Login is required.");
+      return;
+    }
+
+    if (Password.length < 8) {
+      SetStatus("Password must contain at least 8 characters.");
+      return;
+    }
+
     const Response = await fetch("/api/admin/users", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(CreateUserForm)
+      body: JSON.stringify({
+        ...CreateUserForm,
+        Username
+      })
     });
 
     if (!Response.ok) {
@@ -653,7 +669,7 @@ function UserManagementPanel(Properties: {
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <AdminInput Label="Login" Value={Properties.CreateUserForm.Username} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, Username: Value })} />
-              <AdminInput Label="Password" Type="password" Value={Properties.CreateUserForm.Password} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, Password: Value })} />
+              <AdminInput Label="Password" Placeholder="At least 8 characters" Type="password" Value={Properties.CreateUserForm.Password} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, Password: Value })} />
               <AdminInput Label="Display name" Value={Properties.CreateUserForm.DisplayName} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, DisplayName: Value })} />
               <AdminInput Label="Discord ID" Value={Properties.CreateUserForm.DiscordId} OnChange={(Value) => Properties.SetCreateUserForm({ ...Properties.CreateUserForm, DiscordId: Value })} />
               <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
@@ -687,7 +703,11 @@ function UserManagementPanel(Properties: {
                     OnChange={Properties.SetCreateUserForm}
                 />
             </div>
-            <button className="mt-6 w-full rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={() => void Properties.CreateUser()}>
+            <button
+              className="mt-6 w-full rounded-2xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              disabled={!Properties.CreateUserForm.Username.trim() || Properties.CreateUserForm.Password.length < 8}
+              onClick={() => void Properties.CreateUser()}
+            >
               Create user
             </button>
           </div>
