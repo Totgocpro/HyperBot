@@ -88,7 +88,7 @@
       "Key": "MusicButtonResumeLabel",
       "Type": "String",
       "Label": "Resume button label",
-      "Default": "Resume",
+      "Default": "Continue",
       "Section": "Music"
     },
     {

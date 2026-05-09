@@ -76,7 +76,7 @@ const DefaultConfig: TempVoiceConfig = {
   ControlPanelColor: "#38bdf8",
   MusicButtonPlayLabel: "Play music",
   MusicButtonPauseLabel: "Pause",
-  MusicButtonResumeLabel: "Resume",
+  MusicButtonResumeLabel: "Continue",
   MusicButtonSkipLabel: "Skip",
   MusicButtonStopLabel: "Stop",
   MusicModalTitle: "Play YouTube music",
@@ -220,7 +220,7 @@ export default class TempVoicePlugin extends BasePlugin {
 
     if (Members.length === 0) {
       await this.DeleteSession(ChannelId);
-      await Channel.delete("Temporary voice channel is empty.").catch(() => null);
+      await this.DeleteTemporaryChannel(Channel);
       return;
     }
 
@@ -330,6 +330,12 @@ export default class TempVoicePlugin extends BasePlugin {
       const Config = await this.GetConfig(InteractionValue.guildId);
       const Member = await InteractionValue.guild.members.fetch(TargetMemberId).catch(() => null);
 
+      if (!this.CanBanFromTemporaryRoom(Channel)) {
+        await InteractionValue.reply({ content: "The bot cannot ban members from this room.", ephemeral: true });
+        await this.SendControlPanel(Channel, Session, Config);
+        return;
+      }
+
       if (!Member || this.HasProtectedRole(Member, Config.ProtectedRoleIds)) {
         await InteractionValue.reply({ content: "This member cannot be banned from the room.", ephemeral: true });
         return;
@@ -388,13 +394,19 @@ export default class TempVoicePlugin extends BasePlugin {
       return;
     }
 
+    if (!this.CanManageTemporaryRoomPermissions(Channel)) {
+      await InteractionValue.reply({ content: "The bot cannot manage this room permissions.", ephemeral: true });
+      await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
+      return;
+    }
+
     Session.Locked = Locked;
     await Channel.permissionOverwrites.edit(InteractionValue.guild.id, {
       Connect: !Locked
     });
     await this.SaveSession(Session);
     await InteractionValue.reply({ content: Locked ? "Room locked." : "Room unlocked.", ephemeral: true });
-    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
   private async SetSoundboardDisabled(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Disabled: boolean): Promise<void> {
@@ -412,7 +424,7 @@ export default class TempVoicePlugin extends BasePlugin {
     });
     await this.SaveSession(Session);
     await InteractionValue.reply({ content: Disabled ? "Soundboard disabled." : "Soundboard enabled.", ephemeral: true });
-    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
   private async ChangeUserLimit(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Delta: number): Promise<void> {
@@ -427,7 +439,7 @@ export default class TempVoicePlugin extends BasePlugin {
     await Channel.setUserLimit(Session.UserLimit, "Temporary voice user limit changed by owner.");
     await this.SaveSession(Session);
     await InteractionValue.reply({ content: `User limit set to ${Session.UserLimit || "unlimited"}.`, ephemeral: true });
-    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
+    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
   private async HandleClaim(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
@@ -458,6 +470,13 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     const Config = await this.GetConfig(InteractionValue.guildId);
+
+    if (Action === "Ban" && !this.CanBanFromTemporaryRoom(Channel)) {
+      await InteractionValue.reply({ content: "The bot cannot ban members from this room.", ephemeral: true });
+      await this.SendControlPanel(Channel, Session, Config, InteractionValue);
+      return;
+    }
+
     const Members = Array.from(Channel.members.values())
       .filter((Member) => !Member.user.bot)
       .filter((Member) => Member.id !== InteractionValue.user.id)
@@ -588,12 +607,14 @@ export default class TempVoicePlugin extends BasePlugin {
     if (Action === "MusicSkip") await this.MusicPlayer.Skip(Session.ChannelId);
 
     await InteractionValue.reply({ content: Config.MusicControlAppliedMessage, ephemeral: true });
-    await this.SendControlPanel(Channel, Session, Config);
+    await this.SendControlPanel(Channel, Session, Config, InteractionValue);
   }
 
-  private async SendControlPanel(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig): Promise<void> {
+  private async SendControlPanel(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig, SourceInteraction?: ButtonInteraction<"cached">): Promise<void> {
     const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
     const MusicStatus = this.GetMusicStatus(MusicState, Config, Session.ChannelId);
+    const CanManagePermissions = this.CanManageTemporaryRoomPermissions(Channel);
+    const CanBanMembers = this.CanBanFromTemporaryRoom(Channel);
     const Embed = new EmbedBuilder()
       .setTitle(Config.ControlPanelTitle)
       .setDescription(this.ApplyControlTemplate(Config.ControlPanelDescription, Channel, Session))
@@ -609,11 +630,18 @@ export default class TempVoicePlugin extends BasePlugin {
       .setFooter({ text: "Use the buttons below to manage this temporary room." })
       .setTimestamp(new Date());
 
-    const FirstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`TempVoice:Lock:${Session.ChannelId}`)
-        .setLabel(Session.Locked ? "Unlock" : "Lock")
-        .setStyle(Session.Locked ? ButtonStyle.Success : ButtonStyle.Secondary),
+    const FirstButtons: ButtonBuilder[] = [];
+
+    if (CanManagePermissions) {
+      FirstButtons.push(
+        new ButtonBuilder()
+          .setCustomId(`TempVoice:Lock:${Session.ChannelId}`)
+          .setLabel(Session.Locked ? "Unlock" : "Lock")
+          .setStyle(Session.Locked ? ButtonStyle.Success : ButtonStyle.Secondary)
+      );
+    }
+
+    FirstButtons.push(
       new ButtonBuilder()
         .setCustomId(`TempVoice:Soundboard:${Session.ChannelId}`)
         .setLabel(Session.SoundboardDisabled ? "Enable soundboard" : "Disable soundboard")
@@ -627,12 +655,22 @@ export default class TempVoicePlugin extends BasePlugin {
         .setLabel("Claim")
         .setStyle(ButtonStyle.Secondary)
     );
-    const SecondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`TempVoice:Transfer:${Session.ChannelId}`).setLabel("Transfer owner").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`TempVoice:Ban:${Session.ChannelId}`).setLabel("Ban member").setStyle(ButtonStyle.Danger),
+
+    const FirstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...FirstButtons);
+    const SecondButtons: ButtonBuilder[] = [
+      new ButtonBuilder().setCustomId(`TempVoice:Transfer:${Session.ChannelId}`).setLabel("Transfer owner").setStyle(ButtonStyle.Primary)
+    ];
+
+    if (CanBanMembers) {
+      SecondButtons.push(new ButtonBuilder().setCustomId(`TempVoice:Ban:${Session.ChannelId}`).setLabel("Ban member").setStyle(ButtonStyle.Danger));
+    }
+
+    SecondButtons.push(
       new ButtonBuilder().setCustomId(`TempVoice:LimitDown:${Session.ChannelId}`).setLabel("- limit").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`TempVoice:LimitUp:${Session.ChannelId}`).setLabel("+ limit").setStyle(ButtonStyle.Secondary)
     );
+
+    const SecondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...SecondButtons);
     const MusicButtons = [
       new ButtonBuilder().setCustomId(`TempVoice:MusicPlay:${Session.ChannelId}`).setLabel(Config.MusicButtonPlayLabel.slice(0, 80)).setStyle(ButtonStyle.Success)
     ];
@@ -662,6 +700,13 @@ export default class TempVoicePlugin extends BasePlugin {
       };
       send(Options: MessageCreateOptions): Promise<Message>;
     };
+
+    if (SourceInteraction && SourceInteraction.message.id === Session.ControlPanelMessageId) {
+      await SourceInteraction.message.edit(EditPayload).catch((ErrorValue: unknown) => {
+        this.Logger.Warn("Could not edit temporary voice control panel.", ErrorValue);
+      });
+      return;
+    }
 
     if (Session.ControlPanelMessageId) {
       const ExistingMessage = await TextChannel.messages.fetch(Session.ControlPanelMessageId).catch(() => null);
@@ -700,6 +745,31 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     await this.SendControlPanel(Channel, Session, await this.GetConfig(Session.GuildId));
+  }
+
+  private async DeleteTemporaryChannel(Channel: VoiceChannel): Promise<void> {
+    await Channel.permissionOverwrites.edit(Channel.guild.id, {
+      Connect: true,
+      ViewChannel: true
+    }).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Could not unlock temporary voice channel before deletion.", ErrorValue);
+    });
+
+    await Channel.delete("Temporary voice channel is empty.").catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Could not delete empty temporary voice channel.", ErrorValue);
+    });
+  }
+
+  private CanManageTemporaryRoomPermissions(Channel: VoiceChannel): boolean {
+    const BotMember = Channel.guild.members.me;
+    const Permissions = BotMember ? Channel.permissionsFor(BotMember) : null;
+    return Permissions?.has(PermissionFlagsBits.ManageChannels) ?? false;
+  }
+
+  private CanBanFromTemporaryRoom(Channel: VoiceChannel): boolean {
+    const BotMember = Channel.guild.members.me;
+    const Permissions = BotMember ? Channel.permissionsFor(BotMember) : null;
+    return Permissions?.has([PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers]) ?? false;
   }
 
   private async RequireOwner(InteractionValue: ButtonInteraction<"cached"> | StringSelectMenuInteraction<"cached"> | ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<boolean> {
