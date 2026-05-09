@@ -493,7 +493,7 @@ export default class TempVoicePlugin extends BasePlugin {
       .setPlaceholder(Action === "Transfer" ? "Select the new owner" : "Select a member to ban")
       .addOptions(
         Members.map((Member) => ({
-          label: Member.user.username.slice(0, 100),
+          label: Member.displayName.slice(0, 100),
           description: Member.user.tag.slice(0, 100),
           value: Member.id
         }))
@@ -864,7 +864,9 @@ export default class TempVoicePlugin extends BasePlugin {
 
   private ApplyTemplate(Template: string, Member: GuildMember): string {
     return Template
-      .replaceAll("%user%", Member.user.username)
+      .replaceAll("%user%", Member.displayName)
+      .replaceAll("%username%", Member.user.username)
+      .replaceAll("%display_name%", Member.displayName)
       .replaceAll("%tag%", Member.user.tag)
       .replaceAll("%mention%", `<@${Member.id}>`)
       .replaceAll("%server%", Member.guild.name);
