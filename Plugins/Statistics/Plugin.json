@@ -107,6 +107,20 @@
       "Label": "Members left",
       "DataSourceKey": "LeavesDaily",
       "Unit": "leaves"
+    },
+    {
+      "Key": "MessagesActivityHeatmap",
+      "Type": "ActivityHeatmap",
+      "Label": "Message activity heatmap",
+      "DataSourceKey": "MessagesHourly",
+      "Unit": "messages"
+    },
+    {
+      "Key": "VoiceActivityHeatmap",
+      "Type": "ActivityHeatmap",
+      "Label": "Voice activity heatmap",
+      "DataSourceKey": "VoiceSecondsHourly",
+      "Unit": "seconds"
     }
   ],
   "EntryPoint": "./StatisticsPlugin.ts",

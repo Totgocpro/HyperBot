@@ -90,7 +90,8 @@ export type SettingsFieldVisibilityRule = {
 export enum DashboardElementType {
   MetricGrid = "MetricGrid",
   LineChart = "LineChart",
-  BarChart = "BarChart"
+  BarChart = "BarChart",
+  ActivityHeatmap = "ActivityHeatmap"
 }
 
 export type DashboardElement = {

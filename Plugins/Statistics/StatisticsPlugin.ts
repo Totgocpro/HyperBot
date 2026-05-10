@@ -2,10 +2,12 @@ import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, type
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
 type DailyCounters = Record<string, number>;
+type HourlyCounters = Record<string, number>;
 
 type MessageLedger = Record<string, {
   UserId: string;
   DayKey: string;
+  HourKey?: string;
 }>;
 
 type VoiceSession = {
@@ -63,9 +65,13 @@ type ChannelCounter = {
 };
 
 const MessagesDailyKey = "MessagesDaily";
+const MessagesHourlyKey = "MessagesHourly";
 const VoiceSecondsDailyKey = "VoiceSecondsDaily";
+const VoiceSecondsHourlyKey = "VoiceSecondsHourly";
 const JoinsDailyKey = "JoinsDaily";
+const JoinsHourlyKey = "JoinsHourly";
 const LeavesDailyKey = "LeavesDaily";
+const LeavesHourlyKey = "LeavesHourly";
 const MessageLedgerKey = "MessageLedger";
 const ChannelCountersKey = "ChannelCounters";
 
@@ -129,6 +135,7 @@ export default class StatisticsPlugin extends BasePlugin {
 
     const Now = new Date();
     await this.IncrementDailyCounter(MessageValue.guildId, MessagesDailyKey, 1, Now);
+    await this.IncrementHourlyCounter(MessageValue.guildId, MessagesHourlyKey, 1, Now);
     await this.IncrementUserDailyCounter(MessageValue.guildId, MessageValue.author.id, MessagesDailyKey, 1, Now);
     await this.TrackCountedMessage(MessageValue.guildId, MessageValue.id, MessageValue.author.id, Now);
   }
@@ -146,6 +153,9 @@ export default class StatisticsPlugin extends BasePlugin {
     }
 
     await this.IncrementDailyCounterByDayKey(MessageValue.guildId, MessagesDailyKey, -1, Entry.DayKey);
+    if (Entry.HourKey) {
+      await this.IncrementHourlyCounterByHourKey(MessageValue.guildId, MessagesHourlyKey, -1, Entry.HourKey);
+    }
     await this.IncrementUserDailyCounterByDayKey(MessageValue.guildId, Entry.UserId, MessagesDailyKey, -1, Entry.DayKey);
     delete Ledger[MessageValue.id];
     await this.Storage.SetGlobalConfig(MessageValue.guildId, MessageLedgerKey, Ledger);
@@ -157,6 +167,7 @@ export default class StatisticsPlugin extends BasePlugin {
     }
 
     await this.IncrementDailyCounter(Member.guild.id, JoinsDailyKey, 1, new Date());
+    await this.IncrementHourlyCounter(Member.guild.id, JoinsHourlyKey, 1, new Date());
   }
 
   public async OnGuildMemberRemove(Member: GuildMember | PartialGuildMember): Promise<void> {
@@ -165,6 +176,7 @@ export default class StatisticsPlugin extends BasePlugin {
     }
 
     await this.IncrementDailyCounter(Member.guild.id, LeavesDailyKey, 1, new Date());
+    await this.IncrementHourlyCounter(Member.guild.id, LeavesHourlyKey, 1, new Date());
   }
 
   public async OnVoiceStateUpdate(OldState: VoiceState, NewState: VoiceState): Promise<void> {
@@ -239,6 +251,7 @@ export default class StatisticsPlugin extends BasePlugin {
     }
 
     await this.IncrementDailyCounter(Session.GuildId, VoiceSecondsDailyKey, Seconds, new Date(Now));
+    await this.IncrementHourlyCounter(Session.GuildId, VoiceSecondsHourlyKey, Seconds, new Date(Now));
     await this.IncrementUserDailyCounter(Session.GuildId, Session.UserId, VoiceSecondsDailyKey, Seconds, new Date(Now));
     Session.LastFlushedAt = Now;
   }
@@ -251,6 +264,16 @@ export default class StatisticsPlugin extends BasePlugin {
   private async IncrementDailyCounterByDayKey(GuildId: string, Key: string, Amount: number, DayKey: string): Promise<void> {
     const Counters = (await this.Storage.GetGlobalConfig<DailyCounters>(GuildId, Key)) ?? {};
     Counters[DayKey] = Math.max(0, (Counters[DayKey] ?? 0) + Amount);
+    await this.Storage.SetGlobalConfig(GuildId, Key, Counters);
+  }
+
+  private async IncrementHourlyCounter(GuildId: string, Key: string, Amount: number, DateValue: Date): Promise<void> {
+    await this.IncrementHourlyCounterByHourKey(GuildId, Key, Amount, this.ToHourKey(DateValue));
+  }
+
+  private async IncrementHourlyCounterByHourKey(GuildId: string, Key: string, Amount: number, HourKey: string): Promise<void> {
+    const Counters = (await this.Storage.GetGlobalConfig<HourlyCounters>(GuildId, Key)) ?? {};
+    Counters[HourKey] = Math.max(0, (Counters[HourKey] ?? 0) + Amount);
     await this.Storage.SetGlobalConfig(GuildId, Key, Counters);
   }
 
@@ -269,7 +292,8 @@ export default class StatisticsPlugin extends BasePlugin {
     const Ledger = (await this.Storage.GetGlobalConfig<MessageLedger>(GuildId, MessageLedgerKey)) ?? {};
     Ledger[MessageId] = {
       UserId,
-      DayKey: this.ToDayKey(DateValue)
+      DayKey: this.ToDayKey(DateValue),
+      HourKey: this.ToHourKey(DateValue)
     };
     await this.Storage.SetGlobalConfig(GuildId, MessageLedgerKey, Ledger);
   }
@@ -312,6 +336,11 @@ export default class StatisticsPlugin extends BasePlugin {
 
   private ToDayKey(DateValue: Date): string {
     return DateValue.toISOString().slice(0, 10);
+  }
+
+  private ToHourKey(DateValue: Date): string {
+    const WeekdayIndex = (DateValue.getDay() + 6) % 7;
+    return `${WeekdayIndex}:${DateValue.getHours()}`;
   }
 
   private FormatDuration(SecondsValue: number): string {

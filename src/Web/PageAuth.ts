@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "../Core/Clients";
 import { HashSessionToken, SessionCookieName } from "./Auth";
 
-export async function RequireAuthenticatedPage(NextPath: string): Promise<void> {
+export async function RequireAuthenticatedPage(NextPath: string) {
   const CookieStore = await cookies();
   const SessionToken = CookieStore.get(SessionCookieName)?.value;
 
@@ -12,6 +12,9 @@ export async function RequireAuthenticatedPage(NextPath: string): Promise<void> 
   }
 
   const Session = await Prisma.sessionToken.findFirst({
+    include: {
+      DashboardUser: true
+    },
     where: {
       TokenHash: HashSessionToken(SessionToken),
       RevokedAt: null,
@@ -27,6 +30,8 @@ export async function RequireAuthenticatedPage(NextPath: string): Promise<void> 
   if (!Session) {
     redirect(`/login?Next=${encodeURIComponent(NextPath)}`);
   }
+
+  return Session.DashboardUser;
 }
 
 export async function RequireSuperAdminPage(NextPath: string): Promise<void> {

@@ -3,7 +3,7 @@ import { GuildSelector } from "@/src/Web/Components/GuildSelector";
 import { RequireAuthenticatedPage } from "@/src/Web/PageAuth";
 
 export default async function HomePage() {
-  await RequireAuthenticatedPage("/");
+  const User = await RequireAuthenticatedPage("/");
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-100">
@@ -16,11 +16,13 @@ export default async function HomePage() {
               Manage servers, enable plugins, and edit settings from one interface.
             </p>
           </div>
-          <div className="flex gap-3">
-            <Link className="rounded-2xl bg-white px-5 py-3 text-sm font-bold text-blue-700" href="/admin">
-              Global admin
-            </Link>
-          </div>
+          {User.Role === "SuperAdmin" ? (
+            <div className="flex gap-3">
+              <Link className="rounded-2xl bg-white px-5 py-3 text-sm font-bold text-blue-700" href="/admin">
+                Global admin
+              </Link>
+            </div>
+          ) : null}
         </header>
         <GuildSelector />
       </div>

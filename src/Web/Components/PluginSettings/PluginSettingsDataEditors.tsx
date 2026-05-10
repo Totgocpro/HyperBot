@@ -14,6 +14,10 @@ export function DashboardElementRenderer(Properties: { Element: DashboardElement
   const Total = Series.reduce((TotalValue, Point) => TotalValue + Point.Value, 0);
   const Average = Series.length > 0 ? Total / Series.length : 0;
 
+  if (Properties.Element.Type === "ActivityHeatmap") {
+    return <ActivityHeatmap Element={Properties.Element} />;
+  }
+
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -707,6 +711,153 @@ function MetricTile(Properties: { Label: string; Value: string }) {
       <p className="mt-2 text-2xl font-black text-white">{Properties.Value}</p>
     </div>
   );
+}
+
+function ActivityHeatmap(Properties: { Element: DashboardElement & { Value: unknown } }) {
+  const [HoveredCell, SetHoveredCell] = UseState<ActivityHeatmapCell | null>(null);
+  const Cells = BuildActivityHeatmapCells(Properties.Element.Value);
+  const MaxValue = Math.max(...Cells.map((Cell) => Cell.Value), 0);
+  const Total = Cells.reduce((TotalValue, Cell) => TotalValue + Cell.Value, 0);
+  const ActiveSlots = Cells.filter((Cell) => Cell.Value > 0).length;
+  const BestCell = Cells.reduce<ActivityHeatmapCell | null>((BestValue, Cell) => (!BestValue || Cell.Value > BestValue.Value ? Cell : BestValue), null);
+  const DisplayCell = HoveredCell ?? BestCell;
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-xl font-black text-white">{Properties.Element.Label}</h3>
+          <p className="mt-1 text-sm text-slate-500">Weekly pattern by server local day and hour.</p>
+        </div>
+        <div className="grid gap-2 text-left sm:text-right">
+          <p className="text-sm font-bold text-blue-200">
+            Peak: {BestCell && BestCell.Value > 0 ? `${BestCell.DayLabel} ${FormatHourRange(BestCell.Hour)}` : "No activity yet"}
+          </p>
+          <p className="text-xs text-slate-500">
+            Total: {FormatChartValue(Total, Properties.Element.Unit)} | Active slots: {ActiveSlots}/168
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-x-auto">
+        <div className="min-w-[880px]">
+          <div className="grid grid-cols-[76px_repeat(24,minmax(26px,1fr))] gap-1">
+            <div />
+            {Array.from({ length: 24 }, (_, Hour) => (
+              <div className="h-6 text-center text-[10px] font-bold text-slate-500" key={Hour}>
+                {Hour % 2 === 0 ? String(Hour).padStart(2, "0") : ""}
+              </div>
+            ))}
+            {ActivityHeatmapDayLabels.map((DayLabel, DayIndex) => (
+              <ActivityHeatmapRow
+                Cells={Cells.filter((Cell) => Cell.DayIndex === DayIndex)}
+                DayLabel={DayLabel}
+                key={DayLabel}
+                MaxValue={MaxValue}
+                OnHover={SetHoveredCell}
+                Unit={Properties.Element.Unit}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {DisplayCell && DisplayCell.Value > 0 ? (
+        <p className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-3 text-sm text-slate-300">
+          {HoveredCell ? "Selected" : "Best"} slot: <span className="font-bold text-white">{DisplayCell.DayLabel} {FormatHourRange(DisplayCell.Hour)}</span> with{" "}
+          <span className="font-bold text-blue-200">{FormatChartValue(DisplayCell.Value, Properties.Element.Unit)}</span>.
+        </p>
+      ) : (
+        <p className="mt-4 rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No hourly activity has been tracked yet.</p>
+      )}
+    </section>
+  );
+}
+
+function ActivityHeatmapRow(Properties: {
+  Cells: ActivityHeatmapCell[];
+  DayLabel: string;
+  MaxValue: number;
+  OnHover: (Cell: ActivityHeatmapCell | null) => void;
+  Unit?: string;
+}) {
+  return (
+    <>
+      <div className="flex h-7 items-center pr-2 text-xs font-bold text-slate-400">{Properties.DayLabel}</div>
+      {Properties.Cells.map((Cell) => {
+        const Intensity = Properties.MaxValue > 0 ? Cell.Value / Properties.MaxValue : 0;
+        const BackgroundColor = BuildHeatmapColor(Intensity);
+
+        return (
+          <button
+            aria-label={`${Cell.DayLabel} ${FormatHourRange(Cell.Hour)}: ${FormatChartValue(Cell.Value, Properties.Unit)}`}
+            className="h-7 rounded-md border border-slate-800 transition-colors hover:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            key={Cell.Key}
+            onBlur={() => Properties.OnHover(null)}
+            onFocus={() => Properties.OnHover(Cell)}
+            onMouseEnter={() => Properties.OnHover(Cell)}
+            onMouseLeave={() => Properties.OnHover(null)}
+            style={{ backgroundColor: BackgroundColor }}
+            title={`${Cell.DayLabel} ${FormatHourRange(Cell.Hour)}: ${FormatChartValue(Cell.Value, Properties.Unit)}`}
+            type="button"
+          />
+        );
+      })}
+    </>
+  );
+}
+
+type ActivityHeatmapCell = {
+  DayIndex: number;
+  DayLabel: string;
+  Hour: number;
+  Key: string;
+  Value: number;
+};
+
+const ActivityHeatmapDayLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function BuildActivityHeatmapCells(Value: unknown): ActivityHeatmapCell[] {
+  const Data = IsRecord(Value) ? Value : {};
+
+  return ActivityHeatmapDayLabels.flatMap((DayLabel, DayIndex) =>
+    Array.from({ length: 24 }, (_, Hour) => {
+      const Key = `${DayIndex}:${Hour}`;
+      const RawValue = Data[Key];
+
+      return {
+        DayIndex,
+        DayLabel,
+        Hour,
+        Key,
+        Value: typeof RawValue === "number" ? RawValue : 0
+      };
+    })
+  );
+}
+
+function BuildHeatmapColor(Intensity: number): string {
+  if (Intensity <= 0) {
+    return "rgb(15 23 42)";
+  }
+
+  if (Intensity < 0.2) {
+    return "rgb(30 64 175)";
+  }
+
+  if (Intensity < 0.45) {
+    return "rgb(37 99 235)";
+  }
+
+  if (Intensity < 0.7) {
+    return "rgb(14 165 233)";
+  }
+
+  return "rgb(125 211 252)";
+}
+
+function FormatHourRange(Hour: number): string {
+  return `${String(Hour).padStart(2, "0")}:00-${String((Hour + 1) % 24).padStart(2, "0")}:00`;
 }
 
 function BuildMonthlySeries(Value: unknown, Month: string): Array<{ Label: string; Value: number }> {
