@@ -1,0 +1,139 @@
+{
+  "Metadata": {
+    "Id": "InviteTracker",
+    "DisplayName": "Invite Tracker",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "INV"
+  },
+  "Scope": "Guild",
+  "Commands": [
+    {
+      "Name": "invites",
+      "Description": "Show invite statistics for a server member.",
+      "Options": [
+        {
+          "Name": "user",
+          "Description": "Member to inspect. Defaults to yourself.",
+          "Type": "User",
+          "Required": false
+        }
+      ]
+    },
+    {
+      "Name": "invite-leaderboard",
+      "Description": "Show the server invite leaderboard."
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "TrackBotAccounts",
+      "Type": "Boolean",
+      "Label": "Track bot accounts",
+      "Default": false,
+      "Section": "Tracking"
+    },
+    {
+      "Key": "FakeAccountMaxAgeDays",
+      "Type": "Number",
+      "Label": "Fake account age threshold in days",
+      "Default": 7,
+      "Section": "Tracking"
+    },
+    {
+      "Key": "LeaderboardSize",
+      "Type": "Number",
+      "Label": "Leaderboard size",
+      "Default": 10,
+      "Section": "Leaderboard"
+    },
+    {
+      "Key": "LogChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Invite log channel",
+      "Default": "",
+      "Section": "Logging",
+      "SupportedChannelTypes": [
+        "GuildText"
+      ],
+      "RequireWritable": true
+    },
+    {
+      "Key": "JoinLogMessage",
+      "Type": "String",
+      "Label": "Join log message",
+      "Default": "%member% joined using %invite% from %inviter%. Total: %total%.",
+      "Section": "Logging"
+    },
+    {
+      "Key": "LeaveLogMessage",
+      "Type": "String",
+      "Label": "Leave log message",
+      "Default": "%member% left. Invited by %inviter% with %invite%.",
+      "Section": "Logging"
+    },
+    {
+      "Key": "UnknownInviteMessage",
+      "Type": "String",
+      "Label": "Unknown invite log message",
+      "Default": "%member% joined, but the used invite could not be detected.",
+      "Section": "Logging"
+    },
+    {
+      "Key": "EmbedColor",
+      "Type": "String",
+      "Label": "Embed color",
+      "Default": "#22c55e",
+      "Section": "Design"
+    },
+    {
+      "Key": "RefreshInviteCache",
+      "Type": "Button",
+      "Label": "Refresh invite cache",
+      "Description": "Fetches current Discord invite usage for this server. Requires the bot to have Manage Server.",
+      "Default": null,
+      "Section": "Admin tools",
+      "ButtonLabel": "Refresh cache",
+      "ActionKey": "RefreshInviteCache"
+    }
+  ],
+  "DashboardElements": [
+    {
+      "Key": "InviteLeaderboardOverview",
+      "Type": "InviteLeaderboard",
+      "Label": "Invite leaderboard",
+      "DataSourceKey": "InviteStats",
+      "Unit": "invites"
+    },
+    {
+      "Key": "InvitesDailyChart",
+      "Type": "BarChart",
+      "Label": "Tracked joins by invite",
+      "DataSourceKey": "InvitesDaily",
+      "Unit": "joins"
+    },
+    {
+      "Key": "FakeInvitesDailyChart",
+      "Type": "BarChart",
+      "Label": "Fake invite joins",
+      "DataSourceKey": "FakeInvitesDaily",
+      "Unit": "joins"
+    },
+    {
+      "Key": "InviteLeavesDailyChart",
+      "Type": "BarChart",
+      "Label": "Invited members left",
+      "DataSourceKey": "InviteLeavesDaily",
+      "Unit": "leaves"
+    },
+    {
+      "Key": "UnknownInvitesDailyChart",
+      "Type": "BarChart",
+      "Label": "Unknown invite joins",
+      "DataSourceKey": "UnknownInvitesDaily",
+      "Unit": "joins"
+    }
+  ],
+  "EntryPoint": "./InviteTrackerPlugin.ts",
+  "Category": "Engagement"
+}

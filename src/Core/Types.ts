@@ -91,7 +91,8 @@ export enum DashboardElementType {
   MetricGrid = "MetricGrid",
   LineChart = "LineChart",
   BarChart = "BarChart",
-  ActivityHeatmap = "ActivityHeatmap"
+  ActivityHeatmap = "ActivityHeatmap",
+  InviteLeaderboard = "InviteLeaderboard"
 }
 
 export type DashboardElement = {

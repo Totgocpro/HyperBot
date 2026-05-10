@@ -24,6 +24,7 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 | `CustomStatus` | Global | Dashboard only | Configure the bot presence and rotating activity text. |
 | `DiscordGame` | Guild | `/minesweeper`, `/tictactoe` | Run small interactive Discord games. |
 | `Giveaway` | Guild | `/giveaway-*` | Run button-based giveaways with automatic ending, rerolls, eligibility rules, and custom embeds. |
+| `InviteTracker` | Guild | `/invites`, `/invite-leaderboard` | Track Discord invite usage, fake joins, leaves, invite logs, and dashboard rankings. |
 | `Leveling` | Guild | `/leaderboard` | Award XP from activity and display member rankings. Depends on `Statistics`. |
 | `Moderation` | Guild | `/warn`, `/lookup` | Store sanctions, view user history, log moderation actions, and configure AutoMod rules. |
 | `Notifications` | Guild | Dashboard only | Watch RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram sources and post custom embed notifications. |
@@ -56,6 +57,14 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 - Commands: `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list`.
 - Configuration: default channel, default duration, winner limits, required/blocked roles, entry messages, join/leave labels, role bonus entries, active embed, and ended embed.
 - Notes: bonus entries use `ROLE_ID=ENTRIES`, for example `123456789012345678=3` gives members with that role three total entries.
+
+#### Invite Tracker
+
+- Scope: guild.
+- Commands: `/invites`, `/invite-leaderboard`.
+- Configuration: bot tracking, fake account age threshold, leaderboard size, invite log channel, log message templates, embed color, and invite cache refresh.
+- Dashboard: invite leaderboard, tracked joins, fake joins, invited members who left, and unknown invite joins.
+- Notes: the bot needs Discord `Manage Server` permission to fetch server invites. Invite attribution is based on Discord invite usage deltas, so vanity invites, missing permissions, or stale cache can produce unknown joins; use the dashboard refresh action after enabling the plugin or changing invite permissions.
 
 #### Notifications
 
@@ -94,7 +103,7 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 - A Discord application
 - PostgreSQL and Redis, or the provided `docker-compose.yml`
 
-The bot needs the Discord intents required by the plugins you enable, especially `Guilds`, `Guild Members`, `Guild Messages`, `Message Content`, and `Guild Voice States`.
+The bot needs the Discord intents required by the plugins you enable, especially `Guilds`, `Guild Members`, `Guild Messages`, `Message Content`, and `Guild Voice States`. Invite tracking also requires the Discord `Manage Server` permission so the bot can read invite usage.
 
 ## Configuration
 

@@ -18,6 +18,10 @@ export function DashboardElementRenderer(Properties: { Element: DashboardElement
     return <ActivityHeatmap Element={Properties.Element} />;
   }
 
+  if (Properties.Element.Type === "InviteLeaderboard") {
+    return <InviteLeaderboard Element={Properties.Element} />;
+  }
+
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -772,6 +776,96 @@ function ActivityHeatmap(Properties: { Element: DashboardElement & { Value: unkn
       )}
     </section>
   );
+}
+
+function InviteLeaderboard(Properties: { Element: DashboardElement & { Value: unknown } }) {
+  const Rows = BuildInviteLeaderboardRows(Properties.Element.Value).slice(0, 10);
+  const TotalRegular = Rows.reduce((TotalValue, Row) => TotalValue + Row.Regular, 0);
+  const TotalFake = Rows.reduce((TotalValue, Row) => TotalValue + Row.Fake, 0);
+  const TotalLeaves = Rows.reduce((TotalValue, Row) => TotalValue + Row.Leaves, 0);
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-xl font-black text-white">{Properties.Element.Label}</h3>
+          <p className="mt-1 text-sm text-slate-500">Top inviters tracked from Discord invite usage.</p>
+        </div>
+        <p className="text-xs text-slate-500">
+          Regular: {TotalRegular.toLocaleString()} | Fake: {TotalFake.toLocaleString()} | Left: {TotalLeaves.toLocaleString()}
+        </p>
+      </div>
+
+      <div className="mt-4 overflow-x-auto">
+        {Rows.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No invite stats tracked yet.</p>
+        ) : (
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Rank</th>
+                <th className="px-3 py-2">User</th>
+                <th className="px-3 py-2 text-right">Score</th>
+                <th className="px-3 py-2 text-right">Regular</th>
+                <th className="px-3 py-2 text-right">Fake</th>
+                <th className="px-3 py-2 text-right">Left</th>
+                <th className="px-3 py-2 text-right">Bonus</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {Rows.map((Row, Index) => (
+                <tr className="text-slate-200" key={Row.UserId}>
+                  <td className="px-3 py-3 font-black text-white">#{Index + 1}</td>
+                  <td className="px-3 py-3 font-semibold">{Row.UserId}</td>
+                  <td className="px-3 py-3 text-right font-black text-blue-200">{Row.Score.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-right">{Row.Regular.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-right">{Row.Fake.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-right">{Row.Leaves.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-right">{Row.Bonus.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  );
+}
+
+type InviteLeaderboardRow = {
+  Bonus: number;
+  Fake: number;
+  Leaves: number;
+  Regular: number;
+  Score: number;
+  UserId: string;
+};
+
+function BuildInviteLeaderboardRows(Value: unknown): InviteLeaderboardRow[] {
+  const Data = IsRecord(Value) ? Value : {};
+
+  return Object.entries(Data)
+    .filter((Entry): Entry is [string, Record<string, unknown>] => IsRecord(Entry[1]))
+    .map(([UserId, Row]) => {
+      const Regular = GetNumberRecordValue(Row, "Regular");
+      const Bonus = GetNumberRecordValue(Row, "Bonus");
+      const Leaves = GetNumberRecordValue(Row, "Leaves");
+
+      return {
+        Bonus,
+        Fake: GetNumberRecordValue(Row, "Fake"),
+        Leaves,
+        Regular,
+        Score: Regular + Bonus - Leaves,
+        UserId
+      };
+    })
+    .filter((Row) => Row.Score !== 0 || Row.Regular > 0 || Row.Fake > 0 || Row.Leaves > 0)
+    .sort((FirstRow, SecondRow) => SecondRow.Score - FirstRow.Score || SecondRow.Regular - FirstRow.Regular || FirstRow.Leaves - SecondRow.Leaves);
+}
+
+function GetNumberRecordValue(Value: Record<string, unknown>, Key: string): number {
+  return typeof Value[Key] === "number" ? Value[Key] : 0;
 }
 
 function ActivityHeatmapRow(Properties: {
