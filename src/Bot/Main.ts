@@ -438,6 +438,7 @@ function IsSupportedDashboardChannel(Channel: GuildBasedChannel): boolean {
   return [
     ChannelType.GuildText,
     ChannelType.GuildAnnouncement,
+    ChannelType.GuildCategory,
     ChannelType.GuildForum,
     ChannelType.GuildVoice
   ].includes(Channel.type);
@@ -450,6 +451,9 @@ function CanBotWriteInChannel(Channel: GuildBasedChannel): boolean {
   if (!Permissions) return false;
   if (Channel.type === ChannelType.GuildForum) {
     return Permissions.has(PermissionsBitField.Flags.ViewChannel) && Permissions.has(PermissionsBitField.Flags.CreatePublicThreads);
+  }
+  if (Channel.type === ChannelType.GuildCategory) {
+    return Permissions.has(PermissionsBitField.Flags.ViewChannel);
   }
   if (Channel.type === ChannelType.GuildVoice) {
     return Permissions.has(PermissionsBitField.Flags.ViewChannel);

@@ -1,0 +1,195 @@
+{
+  "Metadata": {
+    "Id": "Tickets",
+    "DisplayName": "Tickets",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "TKT"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "PanelChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Ticket panel channel",
+      "Default": "",
+      "Section": "Panel",
+      "SupportedChannelTypes": [
+        "GuildText"
+      ],
+      "RequireWritable": true
+    },
+    {
+      "Key": "PanelEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Ticket panel embed",
+      "Description": "Shown in the public ticket panel.",
+      "Default": {
+        "Name": "Ticket panel",
+        "Title": "Support tickets",
+        "Description": "Open a private ticket with the support team.",
+        "Color": "#38bdf8",
+        "Url": "",
+        "AuthorName": "",
+        "AuthorIconUrl": "",
+        "ThumbnailUrl": "",
+        "ImageUrl": "",
+        "FooterText": "",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Panel"
+    },
+    {
+      "Key": "OpenButtonLabel",
+      "Type": "String",
+      "Label": "Open ticket button label",
+      "Default": "Open ticket",
+      "Section": "Panel"
+    },
+    {
+      "Key": "TicketCategoryId",
+      "Type": "ChannelPicker",
+      "Label": "Ticket category",
+      "Default": "",
+      "Section": "Tickets",
+      "SupportedChannelTypes": [
+        "GuildCategory"
+      ],
+      "RequireWritable": false
+    },
+    {
+      "Key": "SupportRoleIds",
+      "Type": "List",
+      "Label": "Support roles",
+      "Default": [],
+      "Section": "Tickets",
+      "ItemType": "RolePicker"
+    },
+    {
+      "Key": "TicketNameTemplate",
+      "Type": "String",
+      "Label": "Ticket channel name",
+      "Default": "ticket-%username%",
+      "Section": "Tickets"
+    },
+    {
+      "Key": "MaxOpenTicketsPerUser",
+      "Type": "Number",
+      "Label": "Max open tickets per user",
+      "Default": 1,
+      "Section": "Tickets"
+    },
+    {
+      "Key": "WelcomeMessage",
+      "Type": "String",
+      "Label": "Ticket welcome content",
+      "Default": "%user%, thanks for opening a ticket. A support member will answer soon.",
+      "Section": "Tickets"
+    },
+    {
+      "Key": "TicketEmbed",
+      "Type": "EmbedEditor",
+      "Label": "Ticket intro embed",
+      "Description": "Available tags: %id%, %ticket%, %user%, %user_id%, %username%, %avatar%, %reason%, %status%, %claimed_by%, %channel%, %created_at%.",
+      "Default": {
+        "Name": "Ticket intro",
+        "Title": "Ticket #%id%",
+        "Description": "%reason%",
+        "Color": "#38bdf8",
+        "Url": "",
+        "AuthorName": "%username%",
+        "AuthorIconUrl": "%avatar%",
+        "ThumbnailUrl": "%avatar%",
+        "ImageUrl": "",
+        "FooterText": "Opened at %created_at%",
+        "FooterIconUrl": "",
+        "Timestamp": true,
+        "Fields": [
+          {
+            "Name": "Owner",
+            "Value": "%user%",
+            "Inline": true
+          },
+          {
+            "Name": "Status",
+            "Value": "%status%",
+            "Inline": true
+          },
+          {
+            "Name": "Claimed by",
+            "Value": "%claimed_by%",
+            "Inline": true
+          }
+        ],
+        "ImageDataUrl": "",
+        "ImageName": ""
+      },
+      "Section": "Tickets"
+    },
+    {
+      "Key": "RequireOpenReason",
+      "Type": "Boolean",
+      "Label": "Require ticket reason",
+      "Default": true,
+      "Section": "Tickets"
+    },
+    {
+      "Key": "SaveTranscriptOnClose",
+      "Type": "Boolean",
+      "Label": "Send transcript when closing",
+      "Default": true,
+      "Section": "Transcripts"
+    },
+    {
+      "Key": "TranscriptMessageLimit",
+      "Type": "Number",
+      "Label": "Transcript message limit",
+      "Default": 100,
+      "Section": "Transcripts"
+    },
+    {
+      "Key": "LogChannelId",
+      "Type": "ChannelPicker",
+      "Label": "Ticket log channel",
+      "Default": "",
+      "Section": "Logging",
+      "SupportedChannelTypes": [
+        "GuildText"
+      ],
+      "RequireWritable": true
+    },
+    {
+      "Key": "PublishTicketPanel",
+      "Type": "Button",
+      "Label": "Publish ticket panel",
+      "Description": "Sends the ticket creation panel to the configured panel channel.",
+      "Default": null,
+      "Section": "Admin tools",
+      "ButtonLabel": "Publish panel",
+      "ActionKey": "PublishTicketPanel"
+    }
+  ],
+  "DashboardElements": [
+    {
+      "Key": "TicketsOpenedDailyChart",
+      "Type": "BarChart",
+      "Label": "Tickets opened",
+      "DataSourceKey": "TicketsOpenedDaily",
+      "Unit": "tickets"
+    },
+    {
+      "Key": "TicketsClosedDailyChart",
+      "Type": "BarChart",
+      "Label": "Tickets closed",
+      "DataSourceKey": "TicketsClosedDaily",
+      "Unit": "tickets"
+    }
+  ],
+  "EntryPoint": "./TicketsPlugin.ts",
+  "Category": "Support"
+}
