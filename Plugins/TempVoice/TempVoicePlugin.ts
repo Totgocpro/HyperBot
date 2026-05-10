@@ -24,6 +24,7 @@ import {
 } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 import { TempVoiceMusicBusyError, TempVoiceMusicError, TempVoiceMusicPlayer } from "./TempVoiceMusicPlayer.js";
+import { TempVoiceTtsBusyError, TempVoiceTtsPlayer } from "./TempVoiceTtsPlayer.js";
 
 type TempVoiceConfig = {
   CreatorChannelId: string;
@@ -48,6 +49,16 @@ type TempVoiceConfig = {
   MusicIdleStatus: string;
   MusicPlayingStatus: string;
   MusicPausedStatus: string;
+  TTSEnabled: boolean;
+  TTSButtonLabel: string;
+  TTSModalTitle: string;
+  TTSModalTextLabel: string;
+  TTSModalLanguageLabel: string;
+  TTSDefaultLanguage: string;
+  TTSStartedMessage: string;
+  TTSBusyMessage: string;
+  TTSDisabledMessage: string;
+  TTSFailedMessage: string;
 };
 
 type TempVoiceSession = {
@@ -58,6 +69,7 @@ type TempVoiceSession = {
   CreatedAt: string;
   Locked: boolean;
   SoundboardDisabled: boolean;
+  TtsDisabled?: boolean;
   BannedUserIds: string[];
   MemberJoinTimes: Record<string, number>;
   UserLimit: number;
@@ -88,13 +100,26 @@ const DefaultConfig: TempVoiceConfig = {
   MusicPlaybackFailedMessage: "Music playback failed: %error%",
   MusicIdleStatus: "Idle",
   MusicPlayingStatus: "Playing: %title%",
-  MusicPausedStatus: "Paused: %title%"
+  MusicPausedStatus: "Paused: %title%",
+  TTSEnabled: true,
+  TTSButtonLabel: "TTS",
+  TTSModalTitle: "Speak with TTS",
+  TTSModalTextLabel: "Text to say",
+  TTSModalLanguageLabel: "Language (fr, en, es...)",
+  TTSDefaultLanguage: "fr",
+  TTSStartedMessage: "TTS started.",
+  TTSBusyMessage: "The bot is already connected in %channel%.",
+  TTSDisabledMessage: "TTS is disabled on this server.",
+  TTSFailedMessage: "TTS failed: %error%"
 };
 
 const SessionsStorageKey = "TempVoiceSessions";
 
 export default class TempVoicePlugin extends BasePlugin {
   private readonly MusicPlayer = new TempVoiceMusicPlayer(this.Logger, async (ChannelId) => {
+    await this.RefreshControlPanel(ChannelId);
+  });
+  private readonly TtsPlayer = new TempVoiceTtsPlayer(this.Logger, async (ChannelId) => {
     await this.RefreshControlPanel(ChannelId);
   });
 
@@ -181,6 +206,7 @@ export default class TempVoicePlugin extends BasePlugin {
       CreatedAt: new Date().toISOString(),
       Locked: false,
       SoundboardDisabled: false,
+      TtsDisabled: false,
       BannedUserIds: [],
       MemberJoinTimes: {
         [Member.id]: Date.now()
@@ -282,6 +308,11 @@ export default class TempVoicePlugin extends BasePlugin {
       return;
     }
 
+    if (Action === "TTS") {
+      await this.ShowTtsModal(InteractionValue, Session);
+      return;
+    }
+
     if (!(await this.RequireOwner(InteractionValue, Session))) {
       return;
     }
@@ -293,6 +324,11 @@ export default class TempVoicePlugin extends BasePlugin {
 
     if (Action === "Soundboard") {
       await this.SetSoundboardDisabled(InteractionValue, Session, !Session.SoundboardDisabled);
+      return;
+    }
+
+    if (Action === "TtsToggle") {
+      await this.SetTtsDisabled(InteractionValue, Session, !Session.TtsDisabled);
       return;
     }
 
@@ -390,7 +426,17 @@ export default class TempVoicePlugin extends BasePlugin {
 
     const Session = await this.GetSession(ChannelId);
 
-    if (!Session || !(await this.RequireOwner(InteractionValue, Session))) {
+    if (!Session) {
+      await InteractionValue.reply({ content: "This temporary channel no longer exists.", ephemeral: true });
+      return;
+    }
+
+    if (Action === "TTS") {
+      await this.HandleTtsModal(InteractionValue, Session);
+      return;
+    }
+
+    if (!(await this.RequireOwner(InteractionValue, Session))) {
       return;
     }
 
@@ -453,6 +499,20 @@ export default class TempVoicePlugin extends BasePlugin {
     });
     await this.SaveSession(Session);
     await InteractionValue.reply({ content: Disabled ? "Soundboard disabled." : "Soundboard enabled.", ephemeral: true });
+    await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
+  }
+
+  private async SetTtsDisabled(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Disabled: boolean): Promise<void> {
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      return;
+    }
+
+    Session.TtsDisabled = Disabled;
+    await this.SaveSession(Session);
+    await InteractionValue.reply({ content: Disabled ? "TTS disabled for this room." : "TTS enabled for this room.", ephemeral: true });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
@@ -573,6 +633,58 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.showModal(Modal);
   }
 
+  private async ShowTtsModal(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Config = await this.GetConfig(InteractionValue.guildId);
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+
+    if (!Config.TTSEnabled) {
+      await InteractionValue.reply({ content: Config.TTSDisabledMessage, ephemeral: true });
+      return;
+    }
+
+    if (Session.TtsDisabled) {
+      await InteractionValue.reply({ content: "TTS is disabled for this temporary room.", ephemeral: true });
+      return;
+    }
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to use TTS.", ephemeral: true });
+      return;
+    }
+
+    const BusyChannelId = this.GetBusyAudioChannelId(InteractionValue.guildId, Session.ChannelId);
+
+    if (BusyChannelId) {
+      await InteractionValue.reply({ content: this.ApplyTtsTemplate(Config.TTSBusyMessage, { ChannelId: BusyChannelId, Error: "" }), ephemeral: true });
+      return;
+    }
+
+    const Modal = new ModalBuilder()
+      .setCustomId(`TempVoiceModal:TTS:${Session.ChannelId}`)
+      .setTitle(Config.TTSModalTitle.slice(0, 45))
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId("Text")
+            .setLabel(Config.TTSModalTextLabel.slice(0, 45))
+            .setMaxLength(150)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Paragraph)
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId("Language")
+            .setLabel(Config.TTSModalLanguageLabel.slice(0, 45))
+            .setMaxLength(8)
+            .setRequired(false)
+            .setStyle(TextInputStyle.Short)
+            .setValue(Config.TTSDefaultLanguage.slice(0, 8))
+        )
+      );
+
+    await InteractionValue.showModal(Modal);
+  }
+
   private async HandleMusicModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
     const Url = InteractionValue.fields.getTextInputValue("Url").trim();
@@ -620,6 +732,57 @@ export default class TempVoicePlugin extends BasePlugin {
     }
   }
 
+  private async HandleTtsModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+    const Config = await this.GetConfig(InteractionValue.guildId);
+    const Text = InteractionValue.fields.getTextInputValue("Text").trim();
+    const Language = InteractionValue.fields.getTextInputValue("Language").trim() || Config.TTSDefaultLanguage;
+
+    if (!Config.TTSEnabled) {
+      await InteractionValue.reply({ content: Config.TTSDisabledMessage, ephemeral: true });
+      return;
+    }
+
+    if (Session.TtsDisabled) {
+      await InteractionValue.reply({ content: "TTS is disabled for this temporary room.", ephemeral: true });
+      return;
+    }
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to use TTS.", ephemeral: true });
+      return;
+    }
+
+    const BusyChannelId = this.GetBusyAudioChannelId(InteractionValue.guildId, Session.ChannelId);
+
+    if (BusyChannelId) {
+      await InteractionValue.reply({ content: this.ApplyTtsTemplate(Config.TTSBusyMessage, { ChannelId: BusyChannelId, Error: "" }), ephemeral: true });
+      return;
+    }
+
+    await InteractionValue.deferReply({ ephemeral: true });
+
+    try {
+      await this.TtsPlayer.Speak(Channel, Text, Language);
+      await InteractionValue.editReply(Config.TTSStartedMessage);
+      await this.SendControlPanel(Channel, Session, Config);
+    } catch (ErrorValue) {
+      if (ErrorValue instanceof TempVoiceTtsBusyError) {
+        await InteractionValue.editReply(this.ApplyTtsTemplate(Config.TTSBusyMessage, {
+          ChannelId: ErrorValue.ChannelId,
+          Error: ErrorValue.message
+        }));
+        return;
+      }
+
+      const ErrorMessage = ErrorValue instanceof Error ? ErrorValue.message : "Unknown error";
+      await InteractionValue.editReply(this.ApplyTtsTemplate(Config.TTSFailedMessage, {
+        ChannelId: Session.ChannelId,
+        Error: ErrorMessage
+      }));
+    }
+  }
+
   private async HandleMusicButton(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Action: string): Promise<void> {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
     const Config = await this.GetConfig(InteractionValue.guildId);
@@ -642,6 +805,7 @@ export default class TempVoicePlugin extends BasePlugin {
   private async SendControlPanel(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig, SourceInteraction?: ButtonInteraction<"cached">): Promise<void> {
     const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
     const MusicStatus = this.GetMusicStatus(MusicState, Config, Session.ChannelId);
+    const BusyAudioChannelId = this.GetBusyAudioChannelId(Session.GuildId, Session.ChannelId);
     const CanManagePermissions = this.CanManageTemporaryRoomPermissions(Channel);
     const CanBanMembers = this.CanBanFromTemporaryRoom(Channel);
     const Embed = new EmbedBuilder()
@@ -652,6 +816,7 @@ export default class TempVoicePlugin extends BasePlugin {
         { name: "Owner", value: `<@${Session.OwnerId}>`, inline: true },
         { name: "Lock", value: Session.Locked ? "Locked" : "Open", inline: true },
         { name: "Soundboard", value: Session.SoundboardDisabled ? "Disabled" : "Enabled", inline: true },
+        { name: "TTS", value: !Config.TTSEnabled || Session.TtsDisabled ? "Disabled" : "Enabled", inline: true },
         { name: "User limit", value: String(Session.UserLimit || "Unlimited"), inline: true },
         { name: "Bans", value: String(Session.BannedUserIds.length), inline: true },
         { name: "Music", value: MusicStatus.slice(0, 1024), inline: false }
@@ -675,6 +840,11 @@ export default class TempVoicePlugin extends BasePlugin {
         .setCustomId(`TempVoice:Soundboard:${Session.ChannelId}`)
         .setLabel(Session.SoundboardDisabled ? "Enable soundboard" : "Disable soundboard")
         .setStyle(Session.SoundboardDisabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`TempVoice:TtsToggle:${Session.ChannelId}`)
+        .setDisabled(!Config.TTSEnabled)
+        .setLabel(Session.TtsDisabled ? "Enable TTS" : "Disable TTS")
+        .setStyle(Session.TtsDisabled ? ButtonStyle.Success : ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`TempVoice:Rename:${Session.ChannelId}`)
         .setLabel("Rename")
@@ -717,6 +887,16 @@ export default class TempVoicePlugin extends BasePlugin {
       }
 
       MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicStop:${Session.ChannelId}`).setLabel(Config.MusicButtonStopLabel.slice(0, 80)).setStyle(ButtonStyle.Danger));
+    }
+
+    if (Config.TTSEnabled && !Session.TtsDisabled) {
+      MusicButtons.push(
+        new ButtonBuilder()
+          .setCustomId(`TempVoice:TTS:${Session.ChannelId}`)
+          .setDisabled(Boolean(BusyAudioChannelId))
+          .setLabel(Config.TTSButtonLabel.slice(0, 80))
+          .setStyle(ButtonStyle.Primary)
+      );
     }
 
     const ThirdRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...MusicButtons);
@@ -841,7 +1021,17 @@ export default class TempVoicePlugin extends BasePlugin {
       MusicPlaybackFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPlaybackFailedMessage")) ?? DefaultConfig.MusicPlaybackFailedMessage,
       MusicIdleStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicIdleStatus")) ?? DefaultConfig.MusicIdleStatus,
       MusicPlayingStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPlayingStatus")) ?? DefaultConfig.MusicPlayingStatus,
-      MusicPausedStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPausedStatus")) ?? DefaultConfig.MusicPausedStatus
+      MusicPausedStatus: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicPausedStatus")) ?? DefaultConfig.MusicPausedStatus,
+      TTSEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "TTSEnabled")) ?? DefaultConfig.TTSEnabled,
+      TTSButtonLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSButtonLabel")) ?? DefaultConfig.TTSButtonLabel,
+      TTSModalTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSModalTitle")) ?? DefaultConfig.TTSModalTitle,
+      TTSModalTextLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSModalTextLabel")) ?? DefaultConfig.TTSModalTextLabel,
+      TTSModalLanguageLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSModalLanguageLabel")) ?? DefaultConfig.TTSModalLanguageLabel,
+      TTSDefaultLanguage: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSDefaultLanguage")) ?? DefaultConfig.TTSDefaultLanguage,
+      TTSStartedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSStartedMessage")) ?? DefaultConfig.TTSStartedMessage,
+      TTSBusyMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSBusyMessage")) ?? DefaultConfig.TTSBusyMessage,
+      TTSDisabledMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSDisabledMessage")) ?? DefaultConfig.TTSDisabledMessage,
+      TTSFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "TTSFailedMessage")) ?? DefaultConfig.TTSFailedMessage
     };
   }
 
@@ -907,6 +1097,7 @@ export default class TempVoicePlugin extends BasePlugin {
       .replaceAll("%channel%", Channel.name)
       .replaceAll("%locked%", Session.Locked ? "locked" : "open")
       .replaceAll("%soundboard%", Session.SoundboardDisabled ? "disabled" : "enabled")
+      .replaceAll("%tts%", Session.TtsDisabled ? "disabled" : "enabled")
       .replaceAll("%limit%", String(Session.UserLimit || "unlimited"));
   }
 
@@ -937,6 +1128,23 @@ export default class TempVoicePlugin extends BasePlugin {
       .replaceAll("%queued_suffix%", QueuedCount > 0 ? ` (+${QueuedCount} queued)` : "")
       .replaceAll("%channel%", `<#${Values.ChannelId}>`)
       .replaceAll("%error%", Values.Error);
+  }
+
+  private ApplyTtsTemplate(Template: string, Values: { ChannelId: string; Error: string }): string {
+    return Template
+      .replaceAll("%channel%", `<#${Values.ChannelId}>`)
+      .replaceAll("%error%", Values.Error);
+  }
+
+  private GetBusyAudioChannelId(GuildId: string, CurrentChannelId: string): string | null {
+    const MusicChannelId = this.MusicPlayer.GetGuildActiveChannelId(GuildId);
+
+    if (MusicChannelId) {
+      return MusicChannelId;
+    }
+
+    const TtsChannelId = this.TtsPlayer.GetGuildActiveChannelId(GuildId);
+    return TtsChannelId && TtsChannelId !== CurrentChannelId ? TtsChannelId : null;
   }
 
   private ParseColor(ColorValue: string): number {

@@ -13,8 +13,7 @@ import {
   type VoiceConnection
 } from "@discordjs/voice";
 import type { Guild, VoiceBasedChannel } from "discord.js";
-import Play from "play-dl";
-import { youtubeDl as YoutubeDl, type Payload as YoutubeDlPayload } from "youtube-dl-exec";
+import { youtubeDl as YoutubeDl, type Flags as YoutubeDlFlags, type Payload as YoutubeDlPayload } from "youtube-dl-exec";
 import type { PluginLoggerContract } from "../../src/Core/Types.js";
 
 type TempVoiceMusicTrack = {
@@ -46,6 +45,17 @@ type TempVoiceMusicSession = {
   GuildId: string;
   Player: AudioPlayer;
   Queue: TempVoiceMusicTrack[];
+};
+
+type YoutubeDlPlaylistPayload = YoutubeDlPayload & {
+  entries?: Array<YoutubeDlPlaylistEntry | null>;
+};
+
+type YoutubeDlPlaylistEntry = {
+  id?: string;
+  title?: string;
+  url?: string;
+  webpage_url?: string;
 };
 
 export type TempVoiceMusicState = {
@@ -91,6 +101,10 @@ export class TempVoiceMusicPlayer {
 
   public GetStatus(ChannelId: string): string {
     return this.GetState(ChannelId).Status;
+  }
+
+  public GetGuildActiveChannelId(GuildId: string): string | null {
+    return this.GetGuildSession(GuildId)?.ChannelId ?? null;
   }
 
   public async Play(Channel: VoiceBasedChannel, Url: string): Promise<{ Count: number; FirstTitle: string }> {
@@ -305,35 +319,36 @@ export class TempVoiceMusicPlayer {
 
   private async ResolveTracks(Url: string): Promise<TempVoiceMusicTrack[]> {
     const NormalizedUrl = this.NormalizeYouTubeUrl(Url);
-    const Validation = Play.yt_validate(NormalizedUrl);
     const VideoId = this.ExtractYouTubeVideoId(NormalizedUrl);
     const PlaylistId = this.ExtractYouTubePlaylistId(NormalizedUrl);
+    const IsPlaylist = Boolean(PlaylistId && !VideoId);
     const Debug = {
       InputUrl: Url,
+      IsPlaylist,
       NormalizedUrl,
       PlaylistId,
-      Validation,
       VideoId
     };
-    if (Validation === "playlist" || (PlaylistId && !VideoId)) {
+
+    if (IsPlaylist) {
       try {
-        const Playlist = await Play.playlist_info(NormalizedUrl, { incomplete: true });
-        const Videos = await Playlist.all_videos();
-        const Tracks = Videos.slice(0, MaxPlaylistTracks).map((Video) => ({
-          Title: Video.title ?? "YouTube track",
-          Url: this.NormalizeYouTubeUrl(Video.url)
-        }));
+        const Tracks = await this.LoadPlaylistTracks(NormalizedUrl);
+
+        if (Tracks.length === 0) {
+          throw new TempVoiceMusicError("Playlist did not contain playable YouTube tracks.", Debug);
+        }
+
         return Tracks;
       } catch (ErrorValue) {
         this.Logger.Warn("TempVoice music playlist load failed.", {
           ...Debug,
           Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue)
         });
-        throw new TempVoiceMusicError("Playlist could not be loaded.", Debug);
+        throw this.BuildYoutubeDlError("Playlist could not be loaded.", ErrorValue, Debug);
       }
     }
 
-    if (Validation === "video" || VideoId) {
+    if (VideoId) {
       const TrackUrl = VideoId ? `https://www.youtube.com/watch?v=${VideoId}` : NormalizedUrl;
 
       try {
@@ -350,7 +365,7 @@ export class TempVoiceMusicPlayer {
           Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
           TrackUrl
         });
-        throw new TempVoiceMusicError("Video could not be loaded.", Debug);
+        throw this.BuildYoutubeDlError("Video could not be loaded.", ErrorValue, Debug);
       }
     }
 
@@ -434,11 +449,19 @@ export class TempVoiceMusicPlayer {
   }
 
   private async ResolveDirectStreamUrl(Url: string): Promise<string> {
-    const Output = await YoutubeDl(Url, {
-      format: "bestaudio/best",
-      getUrl: true,
-      noWarnings: true
-    });
+    let Output: YoutubeDlPayload | string;
+
+    try {
+      Output = await YoutubeDl(Url, this.BuildYoutubeDlFlags({
+        format: "bestaudio/best",
+        getUrl: true
+      }));
+    } catch (ErrorValue) {
+      throw this.BuildYoutubeDlError("YouTube stream URL could not be resolved.", ErrorValue, {
+        TrackUrl: Url
+      });
+    }
+
     const DirectUrl = String(Output).trim().split(/\r?\n/u).find(Boolean);
 
     if (!DirectUrl) {
@@ -451,13 +474,83 @@ export class TempVoiceMusicPlayer {
   }
 
   private async LoadYoutubeInfo(Url: string): Promise<YoutubeDlPayload> {
-    const Output = await YoutubeDl(Url, {
+    const Output = await YoutubeDl(Url, this.BuildYoutubeDlFlags({
       dumpSingleJson: true,
-      noWarnings: true,
       skipDownload: true
-    });
+    }));
 
     return Output as YoutubeDlPayload;
+  }
+
+  private async LoadPlaylistTracks(Url: string): Promise<TempVoiceMusicTrack[]> {
+    const Output = await YoutubeDl(Url, this.BuildYoutubeDlFlags({
+      dumpSingleJson: true,
+      flatPlaylist: true,
+      ignoreErrors: true,
+      playlistEnd: MaxPlaylistTracks,
+      skipDownload: true
+    })) as YoutubeDlPlaylistPayload;
+    const Entries = Array.isArray(Output.entries) ? Output.entries : [];
+
+    return Entries
+      .filter((Entry): Entry is NonNullable<(typeof Entries)[number]> => Boolean(Entry))
+      .map((Entry) => {
+        const TrackUrl = this.BuildPlaylistEntryUrl(Entry);
+        return TrackUrl
+          ? {
+              Title: Entry.title?.trim() || `YouTube ${Entry.id ?? "track"}`,
+              Url: TrackUrl
+            }
+          : null;
+      })
+      .filter((Track): Track is TempVoiceMusicTrack => Track !== null)
+      .slice(0, MaxPlaylistTracks);
+  }
+
+  private BuildPlaylistEntryUrl(Entry: YoutubeDlPlaylistEntry): string | null {
+    if (Entry.webpage_url) {
+      return this.NormalizeYouTubeUrl(Entry.webpage_url);
+    }
+
+    if (Entry.id && /^[a-z0-9_-]{11}$/iu.test(Entry.id)) {
+      return `https://www.youtube.com/watch?v=${Entry.id}`;
+    }
+
+    if (Entry.url) {
+      return this.NormalizeYouTubeUrl(Entry.url);
+    }
+
+    return null;
+  }
+
+  private BuildYoutubeDlFlags(Flags: YoutubeDlFlags): YoutubeDlFlags {
+    const CookiesPath = process.env.TEMPVOICE_YOUTUBE_COOKIES_PATH ?? process.env.YOUTUBE_COOKIES_PATH ?? "";
+
+    return {
+      noWarnings: true,
+      ...Flags,
+      ...(CookiesPath ? { cookies: CookiesPath } : {})
+    };
+  }
+
+  private BuildYoutubeDlError(Message: string, ErrorValue: unknown, Debug: Record<string, unknown>): TempVoiceMusicError {
+    const ErrorMessage = ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue);
+
+    if (ErrorMessage.includes("Sign in to confirm") || ErrorMessage.includes("--cookies")) {
+      return new TempVoiceMusicError(`${Message} YouTube requires cookies for this video. Set TEMPVOICE_YOUTUBE_COOKIES_PATH to a Netscape cookies.txt file exported from a logged-in browser.`, {
+        ...Debug,
+        Error: ErrorMessage
+      });
+    }
+
+    if (ErrorValue instanceof TempVoiceMusicError) {
+      return ErrorValue;
+    }
+
+    return new TempVoiceMusicError(Message, {
+      ...Debug,
+      Error: ErrorMessage
+    });
   }
 
   private StopFfmpeg(Session: TempVoiceMusicSession): void {

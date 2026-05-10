@@ -167,6 +167,76 @@
       "Label": "Music paused status",
       "Default": "Paused: %title%",
       "Section": "Music messages"
+    },
+    {
+      "Key": "TTSEnabled",
+      "Type": "Boolean",
+      "Label": "Enable public TTS button",
+      "Default": true,
+      "Section": "TTS"
+    },
+    {
+      "Key": "TTSButtonLabel",
+      "Type": "String",
+      "Label": "TTS button label",
+      "Default": "TTS",
+      "Section": "TTS"
+    },
+    {
+      "Key": "TTSDefaultLanguage",
+      "Type": "String",
+      "Label": "Default TTS language",
+      "Default": "fr",
+      "Section": "TTS"
+    },
+    {
+      "Key": "TTSModalTitle",
+      "Type": "String",
+      "Label": "TTS modal title",
+      "Default": "Speak with TTS",
+      "Section": "TTS"
+    },
+    {
+      "Key": "TTSModalTextLabel",
+      "Type": "String",
+      "Label": "TTS text input label",
+      "Default": "Text to say",
+      "Section": "TTS"
+    },
+    {
+      "Key": "TTSModalLanguageLabel",
+      "Type": "String",
+      "Label": "TTS language input label",
+      "Default": "Language (fr, en, es...)",
+      "Section": "TTS"
+    },
+    {
+      "Key": "TTSStartedMessage",
+      "Type": "String",
+      "Label": "TTS started message",
+      "Default": "TTS started.",
+      "Section": "TTS messages"
+    },
+    {
+      "Key": "TTSBusyMessage",
+      "Type": "String",
+      "Label": "TTS busy message",
+      "Default": "The bot is already connected in %channel%.",
+      "Section": "TTS messages"
+    },
+    {
+      "Key": "TTSDisabledMessage",
+      "Type": "String",
+      "Label": "TTS disabled message",
+      "Default": "TTS is disabled on this server.",
+      "Section": "TTS messages"
+    },
+    {
+      "Key": "TTSFailedMessage",
+      "Type": "String",
+      "Label": "TTS failed message",
+      "Default": "TTS failed: %error%",
+      "Section": "TTS messages"
     }
   ],
   "EntryPoint": "./TempVoicePlugin.ts",
