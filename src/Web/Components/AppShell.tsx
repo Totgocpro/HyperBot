@@ -84,7 +84,7 @@ export function AppShell(Properties: { children: ReactNode }) {
   return (
     <>
       {ShowHud ? (
-        <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-800 bg-slate-950/90 px-3 py-2 text-slate-100 shadow-xl shadow-black/20 backdrop-blur sm:px-5 sm:py-3">
+        <header className="fixed inset-x-0 top-0 z-[55] border-b border-slate-800 bg-slate-950/90 px-3 py-2 text-slate-100 shadow-xl shadow-black/20 backdrop-blur sm:px-5 sm:py-3">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 sm:gap-4">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <Link className="rounded-2xl bg-blue-600 px-3 py-2 text-sm font-black text-white sm:px-4" href="/">

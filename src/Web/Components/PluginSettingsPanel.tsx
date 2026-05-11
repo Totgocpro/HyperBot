@@ -547,7 +547,7 @@ function UnsavedChangesBar(Properties: {
   PluginName: string;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 sm:px-6 sm:pb-5">
+    <div className="fixed inset-x-0 bottom-0 z-[70] px-3 pb-3 sm:px-6 sm:pb-5">
       <div className="mx-auto flex max-w-5xl flex-col gap-3 rounded-2xl border border-red-500/60 bg-slate-950 p-3 shadow-2xl shadow-black/60 ring-1 ring-red-500/20 sm:flex-row sm:items-center sm:justify-between sm:p-4">
         <div className="min-w-0">
           <p className="text-sm font-black text-white">Unsaved changes</p>
