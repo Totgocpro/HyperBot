@@ -683,6 +683,28 @@
       }
     },
     {
+      "Key": "CaptchaJoinDmReminderEnabled",
+      "Type": "Boolean",
+      "Label": "Send captcha reminder DM on join",
+      "Default": false,
+      "Section": "Captcha messages",
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
+    },
+    {
+      "Key": "CaptchaJoinDmReminderMessage",
+      "Type": "String",
+      "Label": "Join reminder DM message",
+      "Default": "Welcome to %server%. Please verify in %captchaChannel% to unlock the server.",
+      "Section": "Captcha messages",
+      "VisibleWhen": {
+        "Key": "CaptchaEnabled",
+        "Value": true
+      }
+    },
+    {
       "Key": "CaptchaAlreadyVerifiedMessage",
       "Type": "String",
       "Label": "Already verified response",

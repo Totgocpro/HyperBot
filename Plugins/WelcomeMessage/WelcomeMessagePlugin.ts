@@ -74,6 +74,8 @@ type WelcomeMessageConfig = {
   CaptchaDmMessage: string;
   CaptchaDmSentMessage: string;
   CaptchaDmFailedMessage: string;
+  CaptchaJoinDmReminderEnabled: boolean;
+  CaptchaJoinDmReminderMessage: string;
   CaptchaAlreadyVerifiedMessage: string;
   CaptchaExpiredMessage: string;
   CaptchaFailedMessage: string;
@@ -179,6 +181,8 @@ const DefaultConfig: WelcomeMessageConfig = {
   CaptchaDmMessage: "Verification level %level%/%levels%. Enter the code shown in the image.",
   CaptchaDmSentMessage: "I sent your captcha in DM. Complete every level there to unlock the server.",
   CaptchaDmFailedMessage: "I could not send you a DM. Enable direct messages for this server and try again.",
+  CaptchaJoinDmReminderEnabled: false,
+  CaptchaJoinDmReminderMessage: "Welcome to %server%. Please verify in %captchaChannel% to unlock the server.",
   CaptchaAlreadyVerifiedMessage: "You are already verified.",
   CaptchaExpiredMessage: "This captcha session expired. Start verification again from the server.",
   CaptchaFailedMessage: "Captcha failed. Use the latest DM image and try again.",
@@ -199,8 +203,15 @@ type CaptchaSession = {
   CreatedAt: number;
 };
 
+type CaptchaPanelReference = {
+  ChannelId: string;
+  MessageId: string;
+  UpdatedAt: number;
+};
+
 const CaptchaSessions = new Map<string, CaptchaSession>();
 const CaptchaSessionTtlMilliseconds = 10 * 60 * 1000;
+const CaptchaPanelReferenceKey = "CaptchaPanelReference";
 
 export default class WelcomeMessagePlugin extends BasePlugin {
   private readonly ImageRenderer = new WelcomeImageRenderer(this.Logger);
@@ -230,8 +241,9 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       });
     }
 
-    if (Config.CaptchaEnabled && Config.CaptchaChannelId && Config.CaptchaRoleIds.length > 0) {
-      await this.SendCaptchaMessage(Member, Config, true);
+    if (Config.CaptchaEnabled && Config.CaptchaChannelId && Config.CaptchaRoleIds.length > 0 && !this.HasAllCaptchaRoles(Member, Config)) {
+      await this.EnsureReusableCaptchaPanel(Member, Config);
+      await this.SendCaptchaJoinDmReminder(Member, Config);
     }
   }
 
@@ -274,7 +286,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
         throw new Error(`Welcome captcha panel action failed for guild ${GuildId}: CaptchaChannelId is not configured.`);
       }
 
-      await this.SendCaptchaMessage(Member, Config, false);
+      await this.EnsureReusableCaptchaPanel(Member, Config, true);
       return;
     }
 
@@ -323,13 +335,91 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     }
   }
 
-  private async SendCaptchaMessage(Member: GuildMember, Config: WelcomeMessageConfig, IsPersonalized: boolean): Promise<void> {
+  private async EnsureReusableCaptchaPanel(Member: GuildMember, Config: WelcomeMessageConfig, ThrowOnFailure = false): Promise<CaptchaPanelReference | null> {
+    const ExistingPanel = await this.GetStoredCaptchaPanelReference(Member.guild.id);
+    const PanelPayload = this.BuildCaptchaPanelPayload(Member, Config);
+
+    if (ExistingPanel) {
+      const ExistingMessage = await this.FetchCaptchaPanelMessage(Member.guild.id, ExistingPanel).catch(() => null);
+
+      if (ExistingMessage) {
+        await ExistingMessage.edit(PanelPayload);
+        const UpdatedPanel = {
+          ChannelId: ExistingPanel.ChannelId,
+          MessageId: ExistingPanel.MessageId,
+          UpdatedAt: Date.now()
+        };
+        await this.Storage.SetGlobalConfig(Member.guild.id, CaptchaPanelReferenceKey, UpdatedPanel);
+        return UpdatedPanel;
+      }
+    }
+
     const Channel = await this.ResolveWritableChannel(Member.guild.id, Config.CaptchaChannelId);
 
     if (!Channel) {
-      throw new Error(`Captcha panel action failed for guild ${Member.guild.id}: channel ${Config.CaptchaChannelId} is missing or is not writable.`);
+      const ErrorMessage = `Captcha panel action failed for guild ${Member.guild.id}: channel ${Config.CaptchaChannelId} is missing or is not writable.`;
+
+      if (ThrowOnFailure) {
+        throw new Error(ErrorMessage);
+      }
+
+      this.Logger.Warn(ErrorMessage);
+      return null;
     }
 
+    const Message = await Channel.send(PanelPayload);
+    const PanelReference = {
+      ChannelId: Config.CaptchaChannelId,
+      MessageId: Message.id,
+      UpdatedAt: Date.now()
+    };
+
+    await this.Storage.SetGlobalConfig(Member.guild.id, CaptchaPanelReferenceKey, PanelReference);
+    return PanelReference;
+  }
+
+  private async SendCaptchaJoinDmReminder(Member: GuildMember, Config: WelcomeMessageConfig): Promise<void> {
+    if (!Config.CaptchaJoinDmReminderEnabled || !Config.CaptchaJoinDmReminderMessage.trim()) {
+      return;
+    }
+
+    await Member.send({
+      content: this.ApplyTemplate(Config.CaptchaJoinDmReminderMessage, Member).replaceAll("%captchaChannel%", `<#${Config.CaptchaChannelId}>`)
+    }).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Captcha join DM reminder could not be sent.", {
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        GuildId: Member.guild.id,
+        UserId: Member.user.id
+      });
+    });
+  }
+
+  private async GetStoredCaptchaPanelReference(GuildId: string): Promise<CaptchaPanelReference | null> {
+    const Value = await this.Storage.GetGlobalConfig<unknown>(GuildId, CaptchaPanelReferenceKey);
+
+    if (!Value || typeof Value !== "object" || Array.isArray(Value)) {
+      return null;
+    }
+
+    const RecordValue = Value as Record<string, unknown>;
+
+    if (typeof RecordValue.ChannelId !== "string" || typeof RecordValue.MessageId !== "string") {
+      return null;
+    }
+
+    return {
+      ChannelId: RecordValue.ChannelId,
+      MessageId: RecordValue.MessageId,
+      UpdatedAt: typeof RecordValue.UpdatedAt === "number" ? RecordValue.UpdatedAt : 0
+    };
+  }
+
+  private async FetchCaptchaPanelMessage(GuildId: string, Panel: CaptchaPanelReference) {
+    const Channel = await this.ResolveWritableChannel(GuildId, Panel.ChannelId);
+    return Channel?.messages.fetch(Panel.MessageId) ?? null;
+  }
+
+  private BuildCaptchaPanelPayload(Member: GuildMember, Config: WelcomeMessageConfig) {
     const BuiltEmbed = this.BuildConfiguredEmbed(Config.CaptchaEmbed, Member, {
       Title: Config.CaptchaTitle,
       Description: Config.CaptchaMessage,
@@ -337,22 +427,20 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       Footer: "%server%",
       ShowAuthor: false
     });
-    const CustomId = IsPersonalized ? `WelcomeCaptcha:Start:${Member.user.id}` : "WelcomeCaptcha:Start";
     const Components = [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(CustomId)
+          .setCustomId("WelcomeCaptcha:Start")
           .setLabel(Config.CaptchaButtonLabel || DefaultConfig.CaptchaButtonLabel)
           .setStyle(ButtonStyle.Primary)
       )
     ];
 
-    await Channel.send({
-      content: IsPersonalized ? `<@${Member.user.id}>` : undefined,
+    return {
       embeds: [BuiltEmbed.Embed],
       files: BuiltEmbed.Files,
       components: Components
-    });
+    };
   }
 
   private async HandleCaptchaButton(InteractionValue: ButtonInteraction): Promise<void> {
@@ -870,6 +958,8 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       CaptchaDmMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmMessage")) ?? DefaultConfig.CaptchaDmMessage,
       CaptchaDmSentMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmSentMessage")) ?? DefaultConfig.CaptchaDmSentMessage,
       CaptchaDmFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaDmFailedMessage")) ?? DefaultConfig.CaptchaDmFailedMessage,
+      CaptchaJoinDmReminderEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "CaptchaJoinDmReminderEnabled")) ?? DefaultConfig.CaptchaJoinDmReminderEnabled,
+      CaptchaJoinDmReminderMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaJoinDmReminderMessage")) ?? DefaultConfig.CaptchaJoinDmReminderMessage,
       CaptchaAlreadyVerifiedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaAlreadyVerifiedMessage")) ?? DefaultConfig.CaptchaAlreadyVerifiedMessage,
       CaptchaExpiredMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaExpiredMessage")) ?? DefaultConfig.CaptchaExpiredMessage,
       CaptchaFailedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaFailedMessage")) ?? DefaultConfig.CaptchaFailedMessage,
