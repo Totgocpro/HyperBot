@@ -111,7 +111,13 @@
       "ValidateAs": "Regex",
       "Label": "AutoMod regex patterns",
       "Default": [],
-      "Section": "Regex AutoMod"
+      "Section": "Regex AutoMod",
+      "VisibleWhenAny": [
+        {
+          "Key": "AutoModEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "AutoModAction",
@@ -132,6 +138,12 @@
           "Label": "Delete and warn",
           "Value": "DeleteAndWarn"
         }
+      ],
+      "VisibleWhenAny": [
+        {
+          "Key": "AutoModEnabled",
+          "Value": true
+        } 
       ]
     },
     {
@@ -139,14 +151,26 @@
       "Type": "String",
       "Label": "AutoMod warn reason",
       "Default": "Message matched AutoMod rule: %pattern%",
-      "Section": "Regex AutoMod"
+      "Section": "Regex AutoMod",
+      "VisibleWhenAny": [
+        {
+          "Key": "AutoModEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "AutoModLogMessage",
       "Type": "String",
       "Label": "AutoMod log message",
       "Default": "AutoMod matched %user% in %channel% with `%pattern%`: %content%",
-      "Section": "Regex AutoMod"
+      "Section": "Regex AutoMod",
+      "VisibleWhenAny": [
+        {
+          "Key": "AutoModEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "RepeatedSpamEnabled",
@@ -160,14 +184,26 @@
       "Type": "Number",
       "Label": "Repeated spam window seconds",
       "Default": 10,
-      "Section": "Repeated spam"
+      "Section": "Repeated spam",
+      "VisibleWhenAny": [
+        {
+          "Key": "RepeatedSpamEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "RepeatedSpamThreshold",
       "Type": "Number",
       "Label": "Repeated spam threshold",
       "Default": 3,
-      "Section": "Repeated spam"
+      "Section": "Repeated spam",
+      "VisibleWhenAny": [
+        {
+          "Key": "RepeatedSpamEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "RepeatedSpamAction",
@@ -188,6 +224,12 @@
           "Label": "Delete and warn",
           "Value": "DeleteAndWarn"
         }
+      ],
+      "VisibleWhenAny": [
+        {
+          "Key": "RepeatedSpamEnabled",
+          "Value": true
+        } 
       ]
     },
     {
@@ -203,7 +245,13 @@
       "ItemType": "String",
       "Label": "Allowed invite codes",
       "Default": [],
-      "Section": "Invite blocking"
+      "Section": "Invite blocking",
+      "VisibleWhenAny": [
+        {
+          "Key": "InviteBlockEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "InviteBlockAction",
@@ -224,6 +272,12 @@
           "Label": "Delete and warn",
           "Value": "DeleteAndWarn"
         }
+      ],
+      "VisibleWhenAny": [
+        {
+          "Key": "InviteBlockEnabled",
+          "Value": true
+        } 
       ]
     },
     {
@@ -231,14 +285,26 @@
       "Type": "String",
       "Label": "Invite block warn reason",
       "Default": "Invite links to other servers are not allowed: %invite%",
-      "Section": "Invite blocking"
+      "Section": "Invite blocking",
+      "VisibleWhenAny": [
+        {
+          "Key": "InviteBlockEnabled",
+          "Value": true
+        }
+      ]
     },
     {
       "Key": "InviteBlockLogMessage",
       "Type": "String",
       "Label": "Invite block log message",
       "Default": "Blocked invite from %user% in %channel%: %invite%",
-      "Section": "Invite blocking"
+      "Section": "Invite blocking",
+      "VisibleWhenAny": [
+        {
+          "Key": "InviteBlockEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "ReplaceWordEnabled",
@@ -253,7 +319,13 @@
       "ItemType": "String",
       "Label": "Word replacement rules",
       "Default": [],
-      "Section": "Message rewriting"
+      "Section": "Message rewriting",
+      "VisibleWhenAny": [
+        {
+          "Key": "ReplaceWordEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "CensorWordEnabled",
@@ -282,7 +354,13 @@
         "rape",
         "violate"
       ],
-      "Section": "Message rewriting"
+      "Section": "Message rewriting",
+      "VisibleWhenAny": [
+        {
+          "Key": "CensorWordEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "RewriteWarnUser",

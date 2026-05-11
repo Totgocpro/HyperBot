@@ -180,63 +180,117 @@
       "Type": "String",
       "Label": "TTS button label",
       "Default": "TTS",
-      "Section": "TTS"
+      "Section": "TTS",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSDefaultLanguage",
       "Type": "String",
       "Label": "Default TTS language",
       "Default": "fr",
-      "Section": "TTS"
+      "Section": "TTS",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSModalTitle",
       "Type": "String",
       "Label": "TTS modal title",
       "Default": "Speak with TTS",
-      "Section": "TTS"
+      "Section": "TTS",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSModalTextLabel",
       "Type": "String",
       "Label": "TTS text input label",
       "Default": "Text to say",
-      "Section": "TTS"
+      "Section": "TTS",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSModalLanguageLabel",
       "Type": "String",
       "Label": "TTS language input label",
       "Default": "Language (fr, en, es...)",
-      "Section": "TTS"
+      "Section": "TTS",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSStartedMessage",
       "Type": "String",
       "Label": "TTS started message",
       "Default": "TTS started.",
-      "Section": "TTS messages"
+      "Section": "TTS messages",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSBusyMessage",
       "Type": "String",
       "Label": "TTS busy message",
       "Default": "The bot is already connected in %channel%.",
-      "Section": "TTS messages"
+      "Section": "TTS messages",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSDisabledMessage",
       "Type": "String",
       "Label": "TTS disabled message",
       "Default": "TTS is disabled on this server.",
-      "Section": "TTS messages"
+      "Section": "TTS messages",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     },
     {
       "Key": "TTSFailedMessage",
       "Type": "String",
       "Label": "TTS failed message",
       "Default": "TTS failed: %error%",
-      "Section": "TTS messages"
+      "Section": "TTS messages",
+      "VisibleWhenAny": [
+        {
+          "Key": "TTSEnabled",
+          "Value": true
+        } 
+      ]
     }
   ],
   "EntryPoint": "./TempVoicePlugin.ts",
