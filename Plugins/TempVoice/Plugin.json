@@ -42,12 +42,32 @@
       "Section": "Creation"
     },
     {
+      "Key": "LockEnabled",
+      "Type": "Boolean",
+      "Label": "Enable temporary room lock",
+      "Default": true,
+      "Section": "Owner controls"
+    },
+    {
+      "Key": "BanEnabled",
+      "Type": "Boolean",
+      "Label": "Enable temporary room bans",
+      "Default": true,
+      "Section": "Owner controls"
+    },
+    {
       "Key": "ProtectedRoleIds",
       "Type": "List",
       "Label": "Roles protected from channel bans",
       "Default": [],
       "Section": "Protection",
-      "ItemType": "RolePicker"
+      "ItemType": "RolePicker",
+      "VisibleWhenAny": [
+        {
+          "Key": "BanEnabled",
+          "Value": true
+        }
+      ]
     },
     {
       "Key": "ControlPanelTitle",

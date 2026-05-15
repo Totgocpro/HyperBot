@@ -31,6 +31,8 @@ type TempVoiceConfig = {
   ChannelNameTemplate: string;
   DefaultUserLimit: number;
   DefaultBitrateKbps: number;
+  LockEnabled: boolean;
+  BanEnabled: boolean;
   ProtectedRoleIds: string[];
   ControlPanelTitle: string;
   ControlPanelDescription: string;
@@ -83,6 +85,8 @@ const DefaultConfig: TempVoiceConfig = {
   ChannelNameTemplate: "%user%'s voice room",
   DefaultUserLimit: 0,
   DefaultBitrateKbps: 64,
+  LockEnabled: true,
+  BanEnabled: true,
   ProtectedRoleIds: [],
   ControlPanelTitle: "Temporary voice control panel",
   ControlPanelDescription: "Only the current room owner can use these controls.",
@@ -189,7 +193,7 @@ export default class TempVoicePlugin extends BasePlugin {
         },
         {
           id: Member.id,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.MoveMembers]
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
         }
       ],
       reason: "Temporary voice channel created by HyperBot"
@@ -318,6 +322,14 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     if (Action === "Lock") {
+      const Config = await this.GetConfig(InteractionValue.guildId);
+
+      if (!Config.LockEnabled) {
+        await InteractionValue.reply({ content: "Room lock is disabled on this server.", ephemeral: true });
+        await this.SendControlPanelFromSession(InteractionValue.guild, Session, Config, InteractionValue);
+        return;
+      }
+
       await this.SetLocked(InteractionValue, Session, !Session.Locked);
       return;
     }
@@ -338,6 +350,14 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     if (Action === "Ban") {
+      const Config = await this.GetConfig(InteractionValue.guildId);
+
+      if (!Config.BanEnabled) {
+        await InteractionValue.reply({ content: "Room bans are disabled on this server.", ephemeral: true });
+        await this.SendControlPanelFromSession(InteractionValue.guild, Session, Config, InteractionValue);
+        return;
+      }
+
       await this.ShowMemberSelect(InteractionValue, Session, "Ban");
       return;
     }
@@ -394,6 +414,12 @@ export default class TempVoicePlugin extends BasePlugin {
     if (Action === "Ban") {
       const Config = await this.GetConfig(InteractionValue.guildId);
       const Member = await InteractionValue.guild.members.fetch(TargetMemberId).catch(() => null);
+
+      if (!Config.BanEnabled) {
+        await InteractionValue.reply({ content: "Room bans are disabled on this server.", ephemeral: true });
+        await this.SendControlPanel(Channel, Session, Config);
+        return;
+      }
 
       if (!this.CanBanFromTemporaryRoom(Channel)) {
         await InteractionValue.reply({ content: "The bot cannot ban members from this room.", ephemeral: true });
@@ -559,6 +585,12 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     const Config = await this.GetConfig(InteractionValue.guildId);
+
+    if (Action === "Ban" && !Config.BanEnabled) {
+      await InteractionValue.reply({ content: "Room bans are disabled on this server.", ephemeral: true });
+      await this.SendControlPanel(Channel, Session, Config, InteractionValue);
+      return;
+    }
 
     if (Action === "Ban" && !this.CanBanFromTemporaryRoom(Channel)) {
       await InteractionValue.reply({ content: "The bot cannot ban members from this room.", ephemeral: true });
@@ -806,8 +838,8 @@ export default class TempVoicePlugin extends BasePlugin {
     const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
     const MusicStatus = this.GetMusicStatus(MusicState, Config, Session.ChannelId);
     const BusyAudioChannelId = this.GetBusyAudioChannelId(Session.GuildId, Session.ChannelId);
-    const CanManagePermissions = this.CanManageTemporaryRoomPermissions(Channel);
-    const CanBanMembers = this.CanBanFromTemporaryRoom(Channel);
+    const CanManagePermissions = Config.LockEnabled && this.CanManageTemporaryRoomPermissions(Channel);
+    const CanBanMembers = Config.BanEnabled && this.CanBanFromTemporaryRoom(Channel);
     const Embed = new EmbedBuilder()
       .setTitle(Config.ControlPanelTitle)
       .setDescription(this.ApplyControlTemplate(Config.ControlPanelDescription, Channel, Session))
@@ -956,6 +988,16 @@ export default class TempVoicePlugin extends BasePlugin {
     await this.SendControlPanel(Channel, Session, await this.GetConfig(Session.GuildId));
   }
 
+  private async SendControlPanelFromSession(Guild: Guild, Session: TempVoiceSession, Config: TempVoiceConfig, SourceInteraction?: ButtonInteraction<"cached">): Promise<void> {
+    const Channel = await Guild.channels.fetch(Session.ChannelId).catch(() => null);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+      return;
+    }
+
+    await this.SendControlPanel(Channel, Session, Config, SourceInteraction);
+  }
+
   private async DeleteTemporaryChannel(Channel: VoiceChannel): Promise<void> {
     await Channel.permissionOverwrites.edit(Channel.guild.id, {
       Connect: true,
@@ -1004,6 +1046,8 @@ export default class TempVoicePlugin extends BasePlugin {
       ChannelNameTemplate: (await this.Storage.GetGlobalConfig<string>(GuildId, "ChannelNameTemplate")) ?? DefaultConfig.ChannelNameTemplate,
       DefaultUserLimit: (await this.Storage.GetGlobalConfig<number>(GuildId, "DefaultUserLimit")) ?? DefaultConfig.DefaultUserLimit,
       DefaultBitrateKbps: (await this.Storage.GetGlobalConfig<number>(GuildId, "DefaultBitrateKbps")) ?? DefaultConfig.DefaultBitrateKbps,
+      LockEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "LockEnabled")) ?? DefaultConfig.LockEnabled,
+      BanEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "BanEnabled")) ?? DefaultConfig.BanEnabled,
       ProtectedRoleIds: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "ProtectedRoleIds")) ?? DefaultConfig.ProtectedRoleIds,
       ControlPanelTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "ControlPanelTitle")) ?? DefaultConfig.ControlPanelTitle,
       ControlPanelDescription: (await this.Storage.GetGlobalConfig<string>(GuildId, "ControlPanelDescription")) ?? DefaultConfig.ControlPanelDescription,
