@@ -161,6 +161,27 @@
       "Section": "Music messages"
     },
     {
+      "Key": "MusicPanelEnabled",
+      "Type": "Boolean",
+      "Label": "Enable now playing image panel",
+      "Default": true,
+      "Section": "Music panel",
+      "Description": "When music is playing, Temp Voice posts a private room message with a generated player image and edits it every 3.5 seconds."
+    },
+    {
+      "Key": "MusicPanelAddButtonLabel",
+      "Type": "String",
+      "Label": "Waitlist button label",
+      "Default": "Add to waitlist",
+      "Section": "Music panel",
+      "VisibleWhenAny": [
+        {
+          "Key": "MusicPanelEnabled",
+          "Value": true
+        }
+      ]
+    },
+    {
       "Key": "MusicYoutubeAccountMode",
       "Type": "Select",
       "Label": "YouTube account linking",

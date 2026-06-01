@@ -18,9 +18,13 @@ import { youtubeDl as YoutubeDl, type Flags as YoutubeDlFlags, type Payload as Y
 import type { PluginLoggerContract } from "../../src/Core/Types.js";
 
 type TempVoiceMusicTrack = {
+  Author?: string;
   DirectUrl?: string;
+  DurationSeconds?: number | null;
+  ThumbnailUrl?: string;
   Title: string;
   Url: string;
+  VideoId?: string;
 };
 
 type TempVoiceMusicPlayOptions = {
@@ -43,13 +47,16 @@ export class TempVoiceMusicBusyError extends Error {
 }
 
 type TempVoiceMusicSession = {
+  AccumulatedPausedMs: number;
   ChannelId: string;
   Connection: VoiceConnection;
   CurrentTrack: TempVoiceMusicTrack | null;
   FfmpegProcess: ChildProcessByStdio<null, Readable, Readable> | null;
   GuildId: string;
+  PausedAtMs: number | null;
   Player: AudioPlayer;
   Queue: TempVoiceMusicTrack[];
+  StartedAtMs: number | null;
   YoutubeCookiesPath?: string | null;
 };
 
@@ -58,8 +65,13 @@ type YoutubeDlPlaylistPayload = YoutubeDlPayload & {
 };
 
 type YoutubeDlPlaylistEntry = {
+  artist?: string;
+  channel?: string;
+  duration?: number | string | null;
   id?: string;
+  thumbnail?: string;
   title?: string;
+  uploader?: string;
   url?: string;
   webpage_url?: string;
 };
@@ -67,8 +79,23 @@ type YoutubeDlPlaylistEntry = {
 export type TempVoiceMusicState = {
   Active: boolean;
   CanSkip: boolean;
+  ChannelId: string;
+  DurationSeconds: number | null;
   Paused: boolean;
+  PositionSeconds: number;
+  Queue: Array<{
+    Author: string;
+    DurationSeconds: number | null;
+    ThumbnailUrl: string;
+    Title: string;
+    Url: string;
+    VideoId: string;
+  }>;
+  TrackAuthor: string;
   TrackTitle: string;
+  TrackThumbnailUrl: string;
+  TrackUrl: string;
+  TrackVideoId: string;
   Status: string;
 };
 
@@ -89,18 +116,42 @@ export class TempVoiceMusicPlayer {
       return {
         Active: false,
         CanSkip: false,
+        ChannelId,
+        DurationSeconds: null,
         Paused: false,
+        PositionSeconds: 0,
+        Queue: [],
+        TrackAuthor: "",
         TrackTitle: "",
+        TrackThumbnailUrl: "",
+        TrackUrl: "",
+        TrackVideoId: "",
         Status: "Idle"
       };
     }
 
     const Paused = Session.Player.state.status === AudioPlayerStatus.Paused;
+    const PositionSeconds = this.GetSessionPositionSeconds(Session);
     return {
       Active: true,
       CanSkip: Session.Queue.length > 0,
+      ChannelId,
+      DurationSeconds: Session.CurrentTrack.DurationSeconds ?? null,
       Paused,
+      PositionSeconds,
+      Queue: Session.Queue.map((Track) => ({
+        Author: Track.Author ?? "",
+        DurationSeconds: Track.DurationSeconds ?? null,
+        ThumbnailUrl: Track.ThumbnailUrl ?? this.BuildYoutubeThumbnailUrl(Track.VideoId ?? this.ExtractYouTubeVideoId(Track.Url) ?? ""),
+        Title: Track.Title,
+        Url: Track.Url,
+        VideoId: Track.VideoId ?? this.ExtractYouTubeVideoId(Track.Url) ?? ""
+      })),
+      TrackAuthor: Session.CurrentTrack.Author ?? "",
       TrackTitle: Session.CurrentTrack.Title,
+      TrackThumbnailUrl: Session.CurrentTrack.ThumbnailUrl ?? this.BuildYoutubeThumbnailUrl(Session.CurrentTrack.VideoId ?? this.ExtractYouTubeVideoId(Session.CurrentTrack.Url) ?? ""),
+      TrackUrl: Session.CurrentTrack.Url,
+      TrackVideoId: Session.CurrentTrack.VideoId ?? this.ExtractYouTubeVideoId(Session.CurrentTrack.Url) ?? "",
       Status: `${Paused ? "Paused" : "Playing"}: ${Session.CurrentTrack.Title}`
     };
   }
@@ -196,11 +247,38 @@ export class TempVoiceMusicPlayer {
   }
 
   public Pause(ChannelId: string): boolean {
-    return this.Sessions.get(ChannelId)?.Player.pause() ?? false;
+    const Session = this.Sessions.get(ChannelId);
+
+    if (!Session) {
+      return false;
+    }
+
+    const Paused = Session.Player.pause();
+
+    if (Paused && !Session.PausedAtMs) {
+      Session.PausedAtMs = Date.now();
+      this.NotifyStateChanged(ChannelId);
+    }
+
+    return Paused;
   }
 
   public Resume(ChannelId: string): boolean {
-    return this.Sessions.get(ChannelId)?.Player.unpause() ?? false;
+    const Session = this.Sessions.get(ChannelId);
+
+    if (!Session) {
+      return false;
+    }
+
+    const Resumed = Session.Player.unpause();
+
+    if (Resumed && Session.PausedAtMs) {
+      Session.AccumulatedPausedMs += Date.now() - Session.PausedAtMs;
+      Session.PausedAtMs = null;
+      this.NotifyStateChanged(ChannelId);
+    }
+
+    return Resumed;
   }
 
   public async Skip(ChannelId: string): Promise<boolean> {
@@ -248,13 +326,16 @@ export class TempVoiceMusicPlayer {
       adapterCreator: (Channel.guild as Guild).voiceAdapterCreator
     });
     const Session: TempVoiceMusicSession = {
+      AccumulatedPausedMs: 0,
       ChannelId: Channel.id,
       Connection,
       CurrentTrack: null,
       FfmpegProcess: null,
       GuildId: Channel.guild.id,
+      PausedAtMs: null,
       Player,
       Queue: [],
+      StartedAtMs: null,
       YoutubeCookiesPath: undefined
     };
 
@@ -285,6 +366,9 @@ export class TempVoiceMusicPlayer {
     const Track = Session.Queue.shift() ?? null;
     this.StopFfmpeg(Session);
     Session.CurrentTrack = Track;
+    Session.StartedAtMs = null;
+    Session.PausedAtMs = null;
+    Session.AccumulatedPausedMs = 0;
 
     if (!Track) {
       this.DestroySession(ChannelId, Session);
@@ -344,6 +428,7 @@ export class TempVoiceMusicPlayer {
       const Resource = createAudioResource(Ffmpeg.stdout, {
         inputType: StreamType.Raw
       });
+      Session.StartedAtMs = Date.now();
       Session.Player.play(Resource);
       this.NotifyStateChanged(ChannelId);
       return Track;
@@ -451,8 +536,12 @@ export class TempVoiceMusicPlayer {
         const Title = Info.title ?? `YouTube ${VideoId ?? "track"}`;
 
         return [{
+          Author: this.ExtractAuthor(Info),
+          DurationSeconds: this.ParseDurationSeconds(Info.duration),
+          ThumbnailUrl: typeof Info.thumbnail === "string" ? Info.thumbnail : this.BuildYoutubeThumbnailUrl(VideoId ?? ""),
           Title,
-          Url: TrackUrl
+          Url: TrackUrl,
+          VideoId: VideoId ?? undefined
         }];
       } catch (ErrorValue) {
         this.Logger.Warn("TempVoice music video info failed.", {
@@ -589,12 +678,17 @@ export class TempVoiceMusicPlayer {
 
     return Entries
       .filter((Entry): Entry is NonNullable<(typeof Entries)[number]> => Boolean(Entry))
-      .map((Entry) => {
+      .map((Entry): TempVoiceMusicTrack | null => {
         const TrackUrl = this.BuildPlaylistEntryUrl(Entry);
+        const VideoId = Entry.id && /^[a-z0-9_-]{11}$/iu.test(Entry.id) ? Entry.id : this.ExtractYouTubeVideoId(TrackUrl ?? "");
         return TrackUrl
           ? {
+              Author: this.ExtractAuthor(Entry),
+              DurationSeconds: this.ParseDurationSeconds(Entry.duration),
+              ThumbnailUrl: Entry.thumbnail ?? this.BuildYoutubeThumbnailUrl(VideoId ?? ""),
               Title: Entry.title?.trim() || `YouTube ${Entry.id ?? "track"}`,
-              Url: TrackUrl
+              Url: TrackUrl,
+              VideoId: VideoId ?? undefined
             }
           : null;
       })
@@ -616,6 +710,46 @@ export class TempVoiceMusicPlayer {
     }
 
     return null;
+  }
+
+  private BuildYoutubeThumbnailUrl(VideoId: string): string {
+    return VideoId ? `https://i.ytimg.com/vi/${VideoId}/hqdefault.jpg` : "";
+  }
+
+  private ExtractAuthor(Value: unknown): string {
+    const Source = Value as Record<string, unknown> | null;
+
+    for (const Key of ["artist", "uploader", "channel", "creator"] as const) {
+      const Candidate = Source?.[Key];
+
+      if (typeof Candidate === "string" && Candidate.trim()) {
+        return Candidate.trim();
+      }
+    }
+
+    return "";
+  }
+
+  private GetSessionPositionSeconds(Session: TempVoiceMusicSession): number {
+    if (!Session.StartedAtMs) {
+      return 0;
+    }
+
+    const EffectiveNow = Session.PausedAtMs ?? Date.now();
+    const ElapsedMs = Math.max(0, EffectiveNow - Session.StartedAtMs - Session.AccumulatedPausedMs);
+    const PositionSeconds = Math.floor(ElapsedMs / 1000);
+    const DurationSeconds = Session.CurrentTrack?.DurationSeconds;
+
+    if (typeof DurationSeconds === "number" && DurationSeconds > 0) {
+      return Math.min(PositionSeconds, Math.floor(DurationSeconds));
+    }
+
+    return PositionSeconds;
+  }
+
+  private ParseDurationSeconds(Value: unknown): number | null {
+    const ParsedValue = typeof Value === "number" ? Value : typeof Value === "string" ? Number.parseFloat(Value) : Number.NaN;
+    return Number.isFinite(ParsedValue) && ParsedValue > 0 ? Math.round(ParsedValue) : null;
   }
 
   private BuildYoutubeDlFlags(Flags: YoutubeDlFlags, YoutubeCookiesPath?: string | null): YoutubeDlFlags {
