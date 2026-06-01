@@ -15,6 +15,7 @@ import { BuildGuildHeaders } from "./PluginSettings/PluginSettingsShared";
 import { BackupsManager, DashboardElementRenderer, SendEmbedEditor, StatisticsEditor } from "./PluginSettings/PluginSettingsDataEditors";
 import { BuildDraftValues, BuildPersistablePluginValues, BuildPluginDraftValues, HasPluginUnsavedChanges, PluginHamburgerIcon, ScrollToPluginSection, UpdatePluginSavedValues } from "./PluginSettings/PluginSettingsState";
 import { CustomCommandsEditor, NotificationsEditor, RemindersEditor } from "./PluginSettings/PluginSettingsWorkflowEditors";
+import { EmojiAdderEditor } from "./PluginSettingsCustom/EmojiAdderEditor";
 import type { SaveFeedback } from "./PluginSettings/PluginSettingsTypes";
 
 type PluginSettingsPanelProperties = {
@@ -398,6 +399,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       Plugin={SelectedPlugin}
                       SetStatus={SetStatus}
                       UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : SelectedPlugin.Metadata.Id === "EmojiAdder" ? (
+                    <EmojiAdderEditor
+                      BotId={Properties.BotId}
+                      DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
                     />
                   ) : SelectedPlugin.Metadata.Id === "Backups" ? (
                     <BackupsManager

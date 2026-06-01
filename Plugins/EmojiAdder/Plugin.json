@@ -1,0 +1,46 @@
+{
+  "Metadata": {
+    "Id": "EmojiAdder",
+    "DisplayName": "Emoji Adder",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "EMO"
+  },
+  "Scope": "Guild",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "TenorApiKey",
+      "Type": "Password",
+      "Label": "Tenor API key",
+      "Default": "",
+      "Section": "Tenor",
+      "Description": "Optional. Falls back to TENOR_API_KEY from the server environment, then Tenor's public demo key."
+    },
+    {
+      "Key": "TenorContentFilter",
+      "Type": "Select",
+      "Label": "Tenor content filter",
+      "Default": "medium",
+      "Section": "Tenor",
+      "Options": [
+        { "Label": "High", "Value": "high" },
+        { "Label": "Medium", "Value": "medium" },
+        { "Label": "Low", "Value": "low" },
+        { "Label": "Off", "Value": "off" }
+      ]
+    },
+    {
+      "Key": "EmojiAdderWorkspace",
+      "Type": "Custom",
+      "Label": "Emoji adder",
+      "Default": null,
+      "Section": "Emoji adder",
+      "ActionKey": "AddEmojis",
+      "ActionKeys": ["AddEmojis", "DeleteEmoji"],
+      "CustomRenderer": "EmojiAdder"
+    }
+  ],
+  "EntryPoint": "./EmojiAdderPlugin.ts",
+  "Category": "Utility"
+}

@@ -11,6 +11,7 @@ export enum SettingsFieldType {
   RolePicker = "RolePicker",
   EmbedEditor = "EmbedEditor",
   List = "List",
+  Custom = "Custom",
   Button = "Button"
 }
 
@@ -67,6 +68,8 @@ export type SettingsField = {
   Required?: boolean;
   ButtonLabel?: string;
   ActionKey?: string;
+  ActionKeys?: string[];
+  CustomRenderer?: string;
   ItemType?: "String" | "Number" | "ChannelPicker" | "RolePicker";
   ValidateAs?: "Regex";
   SupportedChannelTypes?: string[];
@@ -196,4 +199,10 @@ export type BotEmojiSummary = {
   Id: string;
   Name: string;
   Animated: boolean;
+};
+
+export type BotEmojiLimitSummary = {
+  MaxAnimatedEmojis: number;
+  MaxStaticEmojis: number;
+  PremiumTier: number;
 };

@@ -32,7 +32,7 @@ export function BuildPluginDraftValues(Plugin: DashboardPlugin): Record<string, 
 }
 
 export function BuildPersistablePluginValues(Plugin: DashboardPlugin, Values: Record<string, unknown>): Record<string, unknown> {
-  const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button").map((Field) => Field.Key));
+  const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button" && Field.Type !== "Custom").map((Field) => Field.Key));
 
   return Object.fromEntries(Object.entries(Values).filter(([Key]) => PersistableKeys.has(Key)));
 }

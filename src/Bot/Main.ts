@@ -8,10 +8,11 @@ import {
 } from "discord.js";
 import Path from "node:path";
 import { Prisma, RedisClient } from "../Core/Clients.js";
+import { GetGuildEmojiLimits } from "../Core/DiscordLimits.js";
 import { PluginLoader } from "../Core/PluginLoader.js";
 import { ScanPluginManifests } from "../Core/PluginScanner.js";
 import { GetDisabledPluginIds, IsPluginDisabled, SetPluginDisabled } from "../Core/PluginState.js";
-import type { BotChannelSummary, BotEmojiSummary, BotGuildSummary, BotMemberSummary, BotRoleSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
+import type { BotChannelSummary, BotEmojiLimitSummary, BotEmojiSummary, BotGuildSummary, BotMemberSummary, BotRoleSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
 
 enum DiscordApplicationCommandOptionType {
   String = 3,
@@ -278,8 +279,10 @@ class BotInstance {
           Name: Emoji.name ?? Emoji.id,
           Animated: Emoji.animated ?? false
         }));
+      const EmojiLimits: BotEmojiLimitSummary = GetGuildEmojiLimits(Guild.premiumTier);
 
       await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:Emojis`, JSON.stringify(Emojis), "EX", 30);
+      await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:EmojiLimits`, JSON.stringify(EmojiLimits), "EX", 30);
     }
   }
 

@@ -235,6 +235,10 @@ export function RenderField(
     return <ActionButton BotId={BotId} Field={Field} GuildId={GuildId} PluginId={PluginId} SetStatus={SetStatus} />;
   }
 
+  if (Field.Type === "Custom") {
+    return null;
+  }
+
   return (
     <label className="block text-sm font-bold text-slate-200">
       {Field.Label}

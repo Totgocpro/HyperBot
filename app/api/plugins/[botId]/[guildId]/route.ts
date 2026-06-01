@@ -147,7 +147,7 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
     return new Response(DependencyErrors.join(" "), { status: 400 });
   }
 
-  for (const Field of ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button)) {
+  for (const Field of ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button && FieldValue.Type !== SettingsFieldType.Custom)) {
     if (Field.Required && !Body.Values[Field.Key]) {
       return new Response(`${Field.Label} is required.`, { status: 400 });
     }
@@ -155,7 +155,7 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
 
   const Storage = new PluginStorage(Prisma, RedisClient, botId, Body.PluginId);
   const PersistableKeys = new Set(
-    ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button).map((Field) => Field.Key)
+    ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button && FieldValue.Type !== SettingsFieldType.Custom).map((Field) => Field.Key)
   );
 
   for (const [Key, Value] of Object.entries(Body.Values)) {

@@ -19,6 +19,8 @@ const SettingsFieldSchema = z.object({
   Required: z.boolean().optional(),
   ButtonLabel: z.string().min(1).optional(),
   ActionKey: z.string().min(1).optional(),
+  ActionKeys: z.array(z.string().min(1)).optional(),
+  CustomRenderer: z.string().min(1).optional(),
   ItemType: z.enum(["String", "Number", "ChannelPicker", "RolePicker"]).optional(),
   ValidateAs: z.enum(["Regex"]).optional(),
   SupportedChannelTypes: z.array(z.string()).optional(),
