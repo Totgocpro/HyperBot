@@ -149,12 +149,14 @@ const SessionsStorageKey = "TempVoiceSessions";
 const MusicPanelAttachmentName = "tempvoice-music-panel.png";
 const MusicPanelGlobalWriteSpacingMs = 900;
 const MusicPanelRefreshIntervalMs = 3500;
+const MusicPanelSimpleMinWriteIntervalMs = 5000;
 const MusicPanelSlowRefreshThresholdMs = 1200;
 const DiscordRestRateLimitPaddingMs = 250;
 
 export default class TempVoicePlugin extends BasePlugin {
   private DiscordRestPressureUntilMs = 0;
   private MusicPanelGlobalNextWriteAtMs = 0;
+  private readonly MusicPanelActiveChannelIds = new Set<string>();
   private readonly MusicPanelLastWriteAtMs = new Map<string, number>();
   private readonly MusicPanelMessages = new Map<string, Message>();
   private readonly MusicPanelNextWriteAtMs = new Map<string, number>();
@@ -1370,10 +1372,13 @@ export default class TempVoicePlugin extends BasePlugin {
     this.MusicPanelRefreshes.add(ChannelId);
 
     try {
+      const WasSimpleMode = this.IsMusicPanelSimpleMode();
       const Session = await this.GetSession(ChannelId);
 
       if (!Session) {
+        this.ClearMusicPanelRuntimeState(ChannelId);
         this.StopMusicPanelRefreshLoop(ChannelId);
+        this.RefreshMusicPanelsAfterModeChange(WasSimpleMode);
         return;
       }
 
@@ -1381,7 +1386,9 @@ export default class TempVoicePlugin extends BasePlugin {
       const Channel = await Guild?.channels.fetch(ChannelId).catch(() => null);
 
       if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+        this.ClearMusicPanelRuntimeState(ChannelId);
         this.StopMusicPanelRefreshLoop(ChannelId);
+        this.RefreshMusicPanelsAfterModeChange(WasSimpleMode);
         return;
       }
 
@@ -1389,8 +1396,20 @@ export default class TempVoicePlugin extends BasePlugin {
       const MusicState = this.MusicPlayer.GetState(ChannelId);
 
       if (!Config.MusicPanelEnabled || !MusicState.Active) {
+        this.MusicPanelActiveChannelIds.delete(ChannelId);
         this.StopMusicPanelRefreshLoop(ChannelId);
         await this.DeleteMusicPanelMessage(Session);
+        this.RefreshMusicPanelsAfterModeChange(WasSimpleMode);
+        return;
+      }
+
+      this.MusicPanelActiveChannelIds.add(ChannelId);
+      this.RefreshMusicPanelsAfterModeChange(WasSimpleMode);
+
+      const SimpleMode = this.IsMusicPanelSimpleMode();
+
+      if (SimpleMode && Reason === "tick") {
+        this.StopMusicPanelRefreshLoop(ChannelId);
         return;
       }
 
@@ -1399,9 +1418,9 @@ export default class TempVoicePlugin extends BasePlugin {
         return;
       }
 
-      await this.UpsertMusicPanelMessage(Channel, Session, Config, Reason);
+      await this.UpsertMusicPanelMessage(Channel, Session, Config, Reason, SimpleMode);
 
-      if (MusicState.Paused) {
+      if (SimpleMode || MusicState.Paused) {
         this.StopMusicPanelRefreshLoop(ChannelId);
       } else {
         this.EnsureMusicPanelRefreshLoop(ChannelId);
@@ -1437,20 +1456,36 @@ export default class TempVoicePlugin extends BasePlugin {
     this.MusicPanelRefreshTimers.delete(ChannelId);
   }
 
-  private async ReserveMusicPanelWrite(ChannelId: string, Reason: "state" | "tick"): Promise<{ HideTiming: boolean }> {
+  private RefreshMusicPanelsAfterModeChange(WasSimpleMode: boolean): void {
+    if (WasSimpleMode === this.IsMusicPanelSimpleMode()) {
+      return;
+    }
+
+    for (const ActiveChannelId of this.MusicPanelActiveChannelIds) {
+      void this.RefreshMusicPanel(ActiveChannelId, "state").catch((ErrorValue: unknown) => {
+        this.Logger.Warn("TempVoice music panel mode refresh failed.", ErrorValue);
+      });
+    }
+  }
+
+  private IsMusicPanelSimpleMode(): boolean {
+    return this.MusicPanelActiveChannelIds.size >= 2;
+  }
+
+  private async ReserveMusicPanelWrite(ChannelId: string, Reason: "state" | "tick", SimpleMode: boolean): Promise<{ HideTiming: boolean }> {
     const Now = Date.now();
     const RestWaitMs = Math.max(this.DiscordRestPressureUntilMs - Now, 0);
     const GlobalWaitMs = Math.max(this.MusicPanelGlobalNextWriteAtMs - Now, 0);
-    const ChannelWaitMs = Reason === "tick" ? Math.max((this.MusicPanelNextWriteAtMs.get(ChannelId) ?? 0) - Now, 0) : 0;
+    const ChannelWaitMs = Reason === "tick" || SimpleMode ? Math.max((this.MusicPanelNextWriteAtMs.get(ChannelId) ?? 0) - Now, 0) : 0;
     const WaitMs = Math.max(RestWaitMs, GlobalWaitMs, ChannelWaitMs);
-    const HideTiming = RestWaitMs > MusicPanelSlowRefreshThresholdMs || GlobalWaitMs > MusicPanelSlowRefreshThresholdMs;
+    const HideTiming = SimpleMode || RestWaitMs > MusicPanelSlowRefreshThresholdMs || GlobalWaitMs > MusicPanelSlowRefreshThresholdMs;
 
     if (WaitMs > 0) {
       await this.Sleep(WaitMs);
     }
 
     const ReservedAt = Date.now();
-    this.MusicPanelNextWriteAtMs.set(ChannelId, ReservedAt + MusicPanelRefreshIntervalMs);
+    this.MusicPanelNextWriteAtMs.set(ChannelId, ReservedAt + (SimpleMode ? MusicPanelSimpleMinWriteIntervalMs : MusicPanelRefreshIntervalMs));
     this.MusicPanelGlobalNextWriteAtMs = Math.max(this.MusicPanelGlobalNextWriteAtMs, ReservedAt + MusicPanelGlobalWriteSpacingMs);
 
     return { HideTiming };
@@ -1470,8 +1505,8 @@ export default class TempVoicePlugin extends BasePlugin {
     return Date.now() - LastWriteAt > MusicPanelRefreshIntervalMs + MusicPanelSlowRefreshThresholdMs;
   }
 
-  private async UpsertMusicPanelMessage(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig, Reason: "state" | "tick"): Promise<void> {
-    const Reservation = await this.ReserveMusicPanelWrite(Session.ChannelId, Reason);
+  private async UpsertMusicPanelMessage(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig, Reason: "state" | "tick", SimpleMode: boolean): Promise<void> {
+    const Reservation = await this.ReserveMusicPanelWrite(Session.ChannelId, Reason, SimpleMode);
     const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
 
     if (!MusicState.Active) {
@@ -1479,7 +1514,7 @@ export default class TempVoicePlugin extends BasePlugin {
       return;
     }
 
-    const HideTiming = Reservation.HideTiming || this.IsMusicPanelRefreshSlow(Session.ChannelId);
+    const HideTiming = Reservation.HideTiming || (!SimpleMode && this.IsMusicPanelRefreshSlow(Session.ChannelId));
     const Attachment = new AttachmentBuilder(await this.MusicPanelRenderer.BuildPanelImage(MusicState, { HideTiming }), {
       name: MusicPanelAttachmentName
     });
@@ -1615,6 +1650,7 @@ export default class TempVoicePlugin extends BasePlugin {
   }
 
   private ClearMusicPanelRuntimeState(ChannelId: string): void {
+    this.MusicPanelActiveChannelIds.delete(ChannelId);
     this.MusicPanelLastWriteAtMs.delete(ChannelId);
     this.MusicPanelMessages.delete(ChannelId);
     this.MusicPanelNextWriteAtMs.delete(ChannelId);
