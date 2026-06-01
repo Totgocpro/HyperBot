@@ -5,6 +5,7 @@ export enum SettingsFieldType {
   String = "String",
   Boolean = "Boolean",
   Number = "Number",
+  Password = "Password",
   Select = "Select",
   ChannelPicker = "ChannelPicker",
   RolePicker = "RolePicker",

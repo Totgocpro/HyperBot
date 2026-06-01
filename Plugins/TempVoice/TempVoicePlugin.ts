@@ -42,8 +42,14 @@ type TempVoiceConfig = {
   MusicButtonResumeLabel: string;
   MusicButtonSkipLabel: string;
   MusicButtonStopLabel: string;
+  MusicAskButtonLabel: string;
   MusicModalTitle: string;
   MusicModalUrlLabel: string;
+  MusicAskModalTitle: string;
+  MusicAskSubmittedMessage: string;
+  MusicYoutubeAccountMode: string;
+  MusicYoutubeCookiesPath: string;
+  MusicRequiresAccountMessage: string;
   MusicStartedMessage: string;
   MusicBusyMessage: string;
   MusicControlAppliedMessage: string;
@@ -80,6 +86,15 @@ type TempVoiceSession = {
 
 type TempVoiceSessions = Record<string, TempVoiceSession>;
 
+type TempVoiceMusicRequest = {
+  ChannelId: string;
+  CreatedAt: string;
+  GuildId: string;
+  Id: string;
+  RequesterId: string;
+  Url: string;
+};
+
 const DefaultConfig: TempVoiceConfig = {
   CreatorChannelId: "",
   ChannelNameTemplate: "%user%'s voice room",
@@ -96,8 +111,14 @@ const DefaultConfig: TempVoiceConfig = {
   MusicButtonResumeLabel: "Continue",
   MusicButtonSkipLabel: "Skip",
   MusicButtonStopLabel: "Stop",
+  MusicAskButtonLabel: "Ask music / playlist",
   MusicModalTitle: "Play YouTube music",
   MusicModalUrlLabel: "YouTube video or playlist URL",
+  MusicAskModalTitle: "Ask music / playlist",
+  MusicAskSubmittedMessage: "Music request sent to the room owner.",
+  MusicYoutubeAccountMode: "Environment",
+  MusicYoutubeCookiesPath: "",
+  MusicRequiresAccountMessage: "This YouTube video is unavailable or requires a linked account.",
   MusicStartedMessage: "Music started: %title%%queued_suffix%.",
   MusicBusyMessage: "Music is already playing in %channel%.",
   MusicControlAppliedMessage: "Music control applied.",
@@ -120,6 +141,7 @@ const DefaultConfig: TempVoiceConfig = {
 const SessionsStorageKey = "TempVoiceSessions";
 
 export default class TempVoicePlugin extends BasePlugin {
+  private readonly MusicRequests = new Map<string, TempVoiceMusicRequest>();
   private readonly MusicPlayer = new TempVoiceMusicPlayer(this.Logger, async (ChannelId) => {
     await this.RefreshControlPanel(ChannelId);
   });
@@ -294,7 +316,7 @@ export default class TempVoicePlugin extends BasePlugin {
   }
 
   private async HandleButton(InteractionValue: ButtonInteraction<"cached">): Promise<void> {
-    const [Prefix, Action, ChannelId] = InteractionValue.customId.split(":");
+    const [Prefix, Action, ChannelId, RequestId] = InteractionValue.customId.split(":");
 
     if (Prefix !== "TempVoice" || !Action || !ChannelId) {
       return;
@@ -314,6 +336,16 @@ export default class TempVoicePlugin extends BasePlugin {
 
     if (Action === "TTS") {
       await this.ShowTtsModal(InteractionValue, Session);
+      return;
+    }
+
+    if (Action === "MusicAsk") {
+      await this.ShowMusicAskModal(InteractionValue, Session);
+      return;
+    }
+
+    if (Action?.startsWith("MusicRequest")) {
+      await this.HandleMusicRequestButton(InteractionValue, Session, Action, RequestId);
       return;
     }
 
@@ -459,6 +491,11 @@ export default class TempVoicePlugin extends BasePlugin {
 
     if (Action === "TTS") {
       await this.HandleTtsModal(InteractionValue, Session);
+      return;
+    }
+
+    if (Action === "MusicAsk") {
+      await this.HandleMusicAskModal(InteractionValue, Session);
       return;
     }
 
@@ -665,6 +702,32 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.showModal(Modal);
   }
 
+  private async ShowMusicAskModal(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Config = await this.GetConfig(InteractionValue.guildId);
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to ask for music.", ephemeral: true });
+      return;
+    }
+
+    const Modal = new ModalBuilder()
+      .setCustomId(`TempVoiceModal:MusicAsk:${Session.ChannelId}`)
+      .setTitle(Config.MusicAskModalTitle.slice(0, 45))
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId("Url")
+            .setLabel(Config.MusicModalUrlLabel.slice(0, 45))
+            .setMaxLength(500)
+            .setRequired(true)
+            .setStyle(TextInputStyle.Short)
+        )
+      );
+
+    await InteractionValue.showModal(Modal);
+  }
+
   private async ShowTtsModal(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
     const Config = await this.GetConfig(InteractionValue.guildId);
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
@@ -730,7 +793,9 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.deferReply({ ephemeral: true });
 
     try {
-      const Result = await this.MusicPlayer.Play(Channel, Url);
+      const Result = await this.MusicPlayer.Play(Channel, Url, {
+        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config)
+      });
       await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicStartedMessage, {
         ChannelId: Session.ChannelId,
         Count: Result.Count,
@@ -750,18 +815,91 @@ export default class TempVoicePlugin extends BasePlugin {
       }
 
       if (ErrorValue instanceof TempVoiceMusicError) {
-        await InteractionValue.editReply(ErrorValue.message);
+        await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicPlaybackFailedMessage, {
+          ChannelId: Session.ChannelId,
+          Count: 0,
+          Error: this.GetPublicMusicErrorMessage(ErrorValue, Config),
+          Title: ""
+        }));
         return;
       }
 
-      const ErrorMessage = ErrorValue instanceof Error ? ErrorValue.message : "Unknown error";
+      this.Logger.Warn("TempVoice music playback failed while handling modal.", ErrorValue);
       await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicPlaybackFailedMessage, {
         ChannelId: Session.ChannelId,
         Count: 0,
-        Error: ErrorMessage,
+        Error: "Playback could not be started.",
         Title: ""
       }));
     }
+  }
+
+  private async HandleMusicAskModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+    const Url = InteractionValue.fields.getTextInputValue("Url").trim();
+    const Config = await this.GetConfig(InteractionValue.guildId);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to ask for music.", ephemeral: true });
+      return;
+    }
+
+    if (!Url) {
+      await InteractionValue.reply({ content: "Music URL is required.", ephemeral: true });
+      return;
+    }
+
+    const Request: TempVoiceMusicRequest = {
+      ChannelId: Session.ChannelId,
+      CreatedAt: new Date().toISOString(),
+      GuildId: Session.GuildId,
+      Id: this.CreateRequestId(),
+      RequesterId: InteractionValue.user.id,
+      Url
+    };
+    this.MusicRequests.set(Request.Id, Request);
+
+    const Embed = new EmbedBuilder()
+      .setTitle("Music request")
+      .setDescription(`<@${Request.RequesterId}> wants to play this music.`)
+      .setColor(this.ParseColor(Config.ControlPanelColor))
+      .addFields({ name: "URL", value: this.ClampDiscordFieldValue(Url), inline: false })
+      .setTimestamp(new Date());
+    const Row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`TempVoice:MusicRequestReject:${Session.ChannelId}:${Request.Id}`)
+        .setLabel("Reject")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`TempVoice:MusicRequestPlayNow:${Session.ChannelId}:${Request.Id}`)
+        .setLabel("Play now")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`TempVoice:MusicRequestQueue:${Session.ChannelId}:${Request.Id}`)
+        .setLabel("Play at end")
+        .setStyle(ButtonStyle.Success)
+    );
+    const TextChannel = Channel as VoiceChannel & {
+      send(Options: MessageCreateOptions): Promise<Message>;
+    };
+
+    const MessageValue = await TextChannel.send({
+      allowedMentions: { users: [Session.OwnerId] },
+      components: [Row],
+      content: `<@${Session.OwnerId}>`,
+      embeds: [Embed]
+    }).catch((ErrorValue: unknown) => {
+      this.MusicRequests.delete(Request.Id);
+      this.Logger.Warn("Could not send temporary voice music request panel.", ErrorValue);
+      return null;
+    });
+
+    if (!MessageValue) {
+      await InteractionValue.reply({ content: "Music request could not be sent.", ephemeral: true });
+      return;
+    }
+
+    await InteractionValue.reply({ content: Config.MusicAskSubmittedMessage, ephemeral: true });
   }
 
   private async HandleTtsModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
@@ -832,6 +970,91 @@ export default class TempVoicePlugin extends BasePlugin {
 
     await InteractionValue.reply({ content: Config.MusicControlAppliedMessage, ephemeral: true });
     await this.SendControlPanel(Channel, Session, Config, InteractionValue);
+  }
+
+  private async HandleMusicRequestButton(InteractionValue: ButtonInteraction<"cached">, Session: TempVoiceSession, Action: string, RequestId?: string): Promise<void> {
+    if (!(await this.RequireOwner(InteractionValue, Session))) {
+      return;
+    }
+
+    const Request = RequestId ? this.MusicRequests.get(RequestId) : null;
+
+    if (!Request || Request.ChannelId !== Session.ChannelId || Request.GuildId !== Session.GuildId) {
+      await InteractionValue.reply({ content: "This music request is no longer available.", ephemeral: true });
+      return;
+    }
+
+    if (Action === "MusicRequestReject") {
+      this.MusicRequests.delete(Request.Id);
+      await InteractionValue.deferUpdate();
+      await InteractionValue.message.delete().catch((ErrorValue: unknown) => {
+        this.Logger.Warn("Could not delete temporary voice music request panel.", ErrorValue);
+      });
+      await InteractionValue.followUp({
+        content: "Music request rejected.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
+    const Config = await this.GetConfig(InteractionValue.guildId);
+
+    if (!Channel || Channel.type !== ChannelType.GuildVoice) {
+      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      return;
+    }
+
+    await InteractionValue.deferUpdate();
+
+    try {
+      const Options = { YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config) };
+      const Result = Action === "MusicRequestQueue"
+        ? await this.MusicPlayer.Enqueue(Channel, Request.Url, Options)
+        : await this.MusicPlayer.Play(Channel, Request.Url, Options);
+      const Status = Action === "MusicRequestQueue" && !("Started" in Result && Result.Started)
+        ? `Music queued: ${Result.FirstTitle}${Result.Count > 1 ? ` (+${Result.Count - 1} queued)` : ""}.`
+        : this.ApplyMusicTemplate(Config.MusicStartedMessage, {
+            ChannelId: Session.ChannelId,
+            Count: Result.Count,
+            Error: "",
+            Title: Result.FirstTitle
+          });
+
+      this.MusicRequests.delete(Request.Id);
+      await InteractionValue.message.delete().catch((ErrorValue: unknown) => {
+        this.Logger.Warn("Could not delete temporary voice music request panel.", ErrorValue);
+      });
+      await InteractionValue.followUp({
+        content: Status,
+        ephemeral: true
+      });
+      await this.SendControlPanel(Channel, Session, Config);
+    } catch (ErrorValue) {
+      this.MusicRequests.delete(Request.Id);
+      const ErrorMessage = ErrorValue instanceof TempVoiceMusicError
+        ? this.GetPublicMusicErrorMessage(ErrorValue, Config)
+        : ErrorValue instanceof TempVoiceMusicBusyError
+          ? this.ApplyMusicTemplate(Config.MusicBusyMessage, {
+              ChannelId: ErrorValue.ChannelId,
+              Count: 0,
+              Error: ErrorValue.message,
+              Title: ""
+            })
+          : "Playback could not be started.";
+
+      if (!(ErrorValue instanceof TempVoiceMusicError) && !(ErrorValue instanceof TempVoiceMusicBusyError)) {
+        this.Logger.Warn("TempVoice music request playback failed.", ErrorValue);
+      }
+
+      await InteractionValue.message.delete().catch((DeleteError: unknown) => {
+        this.Logger.Warn("Could not delete temporary voice music request panel.", DeleteError);
+      });
+      await InteractionValue.followUp({
+        content: `Music request failed: ${ErrorMessage}`,
+        ephemeral: true
+      });
+    }
   }
 
   private async SendControlPanel(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig, SourceInteraction?: ButtonInteraction<"cached">): Promise<void> {
@@ -921,8 +1144,15 @@ export default class TempVoicePlugin extends BasePlugin {
       MusicButtons.push(new ButtonBuilder().setCustomId(`TempVoice:MusicStop:${Session.ChannelId}`).setLabel(Config.MusicButtonStopLabel.slice(0, 80)).setStyle(ButtonStyle.Danger));
     }
 
+    const UtilityButtons: ButtonBuilder[] = [
+      new ButtonBuilder()
+        .setCustomId(`TempVoice:MusicAsk:${Session.ChannelId}`)
+        .setLabel(Config.MusicAskButtonLabel.slice(0, 80))
+        .setStyle(ButtonStyle.Primary)
+    ];
+
     if (Config.TTSEnabled && !Session.TtsDisabled) {
-      MusicButtons.push(
+      UtilityButtons.push(
         new ButtonBuilder()
           .setCustomId(`TempVoice:TTS:${Session.ChannelId}`)
           .setDisabled(Boolean(BusyAudioChannelId))
@@ -932,9 +1162,11 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     const ThirdRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...MusicButtons);
+    const FourthRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...UtilityButtons);
+    const Rows = [FirstRow, SecondRow, ThirdRow, FourthRow];
 
-    const Payload: MessageCreateOptions = { embeds: [Embed], components: [FirstRow, SecondRow, ThirdRow] };
-    const EditPayload: MessageEditOptions = { embeds: [Embed], components: [FirstRow, SecondRow, ThirdRow] };
+    const Payload: MessageCreateOptions = { embeds: [Embed], components: Rows };
+    const EditPayload: MessageEditOptions = { embeds: [Embed], components: Rows };
     const TextChannel = Channel as VoiceChannel & {
       messages: {
         fetch(MessageId: string): Promise<Message>;
@@ -942,22 +1174,28 @@ export default class TempVoicePlugin extends BasePlugin {
       send(Options: MessageCreateOptions): Promise<Message>;
     };
 
-    if (SourceInteraction && SourceInteraction.message.id === Session.ControlPanelMessageId) {
-      await SourceInteraction.message.edit(EditPayload).catch((ErrorValue: unknown) => {
-        this.Logger.Warn("Could not edit temporary voice control panel.", ErrorValue);
-      });
-      return;
-    }
-
     if (Session.ControlPanelMessageId) {
-      const ExistingMessage = await TextChannel.messages.fetch(Session.ControlPanelMessageId).catch(() => null);
+      const ExistingMessage = await this.FetchControlPanelMessage(TextChannel, Session.ControlPanelMessageId);
 
       if (ExistingMessage) {
-        await ExistingMessage.edit(EditPayload).catch((ErrorValue: unknown) => {
+        let FailedWithUnknownMessage = false;
+        const Edited = await ExistingMessage.edit(EditPayload).then(() => true).catch((ErrorValue: unknown) => {
           this.Logger.Warn("Could not edit temporary voice control panel.", ErrorValue);
+          FailedWithUnknownMessage = this.IsDiscordUnknownMessageError(ErrorValue);
+          return false;
         });
-        return;
+
+        if (Edited) {
+          return;
+        }
+
+        if (!FailedWithUnknownMessage) {
+          return;
+        }
       }
+
+      Session.ControlPanelMessageId = undefined;
+      await this.SaveSession(Session);
     }
 
     const MessageValue = await TextChannel.send(Payload).catch((ErrorValue: unknown) => {
@@ -1057,8 +1295,14 @@ export default class TempVoicePlugin extends BasePlugin {
       MusicButtonResumeLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonResumeLabel")) ?? DefaultConfig.MusicButtonResumeLabel,
       MusicButtonSkipLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonSkipLabel")) ?? DefaultConfig.MusicButtonSkipLabel,
       MusicButtonStopLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicButtonStopLabel")) ?? DefaultConfig.MusicButtonStopLabel,
+      MusicAskButtonLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicAskButtonLabel")) ?? DefaultConfig.MusicAskButtonLabel,
       MusicModalTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicModalTitle")) ?? DefaultConfig.MusicModalTitle,
       MusicModalUrlLabel: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicModalUrlLabel")) ?? DefaultConfig.MusicModalUrlLabel,
+      MusicAskModalTitle: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicAskModalTitle")) ?? DefaultConfig.MusicAskModalTitle,
+      MusicAskSubmittedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicAskSubmittedMessage")) ?? DefaultConfig.MusicAskSubmittedMessage,
+      MusicYoutubeAccountMode: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicYoutubeAccountMode")) ?? DefaultConfig.MusicYoutubeAccountMode,
+      MusicYoutubeCookiesPath: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicYoutubeCookiesPath")) ?? DefaultConfig.MusicYoutubeCookiesPath,
+      MusicRequiresAccountMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicRequiresAccountMessage")) ?? DefaultConfig.MusicRequiresAccountMessage,
       MusicStartedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicStartedMessage")) ?? DefaultConfig.MusicStartedMessage,
       MusicBusyMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicBusyMessage")) ?? DefaultConfig.MusicBusyMessage,
       MusicControlAppliedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicControlAppliedMessage")) ?? DefaultConfig.MusicControlAppliedMessage,
@@ -1107,6 +1351,7 @@ export default class TempVoicePlugin extends BasePlugin {
 
   private async DeleteSession(ChannelId: string): Promise<void> {
     this.MusicPlayer.Stop(ChannelId);
+    this.ClearMusicRequests(ChannelId);
 
     for (const Guild of this.DiscordClient.guilds.cache.values()) {
       const Sessions = await this.GetSessions(Guild.id);
@@ -1163,6 +1408,34 @@ export default class TempVoicePlugin extends BasePlugin {
     });
   }
 
+  private GetPublicMusicErrorMessage(ErrorValue: TempVoiceMusicError, Config: TempVoiceConfig): string {
+    if (ErrorValue.message.includes("linked account") || ErrorValue.message.includes("unavailable") || ErrorValue.message.includes("cookies")) {
+      return Config.MusicRequiresAccountMessage;
+    }
+
+    if (ErrorValue.message.includes("Voice connection")) {
+      return "The bot could not connect to the voice channel.";
+    }
+
+    if (ErrorValue.message.startsWith("Use a valid YouTube") || ErrorValue.message.startsWith("No playable YouTube")) {
+      return ErrorValue.message;
+    }
+
+    return "Playback could not be started.";
+  }
+
+  private ResolveYoutubeCookiesPath(Config: TempVoiceConfig): string | null | undefined {
+    if (Config.MusicYoutubeAccountMode === "None") {
+      return null;
+    }
+
+    if (Config.MusicYoutubeAccountMode === "GuildFile") {
+      return Config.MusicYoutubeCookiesPath.trim() || null;
+    }
+
+    return undefined;
+  }
+
   private ApplyMusicTemplate(Template: string, Values: { ChannelId: string; Count: number; Error: string; Title: string }): string {
     const QueuedCount = Math.max(Values.Count - 1, 0);
     return Template
@@ -1178,6 +1451,23 @@ export default class TempVoicePlugin extends BasePlugin {
     return Template
       .replaceAll("%channel%", `<#${Values.ChannelId}>`)
       .replaceAll("%error%", Values.Error);
+  }
+
+  private CreateRequestId(): string {
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private ClearMusicRequests(ChannelId: string): void {
+    for (const [RequestId, Request] of this.MusicRequests.entries()) {
+      if (Request.ChannelId === ChannelId) {
+        this.MusicRequests.delete(RequestId);
+      }
+    }
+  }
+
+  private ClampDiscordFieldValue(Value: string): string {
+    const TrimmedValue = Value.trim();
+    return TrimmedValue.length > 1024 ? `${TrimmedValue.slice(0, 1021)}...` : TrimmedValue;
   }
 
   private GetBusyAudioChannelId(GuildId: string, CurrentChannelId: string): string | null {
@@ -1198,5 +1488,27 @@ export default class TempVoicePlugin extends BasePlugin {
 
   private Clamp(Value: number, Minimum: number, Maximum: number): number {
     return Math.min(Math.max(Math.trunc(Number.isFinite(Value) ? Value : Minimum), Minimum), Maximum);
+  }
+
+  private async FetchControlPanelMessage(
+    TextChannel: VoiceChannel & {
+      messages: {
+        fetch(MessageId: string): Promise<Message>;
+      };
+    },
+    MessageId: string
+  ): Promise<Message | null> {
+    return await TextChannel.messages.fetch(MessageId).catch((ErrorValue: unknown) => {
+      if (!this.IsDiscordUnknownMessageError(ErrorValue)) {
+        this.Logger.Warn("Could not fetch temporary voice control panel.", ErrorValue);
+      }
+
+      return null;
+    });
+  }
+
+  private IsDiscordUnknownMessageError(ErrorValue: unknown): boolean {
+    const Candidate = ErrorValue as { code?: unknown; rawError?: { code?: unknown } } | null;
+    return Candidate?.code === 10008 || Candidate?.rawError?.code === 10008;
   }
 }

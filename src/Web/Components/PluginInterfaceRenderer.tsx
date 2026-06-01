@@ -165,9 +165,12 @@ export function RenderField(
 
   if (Field.Type === "Boolean") {
     return (
-      <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 p-4 font-semibold text-slate-100">
-        {Field.Label}
-        <input checked={Boolean(Value)} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.checked)} type="checkbox" />
+      <label className="block rounded-2xl border border-slate-800 bg-slate-950 p-4 font-semibold text-slate-100">
+        <span className="flex items-center justify-between">
+          {Field.Label}
+          <input checked={Boolean(Value)} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.checked)} type="checkbox" />
+        </span>
+        {Field.Description ? <span className="mt-2 block text-xs font-medium text-slate-500">{Field.Description}</span> : null}
       </label>
     );
   }
@@ -191,6 +194,7 @@ export function RenderField(
           Required={Field.Required}
           Value={String(Value ?? "")}
         />
+        {Field.Description ? <p className="mt-2 text-xs font-medium text-slate-500">{Field.Description}</p> : null}
         {Field.Type === "ChannelPicker" ? <p className="mt-2 text-xs text-slate-500">Only supported writable channels can be selected.</p> : null}
         {Field.Type === "RolePicker" ? <p className="mt-2 text-xs text-slate-500">Only selectable server roles are listed.</p> : null}
       </div>
@@ -234,9 +238,10 @@ export function RenderField(
       <input
         className={BaseClassName}
         onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Field.Type === "Number" ? Number(Event.target.value) : Event.target.value)}
-        type={Field.Type === "Number" ? "number" : "text"}
+        type={Field.Type === "Number" ? "number" : Field.Type === "Password" ? "password" : "text"}
         value={String(Value ?? "")}
       />
+      {Field.Description ? <span className="mt-2 block text-xs font-medium text-slate-500">{Field.Description}</span> : null}
     </label>
   );
 }

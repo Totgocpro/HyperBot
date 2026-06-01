@@ -1,3 +1,4 @@
+import { accessSync, constants as FileSystemConstants } from "node:fs";
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
 import {
@@ -20,6 +21,10 @@ type TempVoiceMusicTrack = {
   DirectUrl?: string;
   Title: string;
   Url: string;
+};
+
+type TempVoiceMusicPlayOptions = {
+  YoutubeCookiesPath?: string | null;
 };
 
 export class TempVoiceMusicError extends Error {
@@ -45,6 +50,7 @@ type TempVoiceMusicSession = {
   GuildId: string;
   Player: AudioPlayer;
   Queue: TempVoiceMusicTrack[];
+  YoutubeCookiesPath?: string | null;
 };
 
 type YoutubeDlPlaylistPayload = YoutubeDlPayload & {
@@ -107,28 +113,71 @@ export class TempVoiceMusicPlayer {
     return this.GetGuildSession(GuildId)?.ChannelId ?? null;
   }
 
-  public async Play(Channel: VoiceBasedChannel, Url: string): Promise<{ Count: number; FirstTitle: string }> {
+  public async Play(Channel: VoiceBasedChannel, Url: string, Options: TempVoiceMusicPlayOptions = {}): Promise<{ Count: number; FirstTitle: string }> {
     const ExistingGuildSession = this.GetGuildSession(Channel.guild.id);
 
     if (ExistingGuildSession && ExistingGuildSession.ChannelId !== Channel.id) {
       throw new TempVoiceMusicBusyError(ExistingGuildSession.ChannelId);
     }
 
-    const Tracks = await this.ResolveTracks(Url);
+    const Tracks = await this.ResolveTracks(Url, Options.YoutubeCookiesPath);
 
     if (Tracks.length === 0) {
       throw new Error("No playable YouTube track found.");
     }
 
-    const FirstTitle = Tracks[0].Title;
-    const Count = Tracks.length;
     const Session = this.GetOrCreateSession(Channel);
+    Session.YoutubeCookiesPath = Options.YoutubeCookiesPath;
     Session.Queue = Tracks;
-    await this.PlayNext(Channel.id);
+    const StartedTrack = await this.PlayNext(Channel.id, true);
+
+    if (!StartedTrack) {
+      throw new Error("No playable YouTube track found.");
+    }
 
     return {
-      Count,
-      FirstTitle
+      Count: Session.Queue.length + 1,
+      FirstTitle: StartedTrack.Title
+    };
+  }
+
+  public async Enqueue(Channel: VoiceBasedChannel, Url: string, Options: TempVoiceMusicPlayOptions = {}): Promise<{ Count: number; FirstTitle: string; Started: boolean }> {
+    const ExistingGuildSession = this.GetGuildSession(Channel.guild.id);
+
+    if (ExistingGuildSession && ExistingGuildSession.ChannelId !== Channel.id) {
+      throw new TempVoiceMusicBusyError(ExistingGuildSession.ChannelId);
+    }
+
+    const Tracks = await this.ResolveTracks(Url, Options.YoutubeCookiesPath);
+
+    if (Tracks.length === 0) {
+      throw new Error("No playable YouTube track found.");
+    }
+
+    const Session = this.GetOrCreateSession(Channel);
+    Session.YoutubeCookiesPath = Options.YoutubeCookiesPath;
+
+    if (Session.CurrentTrack) {
+      Session.Queue.push(...Tracks);
+      this.NotifyStateChanged(Channel.id);
+      return {
+        Count: Tracks.length,
+        FirstTitle: Tracks[0].Title,
+        Started: false
+      };
+    }
+
+    Session.Queue = Tracks;
+    const StartedTrack = await this.PlayNext(Channel.id, true);
+
+    if (!StartedTrack) {
+      throw new Error("No playable YouTube track found.");
+    }
+
+    return {
+      Count: Session.Queue.length + 1,
+      FirstTitle: StartedTrack.Title,
+      Started: true
     };
   }
 
@@ -205,7 +254,8 @@ export class TempVoiceMusicPlayer {
       FfmpegProcess: null,
       GuildId: Channel.guild.id,
       Player,
-      Queue: []
+      Queue: [],
+      YoutubeCookiesPath: undefined
     };
 
     Player.on(AudioPlayerStatus.Idle, () => {
@@ -225,11 +275,11 @@ export class TempVoiceMusicPlayer {
     return Session;
   }
 
-  private async PlayNext(ChannelId: string): Promise<void> {
+  private async PlayNext(ChannelId: string, ThrowIfAllTracksFailed = false): Promise<TempVoiceMusicTrack | null> {
     const Session = this.Sessions.get(ChannelId);
 
     if (!Session) {
-      return;
+      return null;
     }
 
     const Track = Session.Queue.shift() ?? null;
@@ -238,13 +288,13 @@ export class TempVoiceMusicPlayer {
 
     if (!Track) {
       this.DestroySession(ChannelId, Session);
-      return;
+      return null;
     }
 
     try {
       await entersState(Session.Connection, VoiceConnectionStatus.Ready, 15_000);
 
-      const DirectUrl = Track.DirectUrl ?? await this.ResolveDirectStreamUrl(Track.Url);
+      const DirectUrl = Track.DirectUrl ?? await this.ResolveDirectStreamUrl(Track.Url, Session.YoutubeCookiesPath);
       const Ffmpeg = spawn("ffmpeg", [
         "-hide_banner",
         "-loglevel",
@@ -296,15 +346,60 @@ export class TempVoiceMusicPlayer {
       });
       Session.Player.play(Resource);
       this.NotifyStateChanged(ChannelId);
+      return Track;
     } catch (ErrorValue) {
+      const VoiceConnectionError = this.BuildVoiceConnectionError(ErrorValue, ChannelId, Track);
+
+      if (VoiceConnectionError) {
+        this.Logger.Warn("TempVoice music voice connection failed.", VoiceConnectionError.Debug);
+        this.DestroySession(ChannelId, Session);
+
+        if (ThrowIfAllTracksFailed) {
+          throw VoiceConnectionError;
+        }
+
+        return null;
+      }
+
       this.Logger.Warn("TempVoice music stream failed.", {
         ChannelId,
         Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        RemainingQueue: Session.Queue.length,
         TrackTitle: Track.Title,
         TrackUrl: Track.Url
       });
-      throw ErrorValue;
+
+      if (Session.Queue.length > 0) {
+        return await this.PlayNext(ChannelId, ThrowIfAllTracksFailed);
+      }
+
+      this.DestroySession(ChannelId, Session);
+
+      if (ThrowIfAllTracksFailed) {
+        throw ErrorValue;
+      }
+
+      return null;
     }
+  }
+
+  private BuildVoiceConnectionError(ErrorValue: unknown, ChannelId: string, Track: TempVoiceMusicTrack): TempVoiceMusicError | null {
+    if (!this.IsVoiceConnectionAbortError(ErrorValue)) {
+      return null;
+    }
+
+    return new TempVoiceMusicError("Voice connection could not be established.", {
+      ChannelId,
+      Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+      TrackTitle: Track.Title,
+      TrackUrl: Track.Url
+    });
+  }
+
+  private IsVoiceConnectionAbortError(ErrorValue: unknown): boolean {
+    const Candidate = ErrorValue as { code?: unknown; message?: unknown } | null;
+    const Message = typeof Candidate?.message === "string" ? Candidate.message : "";
+    return Candidate?.code === "ABORT_ERR" || Message.includes("operation was aborted") || Message.includes("This operation was aborted");
   }
 
   private GetGuildSession(GuildId: string): TempVoiceMusicSession | null {
@@ -317,7 +412,7 @@ export class TempVoiceMusicPlayer {
     return null;
   }
 
-  private async ResolveTracks(Url: string): Promise<TempVoiceMusicTrack[]> {
+  private async ResolveTracks(Url: string, YoutubeCookiesPath?: string | null): Promise<TempVoiceMusicTrack[]> {
     const NormalizedUrl = this.NormalizeYouTubeUrl(Url);
     const VideoId = this.ExtractYouTubeVideoId(NormalizedUrl);
     const PlaylistId = this.ExtractYouTubePlaylistId(NormalizedUrl);
@@ -332,7 +427,7 @@ export class TempVoiceMusicPlayer {
 
     if (IsPlaylist) {
       try {
-        const Tracks = await this.LoadPlaylistTracks(NormalizedUrl);
+        const Tracks = await this.LoadPlaylistTracks(NormalizedUrl, YoutubeCookiesPath);
 
         if (Tracks.length === 0) {
           throw new TempVoiceMusicError("Playlist did not contain playable YouTube tracks.", Debug);
@@ -352,7 +447,7 @@ export class TempVoiceMusicPlayer {
       const TrackUrl = VideoId ? `https://www.youtube.com/watch?v=${VideoId}` : NormalizedUrl;
 
       try {
-        const Info = await this.LoadYoutubeInfo(TrackUrl);
+        const Info = await this.LoadYoutubeInfo(TrackUrl, YoutubeCookiesPath);
         const Title = Info.title ?? `YouTube ${VideoId ?? "track"}`;
 
         return [{
@@ -448,14 +543,14 @@ export class TempVoiceMusicPlayer {
     return /^[a-z0-9_-]{11}$/iu.test(TrimmedValue) ? TrimmedValue : null;
   }
 
-  private async ResolveDirectStreamUrl(Url: string): Promise<string> {
+  private async ResolveDirectStreamUrl(Url: string, YoutubeCookiesPath?: string | null): Promise<string> {
     let Output: YoutubeDlPayload | string;
 
     try {
       Output = await YoutubeDl(Url, this.BuildYoutubeDlFlags({
         format: "bestaudio/best",
         getUrl: true
-      }));
+      }, YoutubeCookiesPath));
     } catch (ErrorValue) {
       throw this.BuildYoutubeDlError("YouTube stream URL could not be resolved.", ErrorValue, {
         TrackUrl: Url
@@ -473,23 +568,23 @@ export class TempVoiceMusicPlayer {
     return DirectUrl;
   }
 
-  private async LoadYoutubeInfo(Url: string): Promise<YoutubeDlPayload> {
+  private async LoadYoutubeInfo(Url: string, YoutubeCookiesPath?: string | null): Promise<YoutubeDlPayload> {
     const Output = await YoutubeDl(Url, this.BuildYoutubeDlFlags({
       dumpSingleJson: true,
       skipDownload: true
-    }));
+    }, YoutubeCookiesPath));
 
     return Output as YoutubeDlPayload;
   }
 
-  private async LoadPlaylistTracks(Url: string): Promise<TempVoiceMusicTrack[]> {
+  private async LoadPlaylistTracks(Url: string, YoutubeCookiesPath?: string | null): Promise<TempVoiceMusicTrack[]> {
     const Output = await YoutubeDl(Url, this.BuildYoutubeDlFlags({
       dumpSingleJson: true,
       flatPlaylist: true,
       ignoreErrors: true,
       playlistEnd: MaxPlaylistTracks,
       skipDownload: true
-    })) as YoutubeDlPlaylistPayload;
+    }, YoutubeCookiesPath)) as YoutubeDlPlaylistPayload;
     const Entries = Array.isArray(Output.entries) ? Output.entries : [];
 
     return Entries
@@ -523,8 +618,8 @@ export class TempVoiceMusicPlayer {
     return null;
   }
 
-  private BuildYoutubeDlFlags(Flags: YoutubeDlFlags): YoutubeDlFlags {
-    const CookiesPath = process.env.TEMPVOICE_YOUTUBE_COOKIES_PATH ?? process.env.YOUTUBE_COOKIES_PATH ?? "";
+  private BuildYoutubeDlFlags(Flags: YoutubeDlFlags, YoutubeCookiesPath?: string | null): YoutubeDlFlags {
+    const CookiesPath = this.GetReadableYoutubeCookiesPath(YoutubeCookiesPath);
 
     return {
       noWarnings: true,
@@ -533,11 +628,31 @@ export class TempVoiceMusicPlayer {
     };
   }
 
+  private GetReadableYoutubeCookiesPath(YoutubeCookiesPath?: string | null): string {
+    const CookiesPath = (YoutubeCookiesPath === undefined
+      ? process.env.TEMPVOICE_YOUTUBE_COOKIES_PATH ?? process.env.YOUTUBE_COOKIES_PATH ?? ""
+      : YoutubeCookiesPath ?? "").trim();
+
+    if (!CookiesPath) {
+      return "";
+    }
+
+    try {
+      accessSync(CookiesPath, FileSystemConstants.R_OK);
+      return CookiesPath;
+    } catch (ErrorValue) {
+      throw new TempVoiceMusicError("YouTube linked account is configured but the cookies file cannot be read by the bot.", {
+        CookiesConfigured: true,
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue)
+      });
+    }
+  }
+
   private BuildYoutubeDlError(Message: string, ErrorValue: unknown, Debug: Record<string, unknown>): TempVoiceMusicError {
     const ErrorMessage = ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue);
 
-    if (ErrorMessage.includes("Sign in to confirm") || ErrorMessage.includes("--cookies")) {
-      return new TempVoiceMusicError(`${Message} YouTube requires cookies for this video. Set TEMPVOICE_YOUTUBE_COOKIES_PATH to a Netscape cookies.txt file exported from a logged-in browser.`, {
+    if (this.IsYoutubeCookieRequiredError(ErrorMessage)) {
+      return new TempVoiceMusicError(`${Message} YouTube requires a linked account for this video.`, {
         ...Debug,
         Error: ErrorMessage
       });
@@ -551,6 +666,18 @@ export class TempVoiceMusicPlayer {
       ...Debug,
       Error: ErrorMessage
     });
+  }
+
+  private IsYoutubeCookieRequiredError(ErrorMessage: string): boolean {
+    return [
+      "Sign in to confirm",
+      "--cookies",
+      "cookies.txt",
+      "Video unavailable. This video is not available",
+      "This video is only available to Music Premium members",
+      "Private video",
+      "This video may be inappropriate for some users"
+    ].some((Pattern) => ErrorMessage.includes(Pattern));
   }
 
   private StopFfmpeg(Session: TempVoiceMusicSession): void {

@@ -39,12 +39,17 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD_URL_ENCODED:?Run Dev.sh, Release.sh, or scripts/EnsureEnv.sh}@redis:6379
       SUPER_ADMIN_IDS: ${SUPER_ADMIN_IDS:-}
       PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:-true}
-      ENABLE_MESSAGE_EVENTS: ${ENABLE_MESSAGE_EVENTS:-false}
+      ENABLE_MESSAGE_EVENTS: ${ENABLE_MESSAGE_EVENTS:-true}
       PLUGIN_DIRECTORY: dist/Plugins
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      TEMPVOICE_YOUTUBE_COOKIES_PATH: ${TEMPVOICE_YOUTUBE_COOKIES_PATH:-}
+      YOUTUBE_COOKIES_PATH: ${YOUTUBE_COOKIES_PATH:-}
       NODE_ENV: production
     ports:
       - "${APP_HOST_BIND:-127.0.0.1}:${APP_HOST_PORT:-}:3000"
+    # Optional Temp Voice YouTube auth:
+    # volumes:
+    #   - ./secrets/youtube-cookies.txt:/run/secrets/youtube-cookies.txt:ro
     depends_on:
       postgresql:
         condition: service_healthy

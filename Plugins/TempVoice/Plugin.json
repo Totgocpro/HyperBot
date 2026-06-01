@@ -126,6 +126,13 @@
       "Section": "Music"
     },
     {
+      "Key": "MusicAskButtonLabel",
+      "Type": "String",
+      "Label": "Ask music button label",
+      "Default": "Ask music / playlist",
+      "Section": "Music"
+    },
+    {
       "Key": "MusicModalTitle",
       "Type": "String",
       "Label": "Music modal title",
@@ -138,6 +145,64 @@
       "Label": "Music URL input label",
       "Default": "YouTube video or playlist URL",
       "Section": "Music"
+    },
+    {
+      "Key": "MusicAskModalTitle",
+      "Type": "String",
+      "Label": "Ask music modal title",
+      "Default": "Ask music / playlist",
+      "Section": "Music"
+    },
+    {
+      "Key": "MusicAskSubmittedMessage",
+      "Type": "String",
+      "Label": "Ask music submitted message",
+      "Default": "Music request sent to the room owner.",
+      "Section": "Music messages"
+    },
+    {
+      "Key": "MusicYoutubeAccountMode",
+      "Type": "Select",
+      "Label": "YouTube account linking",
+      "Default": "Environment",
+      "Section": "Music account",
+      "Description": "Choose how Temp Voice authenticates YouTube extraction. Nothing from this setting is shown in Discord.",
+      "Options": [
+        {
+          "Label": "Use bot environment",
+          "Value": "Environment",
+          "Description": "Uses TEMPVOICE_YOUTUBE_COOKIES_PATH or YOUTUBE_COOKIES_PATH from the bot process."
+        },
+        {
+          "Label": "No linked account",
+          "Value": "None",
+          "Description": "Only public YouTube videos are playable."
+        },
+        {
+          "Label": "Use server cookie file",
+          "Value": "GuildFile",
+          "Description": "Use a cookies.txt file path configured for this server."
+        }
+      ]
+    },
+    {
+      "Key": "MusicYoutubeCookiesPath",
+      "Type": "Password",
+      "Label": "YouTube cookies file path",
+      "Default": "",
+      "Section": "Music account",
+      "Description": "Absolute path on the bot host to a Netscape cookies.txt exported from the account to link. Do not paste cookie contents here.",
+      "VisibleWhen": {
+        "Key": "MusicYoutubeAccountMode",
+        "Value": "GuildFile"
+      }
+    },
+    {
+      "Key": "MusicRequiresAccountMessage",
+      "Type": "String",
+      "Label": "Linked account required message",
+      "Default": "This YouTube video is unavailable or requires a linked account.",
+      "Section": "Music messages"
     },
     {
       "Key": "MusicStartedMessage",
