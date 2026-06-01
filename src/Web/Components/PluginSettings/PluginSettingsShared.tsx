@@ -3,6 +3,7 @@
 import { useState as UseState } from "react";
 import type { SettingsField } from "../../../Core/Types";
 import { CustomSelect } from "../CustomSelect";
+import { MentionTextInput } from "../EmbedMentionInput";
 import { ParseEditableEmbed, type BotPreviewIdentity, type EditableEmbed, type EditableEmbedField } from "../PluginInterfaceRenderer";
 import type { ChannelCounterDraft, CustomCommandActionType, CustomCommandDraft, NotificationSourceDraft, NotificationSourceType, ReminderDraft } from "./PluginSettingsTypes";
 
@@ -11,8 +12,10 @@ export function BuildGuildHeaders(): HeadersInit {
 }
 
 export function AdvancedEmbedEditor(Properties: {
+  BotId?: string;
   BotIdentity?: BotPreviewIdentity | null;
   EmbedValue: EditableEmbed;
+  GuildId?: string;
   OnChange: (EmbedValue: EditableEmbed) => void;
   PlaceholderText?: string;
 }) {
@@ -74,11 +77,11 @@ export function AdvancedEmbedEditor(Properties: {
           <div className="grid gap-3">
             <label className="block text-sm font-bold text-slate-200">
               Title
-              <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ Title: Event.target.value })} value={CurrentEmbed.Title} />
+              <MentionTextInput BotId={Properties.BotId} ClassName={EmbedInputClassName} GuildId={Properties.GuildId} MaxLength={256} OnChange={(Value) => UpdateEmbed({ Title: Value })} Value={CurrentEmbed.Title} />
             </label>
             <label className="block text-sm font-bold text-slate-200">
               Description
-              <textarea className={`${EmbedInputClassName} min-h-40 resize-y`} maxLength={4096} onChange={(Event) => UpdateEmbed({ Description: Event.target.value })} value={CurrentEmbed.Description} />
+              <MentionTextInput BotId={Properties.BotId} ClassName={`${EmbedInputClassName} min-h-40 resize-y`} GuildId={Properties.GuildId} MaxLength={4096} Multiline={true} OnChange={(Value) => UpdateEmbed({ Description: Value })} Value={CurrentEmbed.Description} />
             </label>
             <label className="block text-sm font-bold text-slate-200">
               Title URL
@@ -95,7 +98,7 @@ export function AdvancedEmbedEditor(Properties: {
           <div className="grid gap-3">
             <label className="block text-sm font-bold text-slate-200">
               Author name
-              <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateEmbed({ AuthorName: Event.target.value })} value={CurrentEmbed.AuthorName} />
+              <MentionTextInput BotId={Properties.BotId} ClassName={EmbedInputClassName} GuildId={Properties.GuildId} MaxLength={256} OnChange={(Value) => UpdateEmbed({ AuthorName: Value })} Value={CurrentEmbed.AuthorName} />
             </label>
             <label className="block text-sm font-bold text-slate-200">
               Author icon URL
@@ -129,7 +132,7 @@ export function AdvancedEmbedEditor(Properties: {
           <div className="grid gap-3">
             <label className="block text-sm font-bold text-slate-200">
               Footer text
-              <input className={EmbedInputClassName} maxLength={2048} onChange={(Event) => UpdateEmbed({ FooterText: Event.target.value })} value={CurrentEmbed.FooterText} />
+              <MentionTextInput BotId={Properties.BotId} ClassName={EmbedInputClassName} GuildId={Properties.GuildId} MaxLength={2048} OnChange={(Value) => UpdateEmbed({ FooterText: Value })} Value={CurrentEmbed.FooterText} />
             </label>
             <label className="block text-sm font-bold text-slate-200">
               Footer icon URL
@@ -150,8 +153,8 @@ export function AdvancedEmbedEditor(Properties: {
             {CurrentEmbed.Fields.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No field configured.</p> : null}
             {CurrentEmbed.Fields.map((Field, Index) => (
               <div className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-3" key={Index}>
-                <input className={EmbedInputClassName} maxLength={256} onChange={(Event) => UpdateField(Index, { Name: Event.target.value })} placeholder="Field name" value={Field.Name} />
-                <textarea className={`${EmbedInputClassName} min-h-20 resize-y`} maxLength={1024} onChange={(Event) => UpdateField(Index, { Value: Event.target.value })} placeholder="Field value" value={Field.Value} />
+                <MentionTextInput BotId={Properties.BotId} ClassName={EmbedInputClassName} GuildId={Properties.GuildId} MaxLength={256} OnChange={(Value) => UpdateField(Index, { Name: Value })} Placeholder="Field name" Value={Field.Name} />
+                <MentionTextInput BotId={Properties.BotId} ClassName={`${EmbedInputClassName} min-h-20 resize-y`} GuildId={Properties.GuildId} MaxLength={1024} Multiline={true} OnChange={(Value) => UpdateField(Index, { Value })} Placeholder="Field value" Value={Field.Value} />
                 <div className="flex gap-2">
                   <label className="flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-200">
                     <input checked={Field.Inline} className="h-4 w-4 accent-blue-600" onChange={(Event) => UpdateField(Index, { Inline: Event.target.checked })} type="checkbox" />

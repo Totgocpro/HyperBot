@@ -8,6 +8,7 @@ import { AdvancedEmbedEditor, BuildNotificationSourceName, BuildReminderDraftId,
 
 export function CustomCommandsEditor(Properties: {
   BotIdentity?: BotPreviewIdentity | null;
+  BotId: string;
   DraftValues: Record<string, Record<string, unknown>>;
   GuildId: string;
   OnCreateChannel: (Name: string) => Promise<string | null>;
@@ -229,8 +230,10 @@ export function CustomCommandsEditor(Properties: {
                           {ActionNeedsEmbed(Action.Type) ? (
                             <div className="mt-3">
                               <AdvancedEmbedEditor
+                                BotId={Properties.BotId}
                                 BotIdentity={Properties.BotIdentity}
                                 EmbedValue={Action.Embed}
+                                GuildId={Properties.GuildId}
                                 OnChange={(Embed) => UpdateAction(Command.Id, Action.Id, { Embed })}
                                 PlaceholderText="Use %mention%, %user%, %args%, %server%, %channel% in text fields."
                               />
@@ -486,8 +489,10 @@ export function RemindersEditor(Properties: {
               {ReminderValue.Mode === "Embed" ? (
                 <div className="lg:col-span-2">
                   <AdvancedEmbedEditor
+                    BotId={Properties.BotId}
                     BotIdentity={Properties.BotIdentity}
                     EmbedValue={ReminderValue.Embed}
+                    GuildId={Properties.GuildId}
                     OnChange={(NextEmbed) => UpdateReminder(ReminderValue.Id, { Embed: NextEmbed, Title: NextEmbed.Title, Message: NextEmbed.Description, Color: NextEmbed.Color })}
                     PlaceholderText="Use placeholders like %server%, %name%, %runCount%, %interval%, %nextRun%."
                   />
@@ -761,8 +766,10 @@ export function NotificationsEditor(Properties: {
 
                 <div className="mt-4">
                   <AdvancedEmbedEditor
+                    BotId={Properties.BotId}
                     BotIdentity={Properties.BotIdentity}
                     EmbedValue={Source.Embed}
+                    GuildId={Properties.GuildId}
                     OnChange={(Embed) => UpdateSource(Source.Id, { Embed })}
                     PlaceholderText="Available tags: %source%, %type%, %title%, %url%, %author%, %publishedAt%, %summary%, %image%."
                   />

@@ -11,7 +11,7 @@ import { Prisma, RedisClient } from "../Core/Clients.js";
 import { PluginLoader } from "../Core/PluginLoader.js";
 import { ScanPluginManifests } from "../Core/PluginScanner.js";
 import { GetDisabledPluginIds, IsPluginDisabled, SetPluginDisabled } from "../Core/PluginState.js";
-import type { BotChannelSummary, BotGuildSummary, BotRoleSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
+import type { BotChannelSummary, BotEmojiSummary, BotGuildSummary, BotMemberSummary, BotRoleSummary, CommandDefinition, CommandOptionDefinition } from "../Core/Types.js";
 
 enum DiscordApplicationCommandOptionType {
   String = 3,
@@ -77,6 +77,7 @@ class BotInstance {
   private LastCommandRegistrationHash = "";
   private LastCommandRegistrationAt = 0;
   private CommandRegistrationPromise: Promise<void> = Promise.resolve();
+  private readonly MemberCacheHydratedGuildIds = new Set<string>();
   private readonly BotId: string;
   private readonly Token: string;
   private readonly ClientId: string;
@@ -209,6 +210,8 @@ class BotInstance {
     await RedisClient.set(`Bot:${this.BotId}:Guilds`, JSON.stringify(Guilds), "EX", 30);
     await this.CacheBotChannels();
     await this.CacheBotRoles();
+    await this.CacheBotMembers();
+    await this.CacheBotEmojis();
   }
 
   public async CacheBotRoles(): Promise<void> {
@@ -239,6 +242,44 @@ class BotInstance {
         }));
 
       await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:Channels`, JSON.stringify(Channels), "EX", 30);
+    }
+  }
+
+  public async CacheBotMembers(): Promise<void> {
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      if (!this.MemberCacheHydratedGuildIds.has(Guild.id)) {
+        await Guild.members.fetch().then(() => {
+          this.MemberCacheHydratedGuildIds.add(Guild.id);
+        }).catch((ErrorValue: unknown) => {
+          console.warn(`Could not hydrate member cache for guild ${Guild.id}:`, ErrorValue);
+          this.MemberCacheHydratedGuildIds.add(Guild.id);
+        });
+      }
+
+      const Members = Guild.members.cache
+        .filter((Member) => !Member.user.bot)
+        .sort((FirstMember, SecondMember) => FirstMember.displayName.localeCompare(SecondMember.displayName))
+        .map<BotMemberSummary>((Member) => ({
+          Id: Member.id,
+          DisplayName: Member.displayName,
+          Username: Member.user.username
+        }));
+
+      await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:Members`, JSON.stringify(Members), "EX", 30);
+    }
+  }
+
+  public async CacheBotEmojis(): Promise<void> {
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      const Emojis = Guild.emojis.cache
+        .sort((FirstEmoji, SecondEmoji) => (FirstEmoji.name ?? "").localeCompare(SecondEmoji.name ?? ""))
+        .map<BotEmojiSummary>((Emoji) => ({
+          Id: Emoji.id,
+          Name: Emoji.name ?? Emoji.id,
+          Animated: Emoji.animated ?? false
+        }));
+
+      await RedisClient.set(`Bot:${this.BotId}:Guild:${Guild.id}:Emojis`, JSON.stringify(Emojis), "EX", 30);
     }
   }
 

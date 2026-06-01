@@ -185,3 +185,15 @@ export type BotRoleSummary = {
   Color: number;
   Position: number;
 };
+
+export type BotMemberSummary = {
+  Id: string;
+  DisplayName: string;
+  Username: string;
+};
+
+export type BotEmojiSummary = {
+  Id: string;
+  Name: string;
+  Animated: boolean;
+};

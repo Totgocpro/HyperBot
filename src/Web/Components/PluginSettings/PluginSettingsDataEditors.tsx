@@ -313,8 +313,10 @@ export function SendEmbedEditor(Properties: {
           </section>
 
           <AdvancedEmbedEditor
+            BotId={Properties.BotId}
             BotIdentity={Properties.BotIdentity}
             EmbedValue={CurrentEmbed}
+            GuildId={Properties.GuildId}
             OnChange={SetCurrentEmbed}
             PlaceholderText="Build the embed from the preview. Select a part of the Discord preview, then edit only that section."
           />

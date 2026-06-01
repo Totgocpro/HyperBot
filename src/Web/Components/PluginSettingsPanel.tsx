@@ -411,6 +411,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   ) : SelectedPlugin.Metadata.Id === "CustomCommands" ? (
                     <CustomCommandsEditor
                       BotIdentity={BotIdentity}
+                      BotId={Properties.BotId}
                       DraftValues={DraftValues}
                       GuildId={Properties.GuildId}
                       OnCreateChannel={CreateChannel}
