@@ -5,18 +5,22 @@ type TempVoiceMusicPanelLogger = {
   Warn(Message: string, Metadata?: unknown): void;
 };
 
+type TempVoiceMusicPanelRenderOptions = {
+  HideTiming?: boolean;
+};
+
 export class TempVoiceMusicPanelRenderer {
   private readonly ThumbnailCache = new Map<string, Promise<Image | null>>();
 
   public constructor(private readonly Logger: TempVoiceMusicPanelLogger) {}
 
-  public async BuildPanelImage(State: TempVoiceMusicState): Promise<Buffer> {
+  public async BuildPanelImage(State: TempVoiceMusicState, Options: TempVoiceMusicPanelRenderOptions = {}): Promise<Buffer> {
     const Width = 1200;
     const Height = 560;
     const Canvas = createCanvas(Width, Height);
     const Context = Canvas.getContext("2d");
     const Thumbnail = await this.LoadThumbnail(State.TrackThumbnailUrl);
-    const Progress = State.DurationSeconds && State.DurationSeconds > 0
+    const Progress = !Options.HideTiming && State.DurationSeconds && State.DurationSeconds > 0
       ? Math.min(State.PositionSeconds / State.DurationSeconds, 1)
       : 0;
 
@@ -32,9 +36,12 @@ export class TempVoiceMusicPanelRenderer {
     this.DrawYoutubeBadge(Context, 54, 42);
 
     this.DrawThumbnail(Context, 54, 104, 520, 292, Thumbnail);
-    this.DrawTrackInfo(Context, State, 610, 104, 526);
+    this.DrawTrackInfo(Context, State, Options, 610, 104, 526);
     this.DrawQueue(Context, State, 610, 258, 526, 190);
-    this.DrawProgress(Context, State, Progress, 54, 462, 1082);
+
+    if (!Options.HideTiming) {
+      this.DrawProgress(Context, State, Progress, 54, 462, 1082);
+    }
 
     return Canvas.encodeSync("png");
   }
@@ -111,7 +118,7 @@ export class TempVoiceMusicPanelRenderer {
     Context.restore();
   }
 
-  private DrawTrackInfo(Context: SKRSContext2D, State: TempVoiceMusicState, X: number, Y: number, Width: number): void {
+  private DrawTrackInfo(Context: SKRSContext2D, State: TempVoiceMusicState, Options: TempVoiceMusicPanelRenderOptions, X: number, Y: number, Width: number): void {
     Context.font = "800 36px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
     Context.fillStyle = "#f8fafc";
     Context.textAlign = "left";
@@ -127,6 +134,10 @@ export class TempVoiceMusicPanelRenderer {
     Context.font = "700 18px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
     Context.fillStyle = State.Paused ? "#fbbf24" : "#22c55e";
     Context.fillText(State.Paused ? "Paused" : "Playing now", X, Y + 124);
+
+    if (Options.HideTiming) {
+      return;
+    }
 
     Context.fillStyle = "#94a3b8";
     Context.fillText(`${this.FormatDuration(State.PositionSeconds)} / ${this.FormatDuration(State.DurationSeconds)}`, X + 132, Y + 124);

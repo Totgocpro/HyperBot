@@ -147,9 +147,17 @@ const DefaultConfig: TempVoiceConfig = {
 
 const SessionsStorageKey = "TempVoiceSessions";
 const MusicPanelAttachmentName = "tempvoice-music-panel.png";
+const MusicPanelGlobalWriteSpacingMs = 900;
 const MusicPanelRefreshIntervalMs = 3500;
+const MusicPanelSlowRefreshThresholdMs = 1200;
+const DiscordRestRateLimitPaddingMs = 250;
 
 export default class TempVoicePlugin extends BasePlugin {
+  private DiscordRestPressureUntilMs = 0;
+  private MusicPanelGlobalNextWriteAtMs = 0;
+  private readonly MusicPanelLastWriteAtMs = new Map<string, number>();
+  private readonly MusicPanelMessages = new Map<string, Message>();
+  private readonly MusicPanelNextWriteAtMs = new Map<string, number>();
   private readonly MusicPanelRefreshes = new Set<string>();
   private readonly MusicPanelRefreshTimers = new Map<string, NodeJS.Timeout>();
   private readonly MusicPanelRenderer = new TempVoiceMusicPanelRenderer(this.Logger);
@@ -161,8 +169,31 @@ export default class TempVoicePlugin extends BasePlugin {
   private readonly TtsPlayer = new TempVoiceTtsPlayer(this.Logger, async (ChannelId) => {
     await this.RefreshControlPanel(ChannelId);
   });
+  private readonly OnDiscordRestRateLimited = (RateLimitData: unknown): void => {
+    const RetryAfter = this.ReadPositiveNumber(RateLimitData, ["retryAfter", "timeToReset", "sublimitTimeout"]);
+
+    if (RetryAfter > 0) {
+      this.MarkDiscordRestPressure(RetryAfter, "rateLimited");
+    }
+  };
+  private readonly OnDiscordRestResponse = (_RequestData: unknown, ResponseValue: unknown): void => {
+    const Headers = (ResponseValue as { headers?: { get(Name: string): string | null } } | null)?.headers;
+
+    if (!Headers) {
+      return;
+    }
+
+    const Remaining = Number(Headers.get("X-RateLimit-Remaining") ?? "");
+    const ResetAfterSeconds = Number(Headers.get("X-RateLimit-Reset-After") ?? "");
+
+    if (Number.isFinite(Remaining) && Remaining <= 0 && Number.isFinite(ResetAfterSeconds) && ResetAfterSeconds > 0) {
+      this.MarkDiscordRestPressure(ResetAfterSeconds * 1000, "headers");
+    }
+  };
 
   public async OnEnable(): Promise<void> {
+    this.DiscordClient.rest.on("rateLimited", this.OnDiscordRestRateLimited);
+    this.DiscordClient.rest.on("response", this.OnDiscordRestResponse);
     this.Logger.Info("Temp Voice plugin enabled.");
   }
 
@@ -171,6 +202,8 @@ export default class TempVoicePlugin extends BasePlugin {
       this.StopMusicPanelRefreshLoop(ChannelId);
     }
 
+    this.DiscordClient.rest.off("rateLimited", this.OnDiscordRestRateLimited);
+    this.DiscordClient.rest.off("response", this.OnDiscordRestResponse);
     this.Logger.Info("Temp Voice plugin disabled.");
   }
 
@@ -1366,7 +1399,7 @@ export default class TempVoicePlugin extends BasePlugin {
         return;
       }
 
-      await this.UpsertMusicPanelMessage(Channel, Session, Config);
+      await this.UpsertMusicPanelMessage(Channel, Session, Config, Reason);
 
       if (MusicState.Paused) {
         this.StopMusicPanelRefreshLoop(ChannelId);
@@ -1404,7 +1437,41 @@ export default class TempVoicePlugin extends BasePlugin {
     this.MusicPanelRefreshTimers.delete(ChannelId);
   }
 
-  private async UpsertMusicPanelMessage(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig): Promise<void> {
+  private async ReserveMusicPanelWrite(ChannelId: string, Reason: "state" | "tick"): Promise<{ HideTiming: boolean }> {
+    const Now = Date.now();
+    const RestWaitMs = Math.max(this.DiscordRestPressureUntilMs - Now, 0);
+    const GlobalWaitMs = Math.max(this.MusicPanelGlobalNextWriteAtMs - Now, 0);
+    const ChannelWaitMs = Reason === "tick" ? Math.max((this.MusicPanelNextWriteAtMs.get(ChannelId) ?? 0) - Now, 0) : 0;
+    const WaitMs = Math.max(RestWaitMs, GlobalWaitMs, ChannelWaitMs);
+    const HideTiming = RestWaitMs > MusicPanelSlowRefreshThresholdMs || GlobalWaitMs > MusicPanelSlowRefreshThresholdMs;
+
+    if (WaitMs > 0) {
+      await this.Sleep(WaitMs);
+    }
+
+    const ReservedAt = Date.now();
+    this.MusicPanelNextWriteAtMs.set(ChannelId, ReservedAt + MusicPanelRefreshIntervalMs);
+    this.MusicPanelGlobalNextWriteAtMs = Math.max(this.MusicPanelGlobalNextWriteAtMs, ReservedAt + MusicPanelGlobalWriteSpacingMs);
+
+    return { HideTiming };
+  }
+
+  private MarkMusicPanelWrite(ChannelId: string): void {
+    this.MusicPanelLastWriteAtMs.set(ChannelId, Date.now());
+  }
+
+  private IsMusicPanelRefreshSlow(ChannelId: string): boolean {
+    const LastWriteAt = this.MusicPanelLastWriteAtMs.get(ChannelId);
+
+    if (!LastWriteAt) {
+      return false;
+    }
+
+    return Date.now() - LastWriteAt > MusicPanelRefreshIntervalMs + MusicPanelSlowRefreshThresholdMs;
+  }
+
+  private async UpsertMusicPanelMessage(Channel: VoiceChannel, Session: TempVoiceSession, Config: TempVoiceConfig, Reason: "state" | "tick"): Promise<void> {
+    const Reservation = await this.ReserveMusicPanelWrite(Session.ChannelId, Reason);
     const MusicState = this.MusicPlayer.GetState(Session.ChannelId);
 
     if (!MusicState.Active) {
@@ -1412,7 +1479,8 @@ export default class TempVoicePlugin extends BasePlugin {
       return;
     }
 
-    const Attachment = new AttachmentBuilder(await this.MusicPanelRenderer.BuildPanelImage(MusicState), {
+    const HideTiming = Reservation.HideTiming || this.IsMusicPanelRefreshSlow(Session.ChannelId);
+    const Attachment = new AttachmentBuilder(await this.MusicPanelRenderer.BuildPanelImage(MusicState, { HideTiming }), {
       name: MusicPanelAttachmentName
     });
     const Embed = new EmbedBuilder()
@@ -1457,17 +1525,28 @@ export default class TempVoicePlugin extends BasePlugin {
     };
 
     if (Session.MusicPanelMessageId) {
-      const ExistingMessage = await this.FetchMusicPanelMessage(TextChannel, Session.MusicPanelMessageId);
+      const CachedMessage = this.MusicPanelMessages.get(Session.ChannelId);
+      const ExistingMessage = CachedMessage?.id === Session.MusicPanelMessageId
+        ? CachedMessage
+        : await this.FetchMusicPanelMessage(TextChannel, Session.MusicPanelMessageId);
 
       if (ExistingMessage) {
+        this.MusicPanelMessages.set(Session.ChannelId, ExistingMessage);
         let FailedWithUnknownMessage = false;
+        let FailedWithRateLimit = false;
         const Edited = await ExistingMessage.edit(EditPayload).then(() => true).catch((ErrorValue: unknown) => {
           this.Logger.Warn("Could not edit temporary voice music panel.", ErrorValue);
           FailedWithUnknownMessage = this.IsDiscordUnknownMessageError(ErrorValue);
+          FailedWithRateLimit = this.RecordDiscordRateLimitFromError(ErrorValue);
           return false;
         });
 
         if (Edited) {
+          this.MarkMusicPanelWrite(Session.ChannelId);
+          return;
+        }
+
+        if (FailedWithRateLimit) {
           return;
         }
 
@@ -1477,22 +1556,27 @@ export default class TempVoicePlugin extends BasePlugin {
       }
 
       Session.MusicPanelMessageId = undefined;
+      this.MusicPanelMessages.delete(Session.ChannelId);
       await this.SaveSession(Session);
     }
 
     const MessageValue = await TextChannel.send(Payload).catch((ErrorValue: unknown) => {
       this.Logger.Warn("Could not send temporary voice music panel.", ErrorValue);
+      this.RecordDiscordRateLimitFromError(ErrorValue);
       return null;
     });
 
     if (MessageValue) {
       Session.MusicPanelMessageId = MessageValue.id;
+      this.MusicPanelMessages.set(Session.ChannelId, MessageValue);
+      this.MarkMusicPanelWrite(Session.ChannelId);
       await this.SaveSession(Session);
     }
   }
 
   private async DeleteMusicPanelMessage(Session: TempVoiceSession): Promise<void> {
     if (!Session.MusicPanelMessageId) {
+      this.ClearMusicPanelRuntimeState(Session.ChannelId);
       return;
     }
 
@@ -1500,6 +1584,8 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await Guild?.channels.fetch(Session.ChannelId).catch(() => null);
     const MessageId = Session.MusicPanelMessageId;
     Session.MusicPanelMessageId = undefined;
+    const CachedMessage = this.MusicPanelMessages.get(Session.ChannelId);
+    this.ClearMusicPanelRuntimeState(Session.ChannelId);
     await this.SaveSession(Session);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
@@ -1511,7 +1597,9 @@ export default class TempVoicePlugin extends BasePlugin {
         fetch(MessageIdValue: string): Promise<Message>;
       };
     };
-    const MessageValue = await this.FetchMusicPanelMessage(TextChannel, MessageId);
+    const MessageValue = CachedMessage?.id === MessageId
+      ? CachedMessage
+      : await this.FetchMusicPanelMessage(TextChannel, MessageId);
 
     if (!MessageValue) {
       return;
@@ -1521,7 +1609,15 @@ export default class TempVoicePlugin extends BasePlugin {
       if (!this.IsDiscordUnknownMessageError(ErrorValue)) {
         this.Logger.Warn("Could not delete temporary voice music panel.", ErrorValue);
       }
+
+      this.RecordDiscordRateLimitFromError(ErrorValue);
     });
+  }
+
+  private ClearMusicPanelRuntimeState(ChannelId: string): void {
+    this.MusicPanelLastWriteAtMs.delete(ChannelId);
+    this.MusicPanelMessages.delete(ChannelId);
+    this.MusicPanelNextWriteAtMs.delete(ChannelId);
   }
 
   private async SendControlPanelFromSession(Guild: Guild, Session: TempVoiceSession, Config: TempVoiceConfig, SourceInteraction?: ButtonInteraction<"cached">): Promise<void> {
@@ -1791,6 +1887,67 @@ export default class TempVoicePlugin extends BasePlugin {
   private ParseColor(ColorValue: string): number {
     const SafeColor = /^#[0-9a-f]{6}$/iu.test(ColorValue) ? ColorValue : DefaultConfig.ControlPanelColor;
     return Number.parseInt(SafeColor.replace("#", ""), 16);
+  }
+
+  private MarkDiscordRestPressure(DurationMs: number, Source: string): void {
+    const SafeDurationMs = this.Clamp(Math.ceil(DurationMs + DiscordRestRateLimitPaddingMs), 0, 60_000);
+
+    if (SafeDurationMs <= 0) {
+      return;
+    }
+
+    this.DiscordRestPressureUntilMs = Math.max(this.DiscordRestPressureUntilMs, Date.now() + SafeDurationMs);
+
+    if (Source !== "headers" && SafeDurationMs >= MusicPanelSlowRefreshThresholdMs) {
+      this.Logger.Warn("TempVoice music panel refresh delayed by Discord REST pressure.", {
+        DurationMs: SafeDurationMs,
+        Source
+      });
+    }
+  }
+
+  private RecordDiscordRateLimitFromError(ErrorValue: unknown): boolean {
+    const Candidate = ErrorValue as {
+      code?: unknown;
+      headers?: { get(Name: string): string | null };
+      rawError?: { retry_after?: unknown };
+      retryAfter?: unknown;
+      status?: unknown;
+    } | null;
+    const HeaderRetryAfter = Number(Candidate?.headers?.get("Retry-After") ?? Candidate?.headers?.get("X-RateLimit-Reset-After") ?? "");
+    const BodyRetryAfter = typeof Candidate?.rawError?.retry_after === "number"
+      ? Candidate.rawError.retry_after * 1000
+      : Number.NaN;
+    const RetryAfter = this.ReadPositiveNumber(Candidate, ["retryAfter"]) || (Number.isFinite(HeaderRetryAfter) ? HeaderRetryAfter * 1000 : 0) || (Number.isFinite(BodyRetryAfter) ? BodyRetryAfter : 0);
+    const IsRateLimited = Candidate?.status === 429 || Candidate?.code === 429 || RetryAfter > 0;
+
+    if (IsRateLimited) {
+      this.MarkDiscordRestPressure(RetryAfter || MusicPanelRefreshIntervalMs, "error");
+    }
+
+    return IsRateLimited;
+  }
+
+  private ReadPositiveNumber(Source: unknown, Keys: string[]): number {
+    const Candidate = Source as Record<string, unknown> | null;
+
+    for (const Key of Keys) {
+      const Value = Candidate?.[Key];
+      const ParsedValue = typeof Value === "number" ? Value : typeof Value === "string" ? Number.parseFloat(Value) : Number.NaN;
+
+      if (Number.isFinite(ParsedValue) && ParsedValue > 0) {
+        return ParsedValue;
+      }
+    }
+
+    return 0;
+  }
+
+  private async Sleep(DurationMs: number): Promise<void> {
+    await new Promise<void>((Resolve) => {
+      const Timer = setTimeout(Resolve, DurationMs);
+      Timer.unref?.();
+    });
   }
 
   private Clamp(Value: number, Minimum: number, Maximum: number): number {
