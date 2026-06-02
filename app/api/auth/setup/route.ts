@@ -4,6 +4,7 @@ import { Prisma } from "@/src/Core/Clients";
 import { CreateDashboardSession, SessionCookieName, ShouldUseSecureCookies } from "@/src/Web/Auth";
 import { HashPassword } from "@/src/Web/Password";
 import { ClearAuthRateLimit, EnforceAuthRateLimit } from "@/src/Web/RateLimit";
+import { GetRequestIpAddress, GetRequestUserAgent } from "@/src/Web/RequestMetadata";
 
 async function Post(Request: Request): Promise<Response> {
   const UserCount = await Prisma.dashboardUser.count();
@@ -71,6 +72,19 @@ async function Post(Request: Request): Promise<Response> {
   await ClearAuthRateLimit(Request, "setup", Body.Username);
 
   const Session = await CreateDashboardSession(User.Id);
+  await Prisma.auditLog.create({
+    data: {
+      ActorId: User.DiscordId,
+      Action: "DashboardSetupCompleted",
+      Target: User.DiscordId,
+      Metadata: {
+        IpAddress: GetRequestIpAddress(Request),
+        UserAgent: GetRequestUserAgent(Request),
+        Username,
+        Result: "Success"
+      }
+    }
+  });
   const ResponseValue = NextResponse.json({ Created: true });
 
   ResponseValue.cookies.set(SessionCookieName, Session.SessionToken, {

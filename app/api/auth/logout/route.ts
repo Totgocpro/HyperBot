@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
-import { HashSessionToken, SessionCookieName, ShouldUseSecureCookies } from "@/src/Web/Auth";
+import { GetSessionUser, HashSessionToken, SessionCookieName, ShouldUseSecureCookies } from "@/src/Web/Auth";
+import { GetRequestIpAddress, GetRequestUserAgent } from "@/src/Web/RequestMetadata";
 
 async function Post(Request: Request): Promise<Response> {
+  const User = await GetSessionUser(Request);
   const SessionToken = Request.headers
     .get("cookie")
     ?.split(";")
@@ -18,6 +20,19 @@ async function Post(Request: Request): Promise<Response> {
       },
       data: {
         RevokedAt: new Date()
+      }
+    });
+
+    await Prisma.auditLog.create({
+      data: {
+        ActorId: User?.DiscordId ?? "anonymous",
+        Action: "DashboardLogout",
+        Target: User?.DiscordId ?? "DashboardSession",
+        Metadata: {
+          IpAddress: GetRequestIpAddress(Request),
+          UserAgent: GetRequestUserAgent(Request),
+          Result: "SessionRevoked"
+        }
       }
     });
   }

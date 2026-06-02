@@ -4,7 +4,7 @@ import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type Re
 import type { HealthReport, SettingsField } from "../../Core/Types";
 import { CustomSelect } from "./CustomSelect";
 
-type AdminSection = "GeneralStatus" | "ConfigTransfer" | "UserManagement";
+type AdminSection = "GeneralStatus" | "ConfigTransfer" | "UserManagement" | "AuditLogs";
 
 type DashboardUserRow = {
   Id: string;
@@ -49,6 +49,29 @@ type BotAccessScope = {
   Grants: GuildGrantRow[];
 };
 
+type AuditLogRow = {
+  Id: string;
+  BotId: string | null;
+  ActorId: string;
+  ActorDisplayName: string | null;
+  Action: string;
+  Target: string;
+  Metadata: unknown;
+  CreatedAt: string;
+};
+
+type AuditLogFilters = {
+  Search: string;
+  Action: string;
+  ActorId: string;
+  Target: string;
+  BotId: string;
+  IpAddress: string;
+  From: string;
+  To: string;
+  Limit: string;
+};
+
 type UserForm = {
   Username: string;
   Password: string;
@@ -71,10 +94,23 @@ const EmptyUserForm: UserForm = {
   GuildPluginAccess: {}
 };
 
+const DefaultAuditLogFilters: AuditLogFilters = {
+  Search: "",
+  Action: "",
+  ActorId: "",
+  Target: "",
+  BotId: "",
+  IpAddress: "",
+  From: "",
+  To: "",
+  Limit: "100"
+};
+
 const AdminSections: Array<{ Id: AdminSection; Label: string; Description: string }> = [
   { Id: "GeneralStatus", Label: "General and status", Description: "Instance health and quick metrics." },
   { Id: "ConfigTransfer", Label: "Config export/import", Description: "Move every saved configuration as JSON." },
-  { Id: "UserManagement", Label: "User Management", Description: "Accounts, roles, bans, and access." }
+  { Id: "UserManagement", Label: "User Management", Description: "Accounts, roles, bans, and access." },
+  { Id: "AuditLogs", Label: "Logs", Description: "Audit trail, login IPs, and filters." }
 ];
 
 export function SuperAdminPanel() {
@@ -84,6 +120,9 @@ export function SuperAdminPanel() {
   const [Users, SetUsers] = UseState<DashboardUserRow[]>([]);
   const [Bots, SetBots] = UseState<BotRow[]>([]);
   const [BotAccessScopes, SetBotAccessScopes] = UseState<BotAccessScope[]>([]);
+  const [AuditLogs, SetAuditLogs] = UseState<AuditLogRow[]>([]);
+  const [AuditLogFiltersValue, SetAuditLogFiltersValue] = UseState<AuditLogFilters>(DefaultAuditLogFilters);
+  const [AuditLogTotal, SetAuditLogTotal] = UseState(0);
   const [CurrentUserDiscordId, SetCurrentUserDiscordId] = UseState("");
   const [CreateUserForm, SetCreateUserForm] = UseState<UserForm>(EmptyUserForm);
   const [IsCreateUserOpen, SetIsCreateUserOpen] = UseState(false);
@@ -98,6 +137,12 @@ export function SuperAdminPanel() {
   UseEffect(() => {
     void LoadAdminData();
   }, []);
+
+  UseEffect(() => {
+    if (ActiveSection === "AuditLogs") {
+      void LoadAuditLogs();
+    }
+  }, [ActiveSection]);
 
   UseEffect(() => {
     if (!SelectedUser) {
@@ -145,6 +190,45 @@ export function SuperAdminPanel() {
       SetStatus("Admin data loaded.");
     } catch (ErrorValue) {
       SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Admin data loading failed.");
+    }
+  }
+
+  async function LoadAuditLogs(Filters: AuditLogFilters = AuditLogFiltersValue): Promise<void> {
+    try {
+      const Query = new URLSearchParams();
+      const FilterEntries: Array<[keyof AuditLogFilters, string]> = [
+        ["Search", "search"],
+        ["Action", "action"],
+        ["ActorId", "actorId"],
+        ["Target", "target"],
+        ["BotId", "botId"],
+        ["IpAddress", "ipAddress"],
+        ["From", "from"],
+        ["To", "to"],
+        ["Limit", "limit"]
+      ];
+
+      for (const [FilterKey, QueryKey] of FilterEntries) {
+        const Value = Filters[FilterKey].trim();
+
+        if (Value) {
+          Query.set(QueryKey, Value);
+        }
+      }
+
+      const Response = await fetch(`/api/admin/logs?${Query.toString()}`);
+
+      if (!Response.ok) {
+        SetStatus(await Response.text());
+        return;
+      }
+
+      const Payload = (await Response.json()) as { Logs: AuditLogRow[]; Total: number; Limit: number };
+      SetAuditLogs(Payload.Logs);
+      SetAuditLogTotal(Payload.Total);
+      SetStatus(`Logs loaded (${Payload.Logs.length}/${Payload.Total}).`);
+    } catch (ErrorValue) {
+      SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Log loading failed.");
     }
   }
 
@@ -430,6 +514,22 @@ export function SuperAdminPanel() {
               CreateUser={CreateUser}
             />
           ) : null}
+
+          {ActiveSection === "AuditLogs" ? (
+            <AuditLogsPanel
+              Bots={Bots}
+              Filters={AuditLogFiltersValue}
+              Logs={AuditLogs}
+              OnApplyFilters={() => void LoadAuditLogs()}
+              OnReload={() => void LoadAuditLogs()}
+              OnResetFilters={() => {
+                SetAuditLogFiltersValue(DefaultAuditLogFilters);
+                void LoadAuditLogs(DefaultAuditLogFilters);
+              }}
+              SetFilters={SetAuditLogFiltersValue}
+              Total={AuditLogTotal}
+            />
+          ) : null}
         </section>
       </div>
     </main>
@@ -526,6 +626,118 @@ function ConfigTransferPanel(Properties: {
           {Properties.ImportFileName ? <p className="mt-3 text-xs text-slate-500">Last selected file: {Properties.ImportFileName}</p> : null}
         </section>
       </div>
+    </section>
+  );
+}
+
+function AuditLogsPanel(Properties: {
+  Bots: BotRow[];
+  Filters: AuditLogFilters;
+  Logs: AuditLogRow[];
+  OnApplyFilters: () => void;
+  OnReload: () => void;
+  OnResetFilters: () => void;
+  SetFilters: (Value: AuditLogFilters) => void;
+  Total: number;
+}) {
+  function SetFilter(Key: keyof AuditLogFilters, Value: string): void {
+    Properties.SetFilters({ ...Properties.Filters, [Key]: Value });
+  }
+
+  return (
+    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-[0.35em] text-blue-300">Logs</p>
+          <h2 className="mt-3 text-2xl font-black text-white sm:text-3xl">Audit trail</h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-400">
+            Review admin actions, plugin changes, authentication events, connection IPs, and request metadata.
+          </p>
+        </div>
+        <button className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800" onClick={Properties.OnReload} type="button">
+          Reload logs
+        </button>
+      </div>
+
+      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminInput Label="Search" Placeholder="Action, actor, target, IP..." Value={Properties.Filters.Search} OnChange={(Value) => SetFilter("Search", Value)} />
+          <AdminInput Label="Action" Placeholder="DashboardLoginSucceeded" Value={Properties.Filters.Action} OnChange={(Value) => SetFilter("Action", Value)} />
+          <AdminInput Label="Actor ID" Placeholder="Discord ID or username" Value={Properties.Filters.ActorId} OnChange={(Value) => SetFilter("ActorId", Value)} />
+          <AdminInput Label="Target" Placeholder="User, plugin, guild..." Value={Properties.Filters.Target} OnChange={(Value) => SetFilter("Target", Value)} />
+          <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
+            Bot
+            <CustomSelect
+              ClassName="mt-2"
+              EmptyLabel="All bots"
+              OnChange={(Value) => SetFilter("BotId", Value)}
+              Options={Properties.Bots.map((Bot) => ({ Label: Bot.Name, Value: Bot.Id, Description: Bot.Id }))}
+              Value={Properties.Filters.BotId}
+            />
+          </div>
+          <AdminInput Label="IP address" Placeholder="192.0.2.10" Value={Properties.Filters.IpAddress} OnChange={(Value) => SetFilter("IpAddress", Value)} />
+          <AdminInput Label="From" Type="datetime-local" Value={Properties.Filters.From} OnChange={(Value) => SetFilter("From", Value)} />
+          <AdminInput Label="To" Type="datetime-local" Value={Properties.Filters.To} OnChange={(Value) => SetFilter("To", Value)} />
+          <AdminInput Label="Limit" Type="number" Value={Properties.Filters.Limit} OnChange={(Value) => SetFilter("Limit", Value)} />
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <button className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={Properties.OnApplyFilters} type="button">
+            Apply filters
+          </button>
+          <button className="rounded-2xl border border-slate-700 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800" onClick={Properties.OnResetFilters} type="button">
+            Reset filters
+          </button>
+          <p className="self-center text-sm text-slate-500">
+            Showing {Properties.Logs.length} of {Properties.Total} matching log(s).
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-950">
+        {Properties.Logs.length === 0 ? (
+          <p className="p-8 text-center text-sm text-slate-400">No log found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[1100px] w-full border-collapse text-left text-sm">
+              <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-[0.2em] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Time</th>
+                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">Actor</th>
+                  <th className="px-4 py-3">Target</th>
+                  <th className="px-4 py-3">Bot</th>
+                  <th className="px-4 py-3">IP</th>
+                  <th className="px-4 py-3">Result</th>
+                  <th className="px-4 py-3">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {Properties.Logs.map((Log) => (
+                  <tr className="align-top text-slate-200" key={Log.Id}>
+                    <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-400">{FormatAuditDate(Log.CreatedAt)}</td>
+                    <td className="px-4 py-4 font-bold text-white">{Log.Action}</td>
+                    <td className="px-4 py-4">
+                      <span className="block font-semibold">{Log.ActorDisplayName ?? Log.ActorId}</span>
+                      {Log.ActorDisplayName ? <span className="mt-1 block text-xs text-slate-500">{Log.ActorId}</span> : null}
+                    </td>
+                    <td className="px-4 py-4 text-slate-300">{Log.Target}</td>
+                    <td className="px-4 py-4 text-xs text-slate-400">{BuildAuditBotLabel(Log.BotId, Properties.Bots)}</td>
+                    <td className="px-4 py-4 font-mono text-xs text-slate-300">{GetAuditMetadataValue(Log.Metadata, "IpAddress") || "-"}</td>
+                    <td className="px-4 py-4">{GetAuditMetadataValue(Log.Metadata, "Result") || "-"}</td>
+                    <td className="max-w-md px-4 py-4">
+                      <details>
+                        <summary className="cursor-pointer text-xs font-bold text-blue-300 hover:text-blue-200">Metadata</summary>
+                        <pre className="mt-2 max-h-48 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">{FormatAuditMetadata(Log.Metadata)}</pre>
+                      </details>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </section>
   );
 }
@@ -963,6 +1175,63 @@ function BuildGrantPluginCategoryGroups(Plugins: GrantPlugin[]): Array<{ Categor
     Category,
     Plugins: GroupPlugins
   }));
+}
+
+function BuildAuditBotLabel(BotId: string | null, Bots: BotRow[]): string {
+  if (!BotId) {
+    return "-";
+  }
+
+  const Bot = Bots.find((BotRowValue) => BotRowValue.Id === BotId);
+  return Bot ? `${Bot.Name} (${Bot.Id})` : BotId;
+}
+
+function FormatAuditDate(Value: string): string {
+  const DateValue = new Date(Value);
+
+  if (Number.isNaN(DateValue.getTime())) {
+    return Value;
+  }
+
+  return DateValue.toLocaleString();
+}
+
+function FormatAuditMetadata(Metadata: unknown): string {
+  if (Metadata === null || Metadata === undefined) {
+    return "{}";
+  }
+
+  try {
+    return JSON.stringify(Metadata, null, 2);
+  } catch {
+    return String(Metadata);
+  }
+}
+
+function GetAuditMetadataValue(Metadata: unknown, Key: string): string {
+  if (!IsRecord(Metadata)) {
+    return "";
+  }
+
+  const Value = Metadata[Key];
+
+  if (Value === null || Value === undefined) {
+    return "";
+  }
+
+  if (typeof Value === "string") {
+    return Value;
+  }
+
+  if (typeof Value === "number" || typeof Value === "boolean") {
+    return String(Value);
+  }
+
+  return "";
+}
+
+function IsRecord(Value: unknown): Value is Record<string, unknown> {
+  return typeof Value === "object" && Value !== null && !Array.isArray(Value);
 }
 
 async function ReadFirstError(Responses: Response[]): Promise<string> {
