@@ -33,6 +33,7 @@ This structure makes HyperBot a reusable foundation: the bot core stays stable w
 | `Statistics` | Guild | `/stats` | Track messages, voice time, joins, leaves, channel counters, and custom `/stats` embeds. |
 | `TempVoice` | Guild | Dashboard only | Create temporary voice channels with owner controls and protection rules. |
 | `WelcomeMessage` | Guild | Dashboard only | Send welcome/leave messages and run configurable captcha verification flows. |
+| `EmojiAdder` | Guild | Dashboard only | Add any Tenor gif as an emoji on your Discord Server. |
 
 ### Plugin Details
 
