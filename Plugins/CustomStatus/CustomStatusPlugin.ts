@@ -16,10 +16,6 @@ type CustomStatusConfig = {
   RotationMode: RotationMode;
   RotationIntervalSeconds: number;
   AvoidImmediateRepeat: boolean;
-  UsePlaceholders: boolean;
-  ShowGuildCount: boolean;
-  ShowUserCount: boolean;
-  ShowPluginCount: boolean;
 };
 
 const DefaultConfig: CustomStatusConfig = {
@@ -31,11 +27,7 @@ const DefaultConfig: CustomStatusConfig = {
   EmojiPlacement: "Prefix",
   RotationMode: "Sequential",
   RotationIntervalSeconds: 60,
-  AvoidImmediateRepeat: true,
-  UsePlaceholders: true,
-  ShowGuildCount: true,
-  ShowUserCount: true,
-  ShowPluginCount: true
+  AvoidImmediateRepeat: true
 };
 
 const ActivityTypeValues: Record<ActivityTypeName, ActivityType> = {
@@ -92,7 +84,7 @@ export default class CustomStatusPlugin extends BasePlugin {
       this.LastRotationAt = Now;
     }
 
-    const StatusText = await this.BuildStatusText(StatusTexts[this.CurrentStatusIndex] ?? StatusTexts[0] ?? "HyperBot Dashboard", Config);
+    const StatusText = this.BuildStatusText(StatusTexts[this.CurrentStatusIndex] ?? StatusTexts[0] ?? "HyperBot Dashboard", Config);
     const Signature = `${StatusText}:${Config.PresenceStatus}:${Config.ActivityType}`;
 
     if (Signature === this.LastAppliedSignature && !ForceRefresh) {
@@ -121,23 +113,8 @@ export default class CustomStatusPlugin extends BasePlugin {
     return (this.CurrentStatusIndex + 1) % StatusTextCount;
   }
 
-  private async BuildStatusText(StatusText: string, Config: CustomStatusConfig): Promise<string> {
-    const TextWithEmoji = this.ApplyEmoji(StatusText, Config);
-
-    if (!Config.UsePlaceholders) {
-      return TextWithEmoji.slice(0, 128);
-    }
-
-    const GuildCount = this.DiscordClient.guilds.cache.size;
-    const UserCount = this.DiscordClient.guilds.cache.reduce((Total, Guild) => Total + (Guild.memberCount ?? 0), 0);
-    const PluginCount = Number(process.env.PLUGIN_COUNT_HINT ?? 0);
-
-    return TextWithEmoji
-      .replaceAll("%guilds%", Config.ShowGuildCount ? String(GuildCount) : "")
-      .replaceAll("%users%", Config.ShowUserCount ? String(UserCount) : "")
-      .replaceAll("%plugins%", Config.ShowPluginCount ? String(PluginCount || "plugins") : "")
-      .replaceAll("%bot%", this.DiscordClient.user?.username ?? "HyperBot")
-      .slice(0, 128);
+  private BuildStatusText(StatusText: string, Config: CustomStatusConfig): string {
+    return this.ApplyEmoji(StatusText, Config).slice(0, 128);
   }
 
   private ApplyEmoji(StatusText: string, Config: CustomStatusConfig): string {
@@ -174,11 +151,7 @@ export default class CustomStatusPlugin extends BasePlugin {
       EmojiPlacement: (await this.Storage.GetGlobalConfig<EmojiPlacement>("Global", "EmojiPlacement")) ?? DefaultConfig.EmojiPlacement,
       RotationMode: (await this.Storage.GetGlobalConfig<RotationMode>("Global", "RotationMode")) ?? DefaultConfig.RotationMode,
       RotationIntervalSeconds: (await this.Storage.GetGlobalConfig<number>("Global", "RotationIntervalSeconds")) ?? DefaultConfig.RotationIntervalSeconds,
-      AvoidImmediateRepeat: (await this.Storage.GetGlobalConfig<boolean>("Global", "AvoidImmediateRepeat")) ?? DefaultConfig.AvoidImmediateRepeat,
-      UsePlaceholders: (await this.Storage.GetGlobalConfig<boolean>("Global", "UsePlaceholders")) ?? DefaultConfig.UsePlaceholders,
-      ShowGuildCount: (await this.Storage.GetGlobalConfig<boolean>("Global", "ShowGuildCount")) ?? DefaultConfig.ShowGuildCount,
-      ShowUserCount: (await this.Storage.GetGlobalConfig<boolean>("Global", "ShowUserCount")) ?? DefaultConfig.ShowUserCount,
-      ShowPluginCount: (await this.Storage.GetGlobalConfig<boolean>("Global", "ShowPluginCount")) ?? DefaultConfig.ShowPluginCount
+      AvoidImmediateRepeat: (await this.Storage.GetGlobalConfig<boolean>("Global", "AvoidImmediateRepeat")) ?? DefaultConfig.AvoidImmediateRepeat
     };
   }
 }

@@ -162,34 +162,6 @@
       "Label": "Avoid immediate repeat in random mode",
       "Default": true,
       "Section": "Rotation"
-    },
-    {
-      "Key": "UsePlaceholders",
-      "Type": "Boolean",
-      "Label": "Enable placeholders",
-      "Default": true,
-      "Section": "Personalization"
-    },
-    {
-      "Key": "ShowGuildCount",
-      "Type": "Boolean",
-      "Label": "Allow %guilds% placeholder",
-      "Default": true,
-      "Section": "Personalization"
-    },
-    {
-      "Key": "ShowUserCount",
-      "Type": "Boolean",
-      "Label": "Allow %users% placeholder",
-      "Default": true,
-      "Section": "Personalization"
-    },
-    {
-      "Key": "ShowPluginCount",
-      "Type": "Boolean",
-      "Label": "Allow %plugins% placeholder",
-      "Default": true,
-      "Section": "Personalization"
     }
   ],
   "EntryPoint": "./CustomStatusPlugin.ts"
