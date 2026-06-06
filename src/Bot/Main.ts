@@ -67,7 +67,7 @@ type DashboardPluginControlAction = {
   CreatedAt: string;
 };
 
-const EnableMessageEvents = process.env.ENABLE_MESSAGE_EVENTS === "true";
+const EnableMessageEvents = process.env.ENABLE_MESSAGE_EVENTS !== "false";
 const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
 
 console.log(`[Bot] Message events ${EnableMessageEvents ? "enabled" : "disabled"}.`);
