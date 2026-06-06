@@ -1,271 +1,255 @@
 # HyperBot
 
-HyperBot is a Discord bot with a web dashboard, built around a modular architecture. The core project handles plugin loading, storage, the admin interface, permissions, and Discord command synchronization. Business features live in `Plugins/`, so they can be added, removed, or changed without modifying the core.
+HyperBot is a Discord bot with a web dashboard and a plugin-based architecture. The core project handles bot instances, plugin loading, storage, the admin interface, permissions, Discord command synchronization, PostgreSQL, and Redis. Features live in `Plugins/`, so they can be added or changed without rewriting the core.
 
-## Project Goal
-
-The main goal is modularity:
-
-- each plugin has its own directory, `Plugin.json`, and TypeScript entry point;
-- plugins declare their slash commands, dashboard settings, and dependencies;
-- the dashboard reads plugin manifests to automatically render available settings;
-- the bot reloads plugins during development and centralizes Discord events;
-- configuration is stored per plugin, globally or per Discord server.
-
-This structure makes HyperBot a reusable foundation: the bot core stays stable while features evolve as modules.
-
-## Included Plugins
-
-| Plugin | Scope | Commands | Main use |
-| --- | --- | --- | --- |
-| `Backups` | Guild | Dashboard only | Create, download, and restore server backups from the dashboard. |
-| `CommandAliases` | Global | Dashboard only | Register global aliases for existing slash commands. |
-| `CustomCommands` | Guild | Prefix commands | Build custom prefix commands with checks, role actions, messages, embeds, reactions, and trigger deletion. |
-| `CustomStatus` | Global | Dashboard only | Configure the bot presence and rotating activity text. |
-| `DiscordGame` | Guild | `/minesweeper`, `/tictactoe` | Run small interactive Discord games. |
-| `Giveaway` | Guild | `/giveaway-*` | Run button-based giveaways with automatic ending, rerolls, eligibility rules, and custom embeds. |
-| `InviteTracker` | Guild | `/invites`, `/invite-leaderboard` | Track Discord invite usage, fake joins, leaves, invite logs, and dashboard rankings. |
-| `Leveling` | Guild | `/leaderboard` | Award XP from activity and display member rankings. Depends on `Statistics`. |
-| `Moderation` | Guild | `/warn`, `/lookup` | Store sanctions, view user history, log moderation actions, and configure AutoMod rules. |
-| `Notifications` | Guild | Dashboard only | Watch RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram sources and post custom embed notifications. |
-| `Reminders` | Guild | `/reminder-*` | Schedule recurring messages or embeds from the dashboard, with slash commands for control. |
-| `SendEmbed` | Guild | Dashboard only | Build, save, and send Discord embeds using the shared embed editor. |
-| `Statistics` | Guild | `/stats` | Track messages, voice time, joins, leaves, channel counters, and custom `/stats` embeds. |
-| `TempVoice` | Guild | Dashboard only | Create temporary voice channels with owner controls and protection rules. |
-| `WelcomeMessage` | Guild | Dashboard only | Send welcome/leave messages and run configurable captcha verification flows. |
-| `EmojiAdder` | Guild | Dashboard only | Add any Tenor gif as an emoji on your Discord Server. |
-
-### Plugin Details
-
-#### Backups
-
-- Scope: guild.
-- Interface: dashboard.
-- Configuration: backup name, restore safety, backup creation, selected restore, latest restore, and backup download.
-- Notes: backups include roles, permissions, categories, channels, and saved plugin configuration. Discord messages are not copied.
-
-#### Custom Commands
-
-- Scope: guild.
-- Interface: dashboard.
-- Configuration: prefix, case sensitivity, default channel/role checks, denied messages, and command action chains.
-- Actions: send message, reply, DM, send/reply/DM embed, add/remove/toggle role, delete trigger, and react.
-- Notes: message and embed fields support command placeholders such as `%user%`, `%mention%`, `%args%`, `%server%`, and `%channel%`.
-
-#### Giveaway
-
-- Scope: guild.
-- Commands: `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list`.
-- Configuration: default channel, default duration, winner limits, required/blocked roles, entry messages, join/leave labels, role bonus entries, active embed, and ended embed.
-- Notes: bonus entries use `ROLE_ID=ENTRIES`, for example `123456789012345678=3` gives members with that role three total entries.
-
-#### Invite Tracker
-
-- Scope: guild.
-- Commands: `/invites`, `/invite-leaderboard`.
-- Configuration: bot tracking, fake account age threshold, leaderboard size, invite log channel, log message templates, embed color, and invite cache refresh.
-- Dashboard: invite leaderboard, tracked joins, fake joins, invited members who left, and unknown invite joins.
-- Notes: the bot needs Discord `Manage Server` permission to fetch server invites. Invite attribution is based on Discord invite usage deltas, so vanity invites, missing permissions, or stale cache can produce unknown joins; use the dashboard refresh action after enabling the plugin or changing invite permissions.
-
-#### Notifications
-
-- Scope: guild.
-- Interface: dashboard.
-- Sources: RSS, YouTube, Twitch, Kick, X, Reddit, and Instagram.
-- Configuration: source list, target channel, check interval, external IDs/URLs, bring-your-own API keys, and custom embed template per source.
-- Notes: notification embeds support tags such as `%source%`, `%type%`, `%title%`, `%url%`, `%author%`, `%publishedAt%`, `%summary%`, and `%image%`.
-
-#### Reminders
-
-- Scope: guild.
-- Commands: `/reminder-list`, `/reminder-enable`, `/reminder-disable`, `/reminder-delete`, `/reminder-run`.
-- Configuration: reminders are created and edited from the dashboard, with target channel, message/embed mode, interval or weekly schedule, next run time, default embed, and max reminders.
-- Notes: reminder text supports placeholders such as `%name%`, `%id%`, `%server%`, `%runCount%`, `%interval%`, and `%nextRun%`.
-
-#### Statistics
-
-- Scope: guild.
-- Commands: `/stats`.
-- Configuration: bot tracking, ignored voice channels, custom `/stats` embed, dashboard charts, and locked voice channel counters.
-- Notes: channel counter names support tags such as `%members_count%`, `%humans_count%`, `%bots_count%`, `%online_count%`, `%voice_count%`, `%channels_count%`, `%roles_count%`, and `%boosts_count%`.
-
-#### Welcome Message
-
-- Scope: guild.
-- Interface: dashboard.
-- Configuration: welcome/leave channels, text or embed mode, image mode, role assignment, captcha channel, captcha roles, captcha difficulty, and captcha embed/messages.
-- Notes: captcha challenges are sent to users in DM as generated images, and completed users can receive one or more roles.
+The repository includes a cross-platform CLI for non-technical users. It creates and configures an instance, tries to keep the web dashboard on port `3000`, starts Docker services, exports the instance, updates from GitHub, and keeps local plugins safe during updates.
 
 ## Requirements
 
-- Node.js 22 or newer
-- npm
-- Docker Desktop or Docker Engine with Docker Compose
-- A Discord application
-- PostgreSQL and Redis, or the provided `docker-compose.yml`
+Install these before starting HyperBot:
 
-The bot needs the Discord intents required by the plugins you enable, especially `Guilds`, `Guild Members`, `Guild Messages`, `Message Content`, and `Guild Voice States`. Invite tracking also requires the Discord `Manage Server` permission so the bot can read invite usage.
+- Docker Desktop or Docker Engine with Docker Compose
+- Python 3.10 or newer
+- Git, only needed for updates from GitHub
+
+The launcher creates its own Python virtual environment in `.hyperbot-cli-venv`. You do not need to install Python packages manually.
+
+## Quick Start
+
+### Linux and macOS
+
+```bash
+chmod +x HyperBot.sh
+./HyperBot.sh create
+```
+
+### Windows
+
+Open `cmd.exe` or PowerShell in the HyperBot folder, then run:
+
+```bat
+HyperBot.bat create
+```
+
+The `create` command:
+
+- creates `.env` when needed;
+- generates PostgreSQL and Redis passwords;
+- uses dashboard port `3000` when it is available;
+- automatically picks another free port if `3000` is already in use;
+- starts PostgreSQL, Redis, and the HyperBot application with Docker;
+- builds the Docker image;
+- prepares the Prisma database schema.
+
+When startup finishes, the CLI prints the dashboard URL, for example:
+
+```text
+http://127.0.0.1:3000
+```
+
+On first launch, the web UI asks you to create the first administrator account.
+
+## Web Port
+
+To create or start an instance on a specific dashboard port:
+
+```bash
+./HyperBot.sh create --port 8080
+./HyperBot.sh start --port 8080
+```
+
+On Windows:
+
+```bat
+HyperBot.bat create --port 8080
+HyperBot.bat start --port 8080
+```
+
+To change configuration without starting the bot:
+
+```bash
+./HyperBot.sh configure --port 8080
+```
+
+Interactive configuration assistant:
+
+```bash
+./HyperBot.sh configure -i
+```
+
+The assistant can configure the dashboard port, bind address, Discord super-admin IDs, and public registration.
+
+## CLI Commands
+
+Linux and macOS:
+
+```bash
+./HyperBot.sh menu
+./HyperBot.sh start
+./HyperBot.sh stop
+./HyperBot.sh status
+./HyperBot.sh logs -f
+./HyperBot.sh export
+./HyperBot.sh update
+```
+
+Windows:
+
+```bat
+HyperBot.bat menu
+HyperBot.bat start
+HyperBot.bat stop
+HyperBot.bat status
+HyperBot.bat logs -f
+HyperBot.bat export
+HyperBot.bat update
+```
+
+Main commands:
+
+| Command | Purpose |
+| --- | --- |
+| `create` | Configures a new instance and starts it. |
+| `start` | Builds and starts HyperBot in production Docker mode. |
+| `stop` | Stops the application, Redis, and PostgreSQL without deleting data. |
+| `status` | Shows Docker containers and the dashboard URL. |
+| `logs -f` | Follows application logs. |
+| `configure` | Updates common `.env` settings quickly. |
+| `export` | Creates a zip containing `.env`, `Plugins/`, and a PostgreSQL backup. |
+| `update` | Updates from `git@github.com:Totgocpro/HyperBot.git` while preserving local plugins. |
+| `menu` | Opens the interactive text menu. |
+
+The legacy `Release.sh` and `Release.bat` files are still available for compatibility. They now call the CLI with `start --logs`.
+
+## Included Plugins
+
+These entries are based on the current `Plugin.json` manifests in `Plugins/`.
+
+| Plugin | Scope | Category | Commands | Dashboard and behavior |
+| --- | --- | --- | --- | --- |
+| `Backups` | Guild | Administration | Dashboard only | Creates and restores Discord server backups from the dashboard. Covers backup naming, restore safety, and backup action buttons. |
+| `CommandAliases` | Global | General | Dashboard only | Registers global command aliases from dashboard-managed alias entries. |
+| `CustomCommands` | Guild | Automation | Dashboard only | Builds prefix commands with a configurable prefix, default channel checks, default role checks, denied messages, and command definitions. |
+| `CustomStatus` | Global | General | Dashboard only | Configures bot presence, activity type, rotating status text, emoji placement, rotation mode, and rotation interval. |
+| `DiscordGame` | Guild | Fun | `/minesweeper`, `/tictactoe`, `/love`, `/askyes` | Provides Discord games and generated image interactions. Dashboard settings cover game text, colors, emojis, love image rendering, and yes/no answer images. |
+| `EmojiAdder` | Guild | Utility | Dashboard only | Searches and adds Tenor GIFs as Discord emojis, can delete emojis, and supports a per-guild Tenor key or the `TENOR_API_KEY` environment variable. Requires the bot to manage guild expressions. |
+| `Giveaway` | Guild | Engagement | `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list` | Runs button-based giveaways with default channel, default duration, winner limits, required roles, blocked roles, bonus entry rules, messages, and button labels. |
+| `InviteTracker` | Guild | Engagement | `/invites`, `/invite-leaderboard` | Tracks invite usage, fake joins, leaves, unknown joins, invite logs, and leaderboard data. Includes dashboard charts and a cache refresh action. Requires the bot to read server invites. |
+| `Leveling` | Guild | Engagement | `/leaderboard` | Awards XP from counted messages and counted voice minutes, then displays a public leaderboard. Depends on `Statistics`. |
+| `Moderation` | Guild | Moderation | `/warn`, `/lookup` | Stores sanctions, logs moderation actions, logs deleted/edited messages and joins/leaves, supports regex AutoMod, repeated spam detection, invite blocking, word replacement, and word censorship. |
+| `Notifications` | Guild | Automation | Dashboard only | Sends scheduled notifications to configured channels. Sources support dashboard-managed source definitions, default channels, and default check intervals. |
+| `Reminders` | Guild | Automation | `/reminder-list`, `/reminder-enable`, `/reminder-disable`, `/reminder-delete`, `/reminder-run` | Schedules dashboard-managed reminders with default channel, embed mode, interval, color, footer text, reminder limits, and slash command management. |
+| `SendEmbed` | Guild | Messages | Dashboard only | Builds, saves, previews, and sends Discord embeds to selected text, announcement, or voice channels through the shared embed editor. |
+| `Statistics` | Guild | Analytics | `/stats` | Tracks messages, voice time, joins, leaves, hourly activity, and channel counters. Provides dashboard charts and a configurable `/stats` embed. |
+| `TempVoice` | Guild | Voice | Dashboard only | Creates temporary voice rooms from a creator channel with owner controls, locks, bans, protected roles, music controls, YouTube cookie-file support, a generated music panel, and optional TTS. |
+| `Tickets` | Guild | Support | Dashboard only | Publishes a ticket panel, creates private ticket channels, applies support role permissions, tracks ticket status, can save transcripts, logs ticket events, and shows open/closed ticket charts. |
+| `WelcomeMessage` | Guild | Community | Dashboard only | Sends welcome and leave messages as embeds or generated images, supports background and avatar styling, and can publish a captcha verification panel with role grants. |
+
+### Plugin Notes
+
+- `Leveling` depends on `Statistics`, because XP is calculated from tracked message and voice activity.
+- `InviteTracker` needs enough Discord permissions to fetch server invites. Without that, invite attribution can show unknown joins.
+- `EmojiAdder` needs the bot permission for managing guild expressions.
+- `TempVoice` needs permissions to create and manage voice channels. Music playback can use public YouTube videos or a server-side `cookies.txt` path.
+- `Tickets` needs permission to create/manage text channels and permission overwrites in the configured category.
+
+## Export an Instance
+
+```bash
+./HyperBot.sh export
+```
+
+The export is created in `Exports/`, for example:
+
+```text
+Exports/hyperbot-instance-20260606-143000.zip
+```
+
+The export contains:
+
+- the `Plugins/` directory;
+- `.env`;
+- a PostgreSQL backup in `Backups/PostgreSQL/`;
+- `manifest.json`.
+
+Warning: `.env` contains secrets. Keep exports private.
+
+## Update HyperBot
+
+```bash
+./HyperBot.sh update
+./HyperBot.sh start
+```
+
+The update command:
+
+- backs up `Plugins/` to `Backups/Updates/`;
+- sets the git remote to `git@github.com:Totgocpro/HyperBot.git`;
+- pulls the latest version of the current branch;
+- restores local plugins that do not exist in the pulled version.
+
+If Git reports tracked local changes, the CLI stops before updating. Commit or stash those changes, then run the update again.
 
 ## Configuration
 
-The provided scripts create `.env` automatically and generate random database passwords on first run. For a manual setup, copy `.env.example` to `.env` and fill the dashboard/application values. Bot tokens are configured from the bot interface.
+The CLI writes common settings to `.env`.
 
-```env
-SUPER_ADMIN_IDS=
-PUBLIC_REGISTRATION_ENABLED=true
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-APP_HOST_PORT=3000
-TWITCH_CLIENT_ID=
-TWITCH_CLIENT_SECRET=
+| Variable | Description |
+| --- | --- |
+| `APP_HOST_PORT` | Local dashboard port. The CLI tries `3000` by default. |
+| `APP_HOST_BIND` | Dashboard bind address. Keep `127.0.0.1` for local-only access. |
+| `SUPER_ADMIN_IDS` | Comma-separated Discord user IDs with super-admin access. |
+| `PUBLIC_REGISTRATION_ENABLED` | Enables or disables public registration. |
+| `TENOR_API_KEY` | Optional API key used by Emoji Adder. |
+| `TEMPVOICE_YOUTUBE_COOKIES_PATH` | Optional path to a YouTube cookies file for Temp Voice music. |
+| `YOUTUBE_COOKIES_PATH` | Fallback YouTube cookies path. |
+| `DATABASE_HOST_BIND` | PostgreSQL and Redis bind address. Keep `127.0.0.1` unless you intentionally expose them. |
+
+To make the dashboard reachable from another device on your local network:
+
+```bash
+./HyperBot.sh configure --host-bind 0.0.0.0
+./HyperBot.sh start
 ```
 
-Useful variables:
+Keep `DATABASE_HOST_BIND=127.0.0.1` unless you know why you need external database access.
 
-- `SUPER_ADMIN_IDS`: optional. Comma-separated list of Discord user IDs.
-- `POSTGRES_PASSWORD`: generated automatically by the scripts when missing.
-- `REDIS_PASSWORD`: generated automatically by the scripts when missing.
-- `PUBLIC_REGISTRATION_ENABLED`: reserved for dashboard registration configuration.
-- `DATABASE_URL`: normally generated by the scripts from the random Docker PostgreSQL port.
-- `REDIS_URL`: normally generated by the scripts from the random Docker Redis port.
-- `COMPOSE_PROJECT_NAME`: generated automatically per project folder so multiple HyperBot folders do not share Docker containers or volumes.
-- `APP_HOST_BIND`: dashboard bind address. Defaults to `127.0.0.1` for local-only access. Use `0.0.0.0` only if you need access from another device on your LAN.
-- `APP_HOST_PORT`: dashboard port exposed by Docker Compose. Leave empty for an automatic free port. Existing generated `APP_HOST_PORT=3000` values are migrated back to automatic by the scripts; set another value manually only if you really want a fixed dashboard URL.
-- `DATABASE_HOST_BIND`: PostgreSQL and Redis bind address. Defaults to `127.0.0.1`; keep it local unless you explicitly need external database access.
-- `PLUGIN_DIRECTORY`: defaults to `Plugins` in development and `dist/Plugins` in production Docker builds.
-- `ENABLE_MESSAGE_EVENTS=true`: optional, useful when enabling behavior that explicitly depends on message events.
-
-The first dashboard account can be created from the web UI while the database is empty. After one account exists, `/api/auth/setup` returns `409` and cannot create another first admin account.
-
-Bot invite URL:
+Bot invite URL template:
 
 ```text
 https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot%20applications.commands&permissions=8
 ```
 
-## Quick Start on Linux/macOS
+The bot needs the Discord intents required by the plugins you enable, especially `Guilds`, `Guild Members`, `Guild Messages`, `Message Content`, and `Guild Voice States`.
+
+## Development
+
+The CLI is intended for production-style Docker startup. For local development with watch mode:
 
 ```bash
 npm install
-```
-
-The scripts create `.env` if it does not exist, including random PostgreSQL and Redis passwords.
-
-For using Hyperbot in Release mode use :
-
-```bash
-chmod +x Release.sh
-./Release.sh
-```
-
-Start development mode:
-
-```bash
-chmod +x Dev.sh
-./Dev.sh
-```
-
-`Dev.sh` starts PostgreSQL and Redis with Docker Compose, assigns local database ports automatically, installs dependencies if needed, generates Prisma, syncs the schema, and starts the bot plus the dashboard.
-
-The dashboard is available at:
-
-```text
-http://localhost:3000
-```
-
-On first launch, the interface asks you to create the first administrator account.
-
-## Quick Start on Windows
-
-The easiest setup on Windows is Command Prompt with Docker Desktop.
-
-1. Install Node.js 22 from the official Node.js website.
-2. Install Docker Desktop and start it.
-3. Clone or open the project.
-4. Open Command Prompt in the project directory.
-5. Run:
-
-```bat
-Release.bat
-```
-
-`Release.bat` creates `.env` if needed, generates random PostgreSQL and Redis passwords, gives the folder its own Docker project name, starts PostgreSQL and Redis on automatic local ports, creates a database backup in `Backups\PostgreSQL`, installs dependencies, builds the application, syncs Prisma, rebuilds the Docker application image, starts the containers, and follows application logs. Set `FOLLOW_LOGS=false` in `.env` to skip log following.
-
-## Docker Compose
-
-To run the full application in containers:
-
-```bash
-sh ./scripts/EnsureEnv.sh .env
-docker compose up -d --build
-```
-
-The `application` service uses variables from `.env`, builds the app, and exposes the dashboard at `http://localhost:3000`.
-
-PostgreSQL, Redis, and the dashboard are bound to `127.0.0.1` by default and use automatic host ports, so multiple HyperBot projects can run at the same time without manually changing `5432`, `6379`, or `3000`. Each folder also gets a generated `COMPOSE_PROJECT_NAME`, so Docker volumes are isolated per bot. To reach the dashboard from another device on your LAN, set `APP_HOST_BIND=0.0.0.0` in `.env`, restart with `./Release.sh`, then open `http://SERVER_LAN_IP:PRINTED_PORT`. Keep `DATABASE_HOST_BIND=127.0.0.1` unless you really need external DB access.
-
-To view logs:
-
-```bash
-docker compose logs -f application
-```
-
-To stop:
-
-```bash
-docker compose down
-```
-
-## npm Scripts
-
-```bash
 npm run dev
 ```
 
-Starts the bot in watch mode and the Next.js dashboard in development mode.
-
-```bash
-npm run bot:dev
-```
-
-Starts only the bot.
-
-```bash
-npm run web:dev
-```
-
-Starts only the dashboard.
-
-```bash
-npm run build
-```
-
-Generates Prisma, compiles the bot, and builds the Next.js application.
-
-```bash
-npm run start
-```
-
-Starts the compiled bot and the production Next.js server.
-
-## Structure
+Useful structure:
 
 ```text
 app/                 Next.js routes and dashboard API
 src/Bot/             Discord bot entry point
 src/Core/            Plugin loader, storage, clients, and shared types
 src/Web/             Authentication and web components
-Plugins/             Default installed plugins
-prisma/              Database schema
-docker-compose.yml   PostgreSQL, Redis, and application services
+Plugins/             Installed plugins
+prisma/              Prisma schema
+scripts/hyperbot_cli.py
 ```
 
-## Add a Plugin
+To add a plugin:
 
-1. Create a directory in `Plugins/YourPluginName`.
-2. Add a `Plugin.json` with metadata, scope, commands, dashboard fields, and the `EntryPoint`.
-3. Implement the plugin class in TypeScript.
-4. Restart the bot or modify a plugin file in development mode to trigger reload.
+1. Create `Plugins/YourPluginName`.
+2. Add `Plugin.json` with metadata, scope, commands, dashboard fields, and `EntryPoint`.
+3. Implement the TypeScript entry point declared in the manifest.
+4. Restart HyperBot.
 
 ## License
 
-This project is distributed under the GPL license. See `LICENSE`.
+HyperBot is distributed under the GPL license. See `LICENSE`.

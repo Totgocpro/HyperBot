@@ -111,10 +111,6 @@ if (-not $ComposeProjectName) {
   $ComposeProjectName = New-HyperBotComposeProjectName
 }
 
-if ($AppHostPort -eq "3000") {
-  $AppHostPort = ""
-}
-
 Set-HyperBotEnvValue "COMPOSE_PROJECT_NAME" $ComposeProjectName
 Set-HyperBotEnvValue "POSTGRES_PASSWORD" $PostgresPassword
 Set-HyperBotEnvValue "REDIS_PASSWORD" $RedisPassword

@@ -4,3 +4,7 @@ dist
 .git
 npm-debug.log
 .env
+.hyperbot-cli-venv
+__pycache__
+Backups
+Exports

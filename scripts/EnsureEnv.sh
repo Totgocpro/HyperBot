@@ -107,10 +107,6 @@ if [ -z "${ComposeProjectName}" ]; then
   ComposeProjectName="$(GenerateComposeProjectName)"
 fi
 
-if [ "${AppHostPort}" = "3000" ]; then
-  AppHostPort=""
-fi
-
 SetEnvKey COMPOSE_PROJECT_NAME "${ComposeProjectName}"
 SetEnvKey POSTGRES_PASSWORD "${PostgresPassword}"
 SetEnvKey REDIS_PASSWORD "${RedisPassword}"

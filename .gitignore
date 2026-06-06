@@ -4,4 +4,7 @@ dist
 .env
 *.log
 *.tsbuildinfo
+__pycache__/
 Backups/
+.hyperbot-cli-venv/
+Exports/
