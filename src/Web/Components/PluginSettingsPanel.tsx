@@ -27,10 +27,12 @@ type PluginSettingsPanelProperties = {
 
 export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const [Plugins, SetPlugins] = UseState<DashboardPlugin[]>([]);
+  const [Guilds, SetGuilds] = UseState<BotGuildSummary[]>([]);
   const [Guild, SetGuild] = UseState<BotGuildSummary | null>(null);
   const [BotIdentity, SetBotIdentity] = UseState<BotPreviewIdentity | null>(null);
   const [SelectedPluginId, SetSelectedPluginId] = UseState("");
   const [PluginMenuOpen, SetPluginMenuOpen] = UseState(false);
+  const [MobileDrawerOpen, SetMobileDrawerOpen] = UseState(false);
   const [SectionMenuOpen, SetSectionMenuOpen] = UseState(true);
   const [DraftValues, SetDraftValues] = UseState<Record<string, Record<string, unknown>>>({});
   const [Status, SetStatus] = UseState("Loading plugins...");
@@ -75,6 +77,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     }
 
     const Payload = (await Response.json()) as { Guilds: BotGuildSummary[] };
+    SetGuilds(Payload.Guilds);
     SetGuild(Payload.Guilds.find((GuildValue) => GuildValue.Id === Properties.GuildId) ?? null);
   }
 
@@ -242,6 +245,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     SetBlockedPluginId("");
     SetSelectedPluginId(PluginId);
     SetPluginMenuOpen(false);
+    SetMobileDrawerOpen(false);
     SetSectionMenuOpen(true);
   }
 
@@ -259,10 +263,43 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   }
 
   return (
-    <main className={`min-h-screen bg-slate-950 px-3 py-5 text-slate-100 sm:px-6 sm:py-8 ${SelectedPluginHasUnsavedChanges ? "pb-32 sm:pb-28" : ""}`}>
+    <main className={`min-h-screen bg-slate-950 px-0 py-0 text-slate-100 lg:px-6 lg:py-8 ${SelectedPluginHasUnsavedChanges ? "pb-32 lg:pb-28" : ""}`}>
       {SaveFeedbackValue ? <SaveFeedbackToast Feedback={SaveFeedbackValue} /> : null}
+      {MobileDrawerOpen ? (
+        <MobileDashboardDrawer
+          BlockedPluginId={BlockedPluginId}
+          BotId={Properties.BotId}
+          BotIdentity={BotIdentity}
+          Guild={Guild}
+          GuildId={Properties.GuildId}
+          Guilds={Guilds}
+          OnClose={() => SetMobileDrawerOpen(false)}
+          OnRefresh={() => void LoadPlugins()}
+          OnSelectPlugin={SelectPlugin}
+          PluginCategoryGroups={PluginCategoryGroups}
+          SelectedPlugin={SelectedPlugin}
+          SelectedPluginHasUnsavedChanges={SelectedPluginHasUnsavedChanges}
+          Status={Status}
+        />
+      ) : null}
       <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-5 md:flex-row md:items-center md:justify-between">
+        <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-3 backdrop-blur lg:hidden">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold text-slate-500">{Guild?.Name ?? "Discord server"}</p>
+            <h1 className="truncate text-lg font-black text-white">{SelectedPlugin?.Metadata.DisplayName ?? "Plugins"}</h1>
+          </div>
+          <button
+            aria-expanded={MobileDrawerOpen}
+            aria-label="Open dashboard menu"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-100 shadow-lg shadow-black/20"
+            onClick={() => SetMobileDrawerOpen(true)}
+            type="button"
+          >
+            <PluginHamburgerIcon />
+          </button>
+        </div>
+
+        <header className="mb-6 hidden flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-5 md:flex-row md:items-center md:justify-between lg:flex">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl bg-blue-600 text-2xl font-black text-white sm:h-16 sm:w-16">
               {Guild?.Icon ? <img alt="" className="h-16 w-16 rounded-3xl" src={Guild.Icon} /> : (Guild?.Name ?? "S").slice(0, 1).toUpperCase()}
@@ -282,8 +319,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
           </button>
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <aside className="rounded-3xl border border-slate-800 bg-slate-900 p-3 shadow-xl shadow-black/20 sm:p-4">
+        <div className="grid min-w-0 gap-0 lg:grid-cols-[280px_1fr] lg:gap-6">
+          <aside className="hidden rounded-3xl border border-slate-800 bg-slate-900 p-3 shadow-xl shadow-black/20 sm:p-4 lg:block">
             <div className="flex items-center justify-between gap-3">
               <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-500">Plugins</p>
               <button
@@ -357,14 +394,14 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
             ) : null}
           </aside>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
+          <section className="min-h-[calc(100vh-7rem)] min-w-0 overflow-x-hidden border-slate-800 bg-slate-950 p-3 shadow-black/20 lg:min-h-0 lg:rounded-3xl lg:border lg:bg-slate-900 lg:p-6 lg:shadow-xl">
             {/* <p className="mb-5 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">{Status}</p> */}
 
             {SelectedPlugin ? (
               <>
-                <div className="flex flex-col gap-3 border-b border-slate-800 pb-5 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 lg:flex-row lg:items-center lg:justify-between lg:pb-5">
                   <div>
-                    <h2 className="text-2xl font-black text-white">{SelectedPlugin.Metadata.DisplayName}</h2>
+                    <h2 className="hidden text-2xl font-black text-white lg:block">{SelectedPlugin.Metadata.DisplayName}</h2>
                     <p className="mt-1 text-sm text-slate-400">
                         Version {SelectedPlugin.Metadata.Version} by {SelectedPlugin.Metadata.Author}
                     </p>
@@ -375,7 +412,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                     ) : null}
                   </div>
                   <button
-                    className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                    className="w-full rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-70 lg:w-auto"
                     disabled={SavingPluginId === SelectedPlugin.Metadata.Id}
                     onClick={() => void SavePlugin(SelectedPlugin)}
                   >
@@ -383,7 +420,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   </button>
                 </div>
 
-                <div className="mt-6 grid gap-5">
+                <div className="mt-4 grid min-w-0 gap-4 lg:mt-6 lg:gap-5">
                   {SelectedPlugin.DependencyErrors?.length ? (
                     <div className="rounded-3xl border border-red-500/40 bg-red-950/50 p-4 text-sm font-bold text-red-100">
                       {SelectedPlugin.DependencyErrors.join(" ")}
@@ -465,10 +502,10 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                   ) : (
                     <>
                   {SelectedPlugin.DashboardElements?.length ? (
-                    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-overview">
+                    <section className="scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 lg:rounded-[2rem] lg:bg-slate-950/40 lg:p-5" id="plugin-section-overview">
                       <div className="mb-4">
                         <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Overview</p>
-                        <h3 className="mt-2 text-2xl font-black text-white">Plugin dashboard</h3>
+                        <h3 className="mt-2 text-xl font-black text-white lg:text-2xl">Plugin dashboard</h3>
                       </div>
                       <div className="grid gap-4">
                         {SelectedPlugin.DashboardElements.map((Element) => (
@@ -487,10 +524,10 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                         IsVisible={SectionVisible}
                         key={Section.Id}
                       >
-                        <section className="rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5">
+                        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 lg:rounded-[2rem] lg:bg-slate-950/40 lg:p-5">
                           <div className="mb-4">
-                            <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Configuration</p>
-                            <h3 className="mt-2 text-2xl font-black text-white">{Section.Label}</h3>
+                            <p className="hidden text-xs font-bold uppercase tracking-[0.3em] text-blue-300 lg:block">Configuration</p>
+                            <h3 className="text-lg font-black text-white lg:mt-2 lg:text-2xl">{Section.Label}</h3>
                           </div>
                           <div className="grid gap-4">
                             {Section.Fields.map((Field) => (
@@ -584,6 +621,133 @@ function UnsavedChangesBar(Properties: {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MobileDashboardDrawer(Properties: {
+  BlockedPluginId: string;
+  BotId: string;
+  BotIdentity: BotPreviewIdentity | null;
+  Guild: BotGuildSummary | null;
+  GuildId: string;
+  Guilds: BotGuildSummary[];
+  OnClose: () => void;
+  OnRefresh: () => void;
+  OnSelectPlugin: (PluginId: string) => void;
+  PluginCategoryGroups: Array<{ Category: string; Plugins: DashboardPlugin[] }>;
+  SelectedPlugin: DashboardPlugin | undefined;
+  SelectedPluginHasUnsavedChanges: boolean;
+  Status: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] lg:hidden">
+      <button aria-label="Close dashboard menu" className="hyperbot-mobile-menu-backdrop absolute inset-0 bg-black/70" onClick={Properties.OnClose} type="button" />
+      <aside className="hyperbot-mobile-menu-panel absolute inset-y-0 right-0 flex w-[min(92vw,24rem)] flex-col border-l border-slate-800 bg-slate-950 text-slate-100 shadow-2xl shadow-black/60">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Dashboard</p>
+            <h2 className="truncate text-lg font-black text-white">Server menu</h2>
+          </div>
+          <button className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-200" onClick={Properties.OnClose} type="button">
+            Close
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-600 text-lg font-black text-white">
+                {Properties.Guild?.Icon ? <img alt="" className="h-12 w-12 object-cover" src={Properties.Guild.Icon} /> : (Properties.Guild?.Name ?? "S").slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-black text-white">{Properties.Guild?.Name ?? "Discord server"}</p>
+                <p className="mt-1 text-sm text-slate-400">{Properties.Guild?.MemberCount ?? "?"} members</p>
+                <p className="mt-1 break-all text-xs text-slate-500">Guild ID: {Properties.GuildId}</p>
+              </div>
+            </div>
+            {Properties.BotIdentity ? (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2">
+                {Properties.BotIdentity.AvatarUrl ? <img alt="" className="h-7 w-7 rounded-lg object-cover" src={Properties.BotIdentity.AvatarUrl} /> : null}
+                <span className="min-w-0 truncate text-sm font-bold text-slate-200">{Properties.BotIdentity.Name}</span>
+              </div>
+            ) : null}
+            <p className="mt-3 text-xs text-slate-500">{Properties.Status}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Link className="rounded-xl border border-slate-700 px-3 py-2 text-center text-sm font-bold text-slate-200" href="/" onClick={Properties.OnClose}>
+                Servers
+              </Link>
+              <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white" onClick={Properties.OnRefresh} type="button">
+                Refresh
+              </button>
+            </div>
+          </section>
+
+          <section className="mt-4">
+            <p className="px-1 text-xs font-black uppercase tracking-[0.22em] text-slate-500">Switch server</p>
+            <div className="mt-2 grid gap-2">
+              {Properties.Guilds.map((GuildValue) => (
+                <Link
+                  className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-left ${
+                    GuildValue.Id === Properties.GuildId ? "border-blue-500 bg-blue-600 text-white" : "border-slate-800 bg-slate-900 text-slate-300"
+                  }`}
+                  href={`/dashboard/${Properties.BotId}/${GuildValue.Id}`}
+                  key={GuildValue.Id}
+                  onClick={Properties.OnClose}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10 text-sm font-black">
+                    {GuildValue.Icon ? <img alt="" className="h-9 w-9 object-cover" src={GuildValue.Icon} /> : GuildValue.Name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black">{GuildValue.Name}</span>
+                    <span className={GuildValue.Id === Properties.GuildId ? "text-xs text-blue-100" : "text-xs text-slate-500"}>{GuildValue.MemberCount ?? "?"} members</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <p className="px-1 text-xs font-black uppercase tracking-[0.22em] text-slate-500">Plugins</p>
+            <div className="mt-2 grid gap-3">
+              {Properties.PluginCategoryGroups.map((Group) => (
+                <div className="grid gap-2" key={Group.Category}>
+                  <p className="px-1 pt-2 text-[0.7rem] font-black uppercase tracking-[0.22em] text-slate-600">{Group.Category}</p>
+                  {Group.Plugins.map((Plugin) => {
+                    const IsSelected = Properties.SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id;
+                    const IsBlocked = Properties.BlockedPluginId === Plugin.Metadata.Id;
+
+                    return (
+                      <button
+                        className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left ${
+                          IsBlocked
+                            ? "border-red-500 bg-red-950 text-red-100"
+                            : IsSelected
+                              ? Properties.SelectedPluginHasUnsavedChanges
+                                ? "border-red-500 bg-red-950/70 text-white"
+                                : "border-blue-500 bg-blue-600 text-white"
+                              : "border-slate-800 bg-slate-900 text-slate-300"
+                        }`}
+                        key={Plugin.Metadata.Id}
+                        onClick={() => Properties.OnSelectPlugin(Plugin.Metadata.Id)}
+                        type="button"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
+                          {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-bold">{Plugin.Metadata.DisplayName}</span>
+                          <span className={IsSelected ? "text-xs text-blue-100" : "text-xs text-slate-500"}>{Plugin.Commands.length} command(s)</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </aside>
     </div>
   );
 }

@@ -196,7 +196,7 @@ function ServerCard(Properties: { Guild: AggregatedGuild }) {
             </div>
             {PrimaryEntry ? (
               <Link
-                className="shrink-0 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+                className="w-full max-w-28 shrink-0 rounded-xl bg-blue-600 px-4 py-2 text-center text-sm font-bold text-white hover:bg-blue-500 sm:w-auto"
                 href={`/dashboard/${PrimaryEntry.Bot.Id}/${Guild.Id}`}
               >
                 Manage

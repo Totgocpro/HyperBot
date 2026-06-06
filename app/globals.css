@@ -35,6 +35,14 @@ html[data-theme="light"] video {
   animation: hyperbot-save-check 420ms ease-out 170ms forwards;
 }
 
+.hyperbot-mobile-menu-backdrop {
+  animation: hyperbot-mobile-menu-backdrop-in 160ms ease-out both;
+}
+
+.hyperbot-mobile-menu-panel {
+  animation: hyperbot-mobile-menu-panel-in 220ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
 @keyframes hyperbot-save-toast-in {
   from {
     opacity: 0;
@@ -71,5 +79,27 @@ html[data-theme="light"] video {
 @keyframes hyperbot-save-check {
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+@keyframes hyperbot-mobile-menu-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes hyperbot-mobile-menu-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }

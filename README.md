@@ -1,5 +1,16 @@
 # HyperBot
 
+![License](https://img.shields.io/badge/license-GPL--3.0-blue)
+![Node.js](https://img.shields.io/badge/node.js-%3E%3D22.12.0-339933?logo=node.js&logoColor=white)
+![Python](https://img.shields.io/badge/python-%3E%3D3.10-3776AB?logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)
+![TypeScript](https://img.shields.io/badge/typescript-5.6-3178C6?logo=typescript&logoColor=white)
+![Next.js](https://img.shields.io/badge/next.js-16.3_canary-000000?logo=next.js&logoColor=white)
+![Discord.js](https://img.shields.io/badge/discord.js-14.16-5865F2?logo=discord&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/postgresql-16-4169E1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/redis-7-DC382D?logo=redis&logoColor=white)
+![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+
 HyperBot is a Discord bot with a web dashboard and a plugin-based architecture. The core project handles bot instances, plugin loading, storage, the admin interface, permissions, Discord command synchronization, PostgreSQL, and Redis. Features live in `Plugins/`, so they can be added or changed without rewriting the core.
 
 The repository includes a cross-platform CLI for non-technical users. It creates and configures an instance, tries to keep the web dashboard on port `3000`, starts Docker services, exports the instance, updates from GitHub, and keeps local plugins safe during updates.

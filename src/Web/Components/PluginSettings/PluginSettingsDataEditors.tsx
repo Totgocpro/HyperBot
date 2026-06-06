@@ -23,16 +23,16 @@ export function DashboardElementRenderer(Properties: { Element: DashboardElement
   }
 
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+    <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-xl font-black text-white">{Properties.Element.Label}</h3>
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-black text-white sm:text-xl">{Properties.Element.Label}</h3>
           <p className="mt-1 text-sm text-slate-500">
             Total: {FormatChartValue(Total, Properties.Element.Unit)} | Average/day: {FormatChartValue(Average, Properties.Element.Unit)}
           </p>
         </div>
         <input
-          className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+          className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 sm:w-auto"
           onChange={(Event) => SetSelectedMonth(Event.target.value)}
           type="month"
           value={SelectedMonth}
@@ -99,16 +99,16 @@ export function StatisticsEditor(Properties: {
   }
 
   return (
-    <section className="scroll-mt-28 rounded-[2rem] border border-slate-800 bg-slate-950/40 p-4 sm:p-5" id="plugin-section-statistics">
-      <div className="mb-5">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Statistics</p>
-        <h3 className="mt-2 text-2xl font-black text-white">Tracking and channel counters</h3>
+    <section className="min-w-0 scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4 lg:rounded-[2rem] lg:bg-slate-950/40 lg:p-5" id="plugin-section-statistics">
+      <div className="mb-4 sm:mb-5">
+        <p className="hidden text-xs font-bold uppercase tracking-[0.3em] text-blue-300 sm:block">Statistics</p>
+        <h3 className="text-xl font-black text-white sm:mt-2 sm:text-2xl">Tracking and channel counters</h3>
       </div>
 
-      <div className="grid gap-5">
+      <div className="grid min-w-0 gap-4 sm:gap-5">
         {Properties.Plugin.DashboardElements?.length ? (
-          <section className="scroll-mt-28 rounded-3xl border border-slate-800 bg-slate-950 p-4" id="plugin-section-overview">
-            <div className="grid gap-4">
+          <section className="min-w-0 scroll-mt-28 rounded-none border-0 bg-transparent p-0 lg:rounded-3xl lg:border lg:border-slate-800 lg:bg-slate-950 lg:p-4" id="plugin-section-overview">
+            <div className="grid min-w-0 gap-3 sm:gap-4">
               {Properties.Plugin.DashboardElements.map((Element) => (
                 <DashboardElementRenderer Element={Element} key={Element.Key} />
               ))}
@@ -117,9 +117,9 @@ export function StatisticsEditor(Properties: {
         ) : null}
 
         {ConfigSections.map((Section) => (
-          <section className="scroll-mt-28 rounded-3xl border border-slate-800 bg-slate-950 p-4" id={`plugin-section-${Section.Id}`} key={Section.Id}>
-            <h4 className="text-xl font-black text-white">{Section.Label}</h4>
-            <div className="mt-4 grid gap-4">
+          <section className="min-w-0 scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-4" id={`plugin-section-${Section.Id}`} key={Section.Id}>
+            <h4 className="text-lg font-black text-white sm:text-xl">{Section.Label}</h4>
+            <div className="mt-3 grid min-w-0 gap-4 sm:mt-4">
               {Section.Fields.map((Field) => (
                 <div key={Field.Key}>{RenderField(Properties.BotId, Properties.GuildId, PluginId, Field, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, async () => null, Properties.OnCreateChannel, Properties.BotIdentity)}</div>
               ))}
@@ -127,13 +127,13 @@ export function StatisticsEditor(Properties: {
           </section>
         ))}
 
-        <section className="scroll-mt-28 rounded-3xl border border-slate-800 bg-slate-950 p-4" id="plugin-section-channel-counters">
+        <section className="min-w-0 scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-4" id="plugin-section-channel-counters">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h4 className="text-xl font-black text-white">Channel counters</h4>
+            <div className="min-w-0">
+              <h4 className="text-lg font-black text-white sm:text-xl">Channel counters</h4>
               <p className="mt-1 text-sm text-slate-500">Voice channels are locked automatically. Leave the channel empty to let the bot create it.</p>
             </div>
-            <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500" onClick={AddCounter} type="button">
+            <button className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 sm:w-auto" onClick={AddCounter} type="button">
               Add counter
             </button>
           </div>
@@ -142,11 +142,11 @@ export function StatisticsEditor(Properties: {
             Tags: %members_count%, %humans_count%, %bots_count%, %online_count%, %voice_count%, %channels_count%, %roles_count%, %boosts_count%.
           </p>
 
-          <div className="mt-4 grid gap-4">
+          <div className="mt-4 grid min-w-0 gap-4">
             {Counters.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No channel counter configured.</p> : null}
             {Counters.map((Counter) => (
-              <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4" key={Counter.Id}>
-                <div className="grid gap-4 lg:grid-cols-[1fr_1fr_150px]">
+              <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900 p-3 sm:rounded-3xl sm:p-4" key={Counter.Id}>
+                <div className="grid min-w-0 gap-4 lg:grid-cols-[1fr_1fr_150px]">
                   <label className="block text-sm font-bold text-slate-200">
                     Channel name template
                     <input className={EmbedInputClassName} onChange={(Event) => UpdateCounter(Counter.Id, { Template: Event.target.value })} value={Counter.Template} />
@@ -174,8 +174,8 @@ export function StatisticsEditor(Properties: {
                   </label>
                 </div>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-slate-500">Current channel ID: {Counter.ChannelId || "Will be created after Save and next bot tick."}</p>
-                  <button className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500" onClick={() => RemoveCounter(Counter.Id)} type="button">
+                  <p className="break-all text-xs text-slate-500">Current channel ID: {Counter.ChannelId || "Will be created after Save and next bot tick."}</p>
+                  <button className="w-full rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500 sm:w-auto" onClick={() => RemoveCounter(Counter.Id)} type="button">
                     Delete counter
                   </button>
                 </div>
@@ -622,8 +622,8 @@ function ChartSvg(Properties: { Series: Array<{ Label: string; Value: number }>;
   const TooltipY = HoveredPoint ? Math.max(HoveredPoint.Y - 72, 10) : 0;
 
   return (
-    <div className="mt-4 overflow-x-auto">
-      <svg className="min-w-[720px]" height={Height} onMouseLeave={() => SetHoveredIndex(null)} viewBox={`0 0 ${Width} ${Height}`} width="100%">
+    <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-2xl">
+      <svg className="block w-[560px] max-w-none sm:w-[720px] lg:w-full" height={Height} onMouseLeave={() => SetHoveredIndex(null)} viewBox={`0 0 ${Width} ${Height}`} width={Width}>
         <defs>
           <linearGradient id="HyperBotChartArea" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="rgb(59 130 246)" stopOpacity="0.38" />
@@ -712,9 +712,9 @@ function ChartSvg(Properties: { Series: Array<{ Label: string; Value: number }>;
 
 function MetricTile(Properties: { Label: string; Value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-3 sm:p-4">
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{Properties.Label}</p>
-      <p className="mt-2 text-2xl font-black text-white">{Properties.Value}</p>
+      <p className="mt-2 break-words text-xl font-black text-white sm:text-2xl">{Properties.Value}</p>
     </div>
   );
 }
@@ -729,10 +729,10 @@ function ActivityHeatmap(Properties: { Element: DashboardElement & { Value: unkn
   const DisplayCell = HoveredCell ?? BestCell;
 
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+    <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-xl font-black text-white">{Properties.Element.Label}</h3>
+          <h3 className="text-lg font-black text-white sm:text-xl">{Properties.Element.Label}</h3>
           <p className="mt-1 text-sm text-slate-500">Weekly pattern by server local day and hour.</p>
         </div>
         <div className="grid gap-2 text-left sm:text-right">
@@ -745,9 +745,9 @@ function ActivityHeatmap(Properties: { Element: DashboardElement & { Value: unkn
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <div className="min-w-[880px]">
-          <div className="grid grid-cols-[76px_repeat(24,minmax(26px,1fr))] gap-1">
+      <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-2xl">
+        <div className="w-[640px] max-w-none sm:w-[880px]">
+          <div className="grid grid-cols-[56px_repeat(24,minmax(20px,1fr))] gap-1 sm:grid-cols-[76px_repeat(24,minmax(26px,1fr))]">
             <div />
             {Array.from({ length: 24 }, (_, Hour) => (
               <div className="h-6 text-center text-[10px] font-bold text-slate-500" key={Hour}>
@@ -787,10 +787,10 @@ function InviteLeaderboard(Properties: { Element: DashboardElement & { Value: un
   const TotalLeaves = Rows.reduce((TotalValue, Row) => TotalValue + Row.Leaves, 0);
 
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+    <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-xl font-black text-white">{Properties.Element.Label}</h3>
+          <h3 className="text-lg font-black text-white sm:text-xl">{Properties.Element.Label}</h3>
           <p className="mt-1 text-sm text-slate-500">Top inviters tracked from Discord invite usage.</p>
         </div>
         <p className="text-xs text-slate-500">
@@ -798,11 +798,11 @@ function InviteLeaderboard(Properties: { Element: DashboardElement & { Value: un
         </p>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-2xl">
         {Rows.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No invite stats tracked yet.</p>
         ) : (
-          <table className="w-full min-w-[680px] text-left text-sm">
+          <table className="w-[560px] max-w-none text-left text-sm sm:w-[680px]">
             <thead className="text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-2">Rank</th>
@@ -879,7 +879,7 @@ function ActivityHeatmapRow(Properties: {
 }) {
   return (
     <>
-      <div className="flex h-7 items-center pr-2 text-xs font-bold text-slate-400">{Properties.DayLabel}</div>
+      <div className="flex h-7 items-center pr-2 text-[11px] font-bold text-slate-400 sm:text-xs">{Properties.DayLabel.slice(0, 3)}</div>
       {Properties.Cells.map((Cell) => {
         const Intensity = Properties.MaxValue > 0 ? Cell.Value / Properties.MaxValue : 0;
         const BackgroundColor = BuildHeatmapColor(Intensity);
