@@ -33,6 +33,69 @@
       ]
     },
     {
+      "Key": "ActivityWindowDays",
+      "Type": "Number",
+      "Label": "Activity window in days",
+      "Default": 30,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "ActiveMessageThreshold",
+      "Type": "Number",
+      "Label": "Active message threshold",
+      "Default": 20,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "ActiveVoiceMinuteThreshold",
+      "Type": "Number",
+      "Label": "Active voice minute threshold",
+      "Default": 60,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "ActiveReactionThreshold",
+      "Type": "Number",
+      "Label": "Active reaction threshold",
+      "Default": 10,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "LowActivityMessageThreshold",
+      "Type": "Number",
+      "Label": "Low activity message threshold",
+      "Default": 3,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "LowActivityVoiceMinuteThreshold",
+      "Type": "Number",
+      "Label": "Low activity voice minute threshold",
+      "Default": 10,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "LowActivityReactionThreshold",
+      "Type": "Number",
+      "Label": "Low activity reaction threshold",
+      "Default": 2,
+      "Section": "Activity status"
+    },
+    {
+      "Key": "ActiveRoleId",
+      "Type": "RolePicker",
+      "Label": "Active member role",
+      "Default": "",
+      "Section": "Activity roles"
+    },
+    {
+      "Key": "InactiveRoleId",
+      "Type": "RolePicker",
+      "Label": "Inactive member role",
+      "Default": "",
+      "Section": "Activity roles"
+    },
+    {
       "Key": "StatsEmbed",
       "Type": "EmbedEditor",
       "Label": "Stats command embed",
@@ -93,6 +156,20 @@
       "Label": "Voice time",
       "DataSourceKey": "VoiceSecondsDaily",
       "Unit": "seconds"
+    },
+    {
+      "Key": "ReactionsChart",
+      "Type": "BarChart",
+      "Label": "Reactions added",
+      "DataSourceKey": "ReactionsDaily",
+      "Unit": "reactions"
+    },
+    {
+      "Key": "ActivityStatusChart",
+      "Type": "PieChart",
+      "Label": "Member activity status",
+      "DataSourceKey": "ActivityOverview",
+      "Unit": "members"
     },
     {
       "Key": "JoinsChart",

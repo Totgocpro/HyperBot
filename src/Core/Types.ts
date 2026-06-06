@@ -96,7 +96,8 @@ export enum DashboardElementType {
   LineChart = "LineChart",
   BarChart = "BarChart",
   ActivityHeatmap = "ActivityHeatmap",
-  InviteLeaderboard = "InviteLeaderboard"
+  InviteLeaderboard = "InviteLeaderboard",
+  PieChart = "PieChart"
 }
 
 export type DashboardElement = {

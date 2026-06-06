@@ -26,6 +26,7 @@ enum DiscordApplicationCommandOptionType {
 const DiscordGatewayIntentBits = {
   Guilds: 1,
   GuildMessages: 512,
+  GuildMessageReactions: 1024,
   GuildModeration: 4,
   GuildMembers: 2,
   GuildVoiceStates: 128,
@@ -90,7 +91,7 @@ class BotInstance {
 
     this.DiscordClient = new Client({
       intents: BuildGatewayIntents(),
-      partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User]
+      partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.GuildMember, Partials.User]
     });
 
     this.Loader = new PluginLoader(PluginDirectory, Prisma, RedisClient, this.DiscordClient, BotId);
@@ -147,6 +148,17 @@ class BotInstance {
     this.DiscordClient.on("messageUpdate", (OldMessage, NewMessage) => {
       void RunSafely(`messageUpdate:${this.BotId}`, async () => {
         await this.Loader.DispatchMessageUpdate(OldMessage, NewMessage);
+      });
+    });
+
+    this.DiscordClient.on("messageReactionAdd", (Reaction, UserValue) => {
+      void RunSafely(`messageReactionAdd:${this.BotId}`, async () => {
+        if (UserValue.bot) {
+          return;
+        }
+
+        const FullReaction = Reaction.partial ? await Reaction.fetch() : Reaction;
+        await this.Loader.DispatchMessageReactionAdd(FullReaction, UserValue);
       });
     });
 
@@ -468,6 +480,7 @@ function BuildGatewayIntents(): number[] {
   const Intents: number[] = [
     DiscordGatewayIntentBits.Guilds,
     DiscordGatewayIntentBits.GuildMessages,
+    DiscordGatewayIntentBits.GuildMessageReactions,
     DiscordGatewayIntentBits.GuildModeration,
     DiscordGatewayIntentBits.GuildMembers,
     DiscordGatewayIntentBits.GuildVoiceStates

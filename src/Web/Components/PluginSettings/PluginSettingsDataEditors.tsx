@@ -22,6 +22,10 @@ export function DashboardElementRenderer(Properties: { Element: DashboardElement
     return <InviteLeaderboard Element={Properties.Element} />;
   }
 
+  if (Properties.Element.Type === "PieChart") {
+    return <PieChart Element={Properties.Element} />;
+  }
+
   return (
     <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -716,6 +720,92 @@ function MetricTile(Properties: { Label: string; Value: string }) {
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{Properties.Label}</p>
       <p className="mt-2 break-words text-xl font-black text-white sm:text-2xl">{Properties.Value}</p>
     </div>
+  );
+}
+
+type PieChartBucket = {
+  Label: string;
+  Value: number;
+  Color: string;
+};
+
+function PieChart(Properties: { Element: DashboardElement & { Value: unknown } }) {
+  const Value = IsRecord(Properties.Element.Value) ? Properties.Element.Value : {};
+  const RawBuckets = Array.isArray(Value.Buckets) ? Value.Buckets : [];
+  const Buckets = RawBuckets
+    .filter((Bucket): Bucket is Record<string, unknown> => IsRecord(Bucket))
+    .map<PieChartBucket>((Bucket) => ({
+      Label: typeof Bucket.Label === "string" ? Bucket.Label : "Unknown",
+      Value: typeof Bucket.Value === "number" ? Math.max(0, Bucket.Value) : 0,
+      Color: typeof Bucket.Color === "string" ? Bucket.Color : "#64748b"
+    }));
+  const Total = typeof Value.Total === "number" ? Value.Total : Buckets.reduce((TotalValue, Bucket) => TotalValue + Bucket.Value, 0);
+  const WindowDays = typeof Value.WindowDays === "number" ? Value.WindowDays : null;
+  const Circumference = 100;
+  let Offset = 25;
+
+  return (
+    <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-black text-white sm:text-xl">{Properties.Element.Label}</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {Total.toLocaleString()} tracked {Properties.Element.Unit ?? "items"}
+            {WindowDays ? ` over ${WindowDays} day(s)` : ""}
+          </p>
+        </div>
+      </div>
+
+      {Total <= 0 ? (
+        <p className="mt-4 rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No activity status data yet.</p>
+      ) : (
+        <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-[180px_1fr] sm:items-center">
+          <div className="mx-auto h-44 w-44">
+            <svg className="h-full w-full -rotate-90" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" fill="transparent" r="15.9155" stroke="rgb(30 41 59)" strokeWidth="7" />
+              {Buckets.map((Bucket) => {
+                const Segment = Total > 0 ? (Bucket.Value / Total) * Circumference : 0;
+                const StrokeDasharray = `${Segment} ${Circumference - Segment}`;
+                const StrokeDashoffset = Offset;
+                Offset -= Segment;
+
+                return (
+                  <circle
+                    cx="21"
+                    cy="21"
+                    fill="transparent"
+                    key={Bucket.Label}
+                    r="15.9155"
+                    stroke={Bucket.Color}
+                    strokeDasharray={StrokeDasharray}
+                    strokeDashoffset={StrokeDashoffset}
+                    strokeLinecap="butt"
+                    strokeWidth="7"
+                  />
+                );
+              })}
+            </svg>
+          </div>
+          <div className="grid min-w-0 gap-2">
+            {Buckets.map((Bucket) => {
+              const Percent = Total > 0 ? (Bucket.Value / Total) * 100 : 0;
+
+              return (
+                <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 px-3 py-2" key={Bucket.Label}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: Bucket.Color }} />
+                    <span className="truncate text-sm font-bold text-slate-200">{Bucket.Label}</span>
+                  </span>
+                  <span className="shrink-0 text-sm font-black text-white">
+                    {Bucket.Value.toLocaleString()} ({Percent.toFixed(1)}%)
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

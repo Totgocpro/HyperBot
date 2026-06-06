@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, MessageReaction, PartialGuildMember, PartialMessage, PartialUser, User, VoiceState } from "discord.js";
 import type { PluginContext, PluginLoggerContract, PluginManifest, PluginStorageContract } from "./Types.js";
 
 export abstract class BasePlugin {
@@ -29,6 +29,10 @@ export abstract class BasePlugin {
   }
 
   public async OnMessageUpdate(_OldMessage: Message | PartialMessage, _NewMessage: Message | PartialMessage): Promise<void> {
+    return;
+  }
+
+  public async OnMessageReactionAdd(_Reaction: MessageReaction, _User: User | PartialUser): Promise<void> {
     return;
   }
 

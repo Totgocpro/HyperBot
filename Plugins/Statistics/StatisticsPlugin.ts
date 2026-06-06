@@ -1,4 +1,4 @@
-import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, type ChatInputCommandInteraction, type Guild, type GuildMember, type Message, type PartialGuildMember, type PartialMessage, type VoiceChannel, type VoiceState } from "discord.js";
+import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, type ChatInputCommandInteraction, type Guild, type GuildMember, type Message, type MessageReaction, type PartialGuildMember, type PartialMessage, type PartialUser, type User, type VoiceChannel, type VoiceState } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 
 type DailyCounters = Record<string, number>;
@@ -64,16 +64,67 @@ type ChannelCounter = {
   Template: string;
 };
 
+type ActivityConfig = {
+  ActivityWindowDays: number;
+  ActiveMessageThreshold: number;
+  ActiveVoiceMinuteThreshold: number;
+  ActiveReactionThreshold: number;
+  LowActivityMessageThreshold: number;
+  LowActivityVoiceMinuteThreshold: number;
+  LowActivityReactionThreshold: number;
+  ActiveRoleId: string;
+  InactiveRoleId: string;
+};
+
+type ActivityBucket = {
+  Label: string;
+  Value: number;
+  Color: string;
+};
+
+type ActivityOverview = {
+  Active: number;
+  LowActivity: number;
+  Inactive: number;
+  Total: number;
+  WindowDays: number;
+  GeneratedAt: string;
+  Buckets: ActivityBucket[];
+  Thresholds: {
+    ActiveMessages: number;
+    ActiveVoiceMinutes: number;
+    ActiveReactions: number;
+    LowActivityMessages: number;
+    LowActivityVoiceMinutes: number;
+    LowActivityReactions: number;
+  };
+};
+
 const MessagesDailyKey = "MessagesDaily";
 const MessagesHourlyKey = "MessagesHourly";
 const VoiceSecondsDailyKey = "VoiceSecondsDaily";
 const VoiceSecondsHourlyKey = "VoiceSecondsHourly";
+const ReactionsDailyKey = "ReactionsDaily";
+const ReactionsHourlyKey = "ReactionsHourly";
 const JoinsDailyKey = "JoinsDaily";
 const JoinsHourlyKey = "JoinsHourly";
 const LeavesDailyKey = "LeavesDaily";
 const LeavesHourlyKey = "LeavesHourly";
 const MessageLedgerKey = "MessageLedger";
 const ChannelCountersKey = "ChannelCounters";
+const ActivityOverviewKey = "ActivityOverview";
+
+const DefaultActivityConfig: ActivityConfig = {
+  ActivityWindowDays: 30,
+  ActiveMessageThreshold: 20,
+  ActiveVoiceMinuteThreshold: 60,
+  ActiveReactionThreshold: 10,
+  LowActivityMessageThreshold: 3,
+  LowActivityVoiceMinuteThreshold: 10,
+  LowActivityReactionThreshold: 2,
+  ActiveRoleId: "",
+  InactiveRoleId: ""
+};
 
 const DefaultStatsTextConfig: StatsTextConfig = {
   StatsEmbedTitle: "%user%'s statistics",
@@ -118,6 +169,8 @@ const DefaultStatsEmbed: EditableEmbed = {
 
 export default class StatisticsPlugin extends BasePlugin {
   private readonly VoiceSessions = new Map<string, VoiceSession>();
+  private LastActivityOverviewAt = 0;
+  private LastActivityRoleSyncAt = 0;
 
   public async OnEnable(): Promise<void> {
     this.Logger.Info("Statistics plugin enabled.");
@@ -161,6 +214,19 @@ export default class StatisticsPlugin extends BasePlugin {
     await this.Storage.SetGlobalConfig(MessageValue.guildId, MessageLedgerKey, Ledger);
   }
 
+  public async OnMessageReactionAdd(Reaction: MessageReaction, UserValue: User | PartialUser): Promise<void> {
+    const GuildId = Reaction.message.guildId;
+
+    if (!GuildId || (!(await this.ShouldTrackBots(GuildId)) && UserValue.bot)) {
+      return;
+    }
+
+    const Now = new Date();
+    await this.IncrementDailyCounter(GuildId, ReactionsDailyKey, 1, Now);
+    await this.IncrementHourlyCounter(GuildId, ReactionsHourlyKey, 1, Now);
+    await this.IncrementUserDailyCounter(GuildId, UserValue.id, ReactionsDailyKey, 1, Now);
+  }
+
   public async OnGuildMemberAdd(Member: GuildMember): Promise<void> {
     if (!(await this.ShouldTrackBots(Member.guild.id)) && Member.user.bot) {
       return;
@@ -193,6 +259,7 @@ export default class StatisticsPlugin extends BasePlugin {
   public async OnTick(): Promise<void> {
     await this.FlushAllVoiceSessions();
     await this.UpdateChannelCounters();
+    await this.UpdateActivityOverviewIfNeeded();
   }
 
   public async OnSlashCommand(CommandName: string, Interaction: ChatInputCommandInteraction): Promise<void> {
@@ -356,6 +423,159 @@ export default class StatisticsPlugin extends BasePlugin {
 
   private async ShouldTrackBots(GuildId: string): Promise<boolean> {
     return (await this.Storage.GetGlobalConfig<boolean>(GuildId, "TrackBots")) ?? false;
+  }
+
+  private async GetActivityConfig(GuildId: string): Promise<ActivityConfig> {
+    return {
+      ActivityWindowDays: await this.GetNumberConfigValue(GuildId, "ActivityWindowDays", DefaultActivityConfig.ActivityWindowDays),
+      ActiveMessageThreshold: await this.GetNumberConfigValue(GuildId, "ActiveMessageThreshold", DefaultActivityConfig.ActiveMessageThreshold),
+      ActiveVoiceMinuteThreshold: await this.GetNumberConfigValue(GuildId, "ActiveVoiceMinuteThreshold", DefaultActivityConfig.ActiveVoiceMinuteThreshold),
+      ActiveReactionThreshold: await this.GetNumberConfigValue(GuildId, "ActiveReactionThreshold", DefaultActivityConfig.ActiveReactionThreshold),
+      LowActivityMessageThreshold: await this.GetNumberConfigValue(GuildId, "LowActivityMessageThreshold", DefaultActivityConfig.LowActivityMessageThreshold),
+      LowActivityVoiceMinuteThreshold: await this.GetNumberConfigValue(GuildId, "LowActivityVoiceMinuteThreshold", DefaultActivityConfig.LowActivityVoiceMinuteThreshold),
+      LowActivityReactionThreshold: await this.GetNumberConfigValue(GuildId, "LowActivityReactionThreshold", DefaultActivityConfig.LowActivityReactionThreshold),
+      ActiveRoleId: (await this.Storage.GetGlobalConfig<string>(GuildId, "ActiveRoleId")) ?? DefaultActivityConfig.ActiveRoleId,
+      InactiveRoleId: (await this.Storage.GetGlobalConfig<string>(GuildId, "InactiveRoleId")) ?? DefaultActivityConfig.InactiveRoleId
+    };
+  }
+
+  private async GetNumberConfigValue(GuildId: string, Key: string, Fallback: number): Promise<number> {
+    const StoredValue = await this.Storage.GetGlobalConfig<number>(GuildId, Key);
+
+    if (typeof StoredValue !== "number" || !Number.isFinite(StoredValue)) {
+      return Fallback;
+    }
+
+    return Math.max(0, StoredValue);
+  }
+
+  private async UpdateActivityOverviewIfNeeded(): Promise<void> {
+    const Now = Date.now();
+    const ShouldUpdateOverview = Now - this.LastActivityOverviewAt >= 60_000;
+    const ShouldSyncRoles = Now - this.LastActivityRoleSyncAt >= 300_000;
+
+    if (!ShouldUpdateOverview && !ShouldSyncRoles) {
+      return;
+    }
+
+    for (const Guild of this.DiscordClient.guilds.cache.values()) {
+      await this.UpdateGuildActivityOverview(Guild, ShouldSyncRoles);
+    }
+
+    this.LastActivityOverviewAt = Now;
+    if (ShouldSyncRoles) {
+      this.LastActivityRoleSyncAt = Now;
+    }
+  }
+
+  private async UpdateGuildActivityOverview(Guild: Guild, SyncRoles: boolean): Promise<void> {
+    const Config = await this.GetActivityConfig(Guild.id);
+    const Now = new Date();
+    const StartDate = new Date(Now);
+    StartDate.setDate(StartDate.getDate() - Math.max(1, Config.ActivityWindowDays) + 1);
+
+    const Members = await Guild.members.fetch().catch(() => Guild.members.cache);
+    const TrackBots = await this.ShouldTrackBots(Guild.id);
+    let Active = 0;
+    let LowActivity = 0;
+    let Inactive = 0;
+
+    for (const Member of Members.values()) {
+      if (!TrackBots && Member.user.bot) {
+        continue;
+      }
+
+      const MessageCounters = (await this.Storage.GetUserValue<DailyCounters>(Guild.id, Member.id, MessagesDailyKey)) ?? {};
+      const VoiceCounters = (await this.Storage.GetUserValue<DailyCounters>(Guild.id, Member.id, VoiceSecondsDailyKey)) ?? {};
+      const ReactionCounters = (await this.Storage.GetUserValue<DailyCounters>(Guild.id, Member.id, ReactionsDailyKey)) ?? {};
+      const Messages = this.SumRange(MessageCounters, StartDate, Now);
+      const VoiceMinutes = Math.floor(this.SumRange(VoiceCounters, StartDate, Now) / 60);
+      const Reactions = this.SumRange(ReactionCounters, StartDate, Now);
+      const Status = this.ClassifyActivity(Messages, VoiceMinutes, Reactions, Config);
+
+      if (Status === "Active") {
+        Active += 1;
+      } else if (Status === "LowActivity") {
+        LowActivity += 1;
+      } else {
+        Inactive += 1;
+      }
+
+      if (SyncRoles) {
+        await this.SyncActivityRoles(Member, Status, Config);
+      }
+    }
+
+    const Total = Active + LowActivity + Inactive;
+    const Overview: ActivityOverview = {
+      Active,
+      LowActivity,
+      Inactive,
+      Total,
+      WindowDays: Math.max(1, Config.ActivityWindowDays),
+      GeneratedAt: Now.toISOString(),
+      Buckets: [
+        { Label: "Active", Value: Active, Color: "#22c55e" },
+        { Label: "Low activity", Value: LowActivity, Color: "#f59e0b" },
+        { Label: "Inactive", Value: Inactive, Color: "#ef4444" }
+      ],
+      Thresholds: {
+        ActiveMessages: Config.ActiveMessageThreshold,
+        ActiveVoiceMinutes: Config.ActiveVoiceMinuteThreshold,
+        ActiveReactions: Config.ActiveReactionThreshold,
+        LowActivityMessages: Config.LowActivityMessageThreshold,
+        LowActivityVoiceMinutes: Config.LowActivityVoiceMinuteThreshold,
+        LowActivityReactions: Config.LowActivityReactionThreshold
+      }
+    };
+
+    await this.Storage.SetGlobalConfig(Guild.id, ActivityOverviewKey, Overview);
+  }
+
+  private ClassifyActivity(Messages: number, VoiceMinutes: number, Reactions: number, Config: ActivityConfig): "Active" | "LowActivity" | "Inactive" {
+    if (
+      Messages >= Config.ActiveMessageThreshold ||
+      VoiceMinutes >= Config.ActiveVoiceMinuteThreshold ||
+      Reactions >= Config.ActiveReactionThreshold
+    ) {
+      return "Active";
+    }
+
+    if (
+      Messages >= Config.LowActivityMessageThreshold ||
+      VoiceMinutes >= Config.LowActivityVoiceMinuteThreshold ||
+      Reactions >= Config.LowActivityReactionThreshold
+    ) {
+      return "LowActivity";
+    }
+
+    return "Inactive";
+  }
+
+  private async SyncActivityRoles(Member: GuildMember, Status: "Active" | "LowActivity" | "Inactive", Config: ActivityConfig): Promise<void> {
+    const ActiveRole = Config.ActiveRoleId ? Member.guild.roles.cache.get(Config.ActiveRoleId) : null;
+    const InactiveRole = Config.InactiveRoleId ? Member.guild.roles.cache.get(Config.InactiveRoleId) : null;
+    const BotMember = Member.guild.members.me;
+
+    if (!BotMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return;
+    }
+
+    if (ActiveRole && ActiveRole.editable) {
+      if (Status === "Active" && !Member.roles.cache.has(ActiveRole.id)) {
+        await Member.roles.add(ActiveRole).catch(() => null);
+      } else if (Status !== "Active" && Member.roles.cache.has(ActiveRole.id)) {
+        await Member.roles.remove(ActiveRole).catch(() => null);
+      }
+    }
+
+    if (InactiveRole && InactiveRole.editable) {
+      if (Status === "Inactive" && !Member.roles.cache.has(InactiveRole.id)) {
+        await Member.roles.add(InactiveRole).catch(() => null);
+      } else if (Status !== "Inactive" && Member.roles.cache.has(InactiveRole.id)) {
+        await Member.roles.remove(InactiveRole).catch(() => null);
+      }
+    }
   }
 
   private async IsTrackableVoiceState(State: VoiceState): Promise<boolean> {

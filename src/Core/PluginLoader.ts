@@ -3,7 +3,7 @@ import Path from "node:path";
 import Chokidar from "chokidar";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
-import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, PartialGuildMember, PartialMessage, VoiceState } from "discord.js";
+import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, MessageReaction, PartialGuildMember, PartialMessage, PartialUser, User, VoiceState } from "discord.js";
 import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
 import { IsPluginDisabled } from "./PluginState.js";
@@ -115,6 +115,12 @@ export class PluginLoader {
   public async DispatchMessageUpdate(OldMessage: Message | PartialMessage, NewMessage: Message | PartialMessage): Promise<void> {
     for (const LoadedPluginValue of this.Plugins.values()) {
       await LoadedPluginValue.Instance.OnMessageUpdate(OldMessage, NewMessage);
+    }
+  }
+
+  public async DispatchMessageReactionAdd(Reaction: MessageReaction, UserValue: User | PartialUser): Promise<void> {
+    for (const LoadedPluginValue of this.Plugins.values()) {
+      await LoadedPluginValue.Instance.OnMessageReactionAdd(Reaction, UserValue);
     }
   }
 
