@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { createElement, type ReactNode } from "react";
 import sharp from "sharp";
 import satori, { type Font } from "satori";
 import type { User } from "discord.js";
+import { LoadSatoriFonts } from "../../src/Core/SatoriFonts.js";
 
 type LoveRendererLogger = {
   Warn(Message: string, Metadata?: unknown): void;
@@ -30,8 +30,6 @@ type RgbColor = {
 
 const H = createElement;
 const SatoriFontFamily = "DejaVu Sans";
-const SatoriRegularFontPath = "/usr/share/fonts/TTF/DejaVuSans.ttf";
-const SatoriBoldFontPath = "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf";
 
 export class DiscordLoveRenderer {
   private SatoriFontsPromise: Promise<Font[]> | null = null;
@@ -316,14 +314,7 @@ export class DiscordLoveRenderer {
 
   private async GetSatoriFonts(): Promise<Font[]> {
     if (!this.SatoriFontsPromise) {
-      this.SatoriFontsPromise = Promise.all([
-        readFile(SatoriRegularFontPath),
-        readFile(SatoriBoldFontPath)
-      ]).then(([RegularFont, BoldFont]) => [
-        { name: SatoriFontFamily, data: RegularFont, weight: 400, style: "normal" },
-        { name: SatoriFontFamily, data: BoldFont, weight: 700, style: "normal" },
-        { name: SatoriFontFamily, data: BoldFont, weight: 800, style: "normal" }
-      ]);
+      this.SatoriFontsPromise = LoadSatoriFonts(SatoriFontFamily);
     }
 
     return await this.SatoriFontsPromise;

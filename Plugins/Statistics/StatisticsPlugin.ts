@@ -1,15 +1,13 @@
 import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, type ChatInputCommandInteraction, type Guild, type GuildMember, type Message, type MessageReaction, type PartialGuildMember, type PartialMessage, type PartialUser, type User, type VoiceChannel, type VoiceState } from "discord.js";
-import { readFile } from "node:fs/promises";
 import { createElement, type ReactNode } from "react";
 import sharp from "sharp";
 import satori, { type Font } from "satori";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 import { Prisma } from "../../src/Core/Clients.js";
+import { LoadSatoriFonts } from "../../src/Core/SatoriFonts.js";
 
 const H = createElement;
 const SatoriFontFamily = "DejaVu Sans";
-const SatoriRegularFontPath = "/usr/share/fonts/TTF/DejaVuSans.ttf";
-const SatoriBoldFontPath = "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf";
 
 type DailyCounters = Record<string, number>;
 type HourlyCounters = Record<string, number>;
@@ -905,14 +903,7 @@ export default class StatisticsPlugin extends BasePlugin {
 
   private async GetSatoriFonts(): Promise<Font[]> {
     if (!this.SatoriFontsPromise) {
-      this.SatoriFontsPromise = Promise.all([
-        readFile(SatoriRegularFontPath),
-        readFile(SatoriBoldFontPath)
-      ]).then(([RegularFont, BoldFont]) => [
-        { name: SatoriFontFamily, data: RegularFont, weight: 400, style: "normal" },
-        { name: SatoriFontFamily, data: BoldFont, weight: 700, style: "normal" },
-        { name: SatoriFontFamily, data: BoldFont, weight: 800, style: "normal" }
-      ]);
+      this.SatoriFontsPromise = LoadSatoriFonts(SatoriFontFamily);
     }
 
     return await this.SatoriFontsPromise;
