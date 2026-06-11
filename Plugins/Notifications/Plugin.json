@@ -7,6 +7,9 @@
     "Icon": "NT"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Sends scheduled notifications to configured channels from dashboard-managed sources."
+  },
   "Commands": [],
   "WebInterface": [
     {

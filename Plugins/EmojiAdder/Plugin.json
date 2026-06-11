@@ -7,6 +7,9 @@
     "Icon": "EMO"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Searches and adds Tenor GIFs as Discord emojis, and can delete existing emojis from the dashboard."
+  },
   "Commands": [],
   "WebInterface": [
     {

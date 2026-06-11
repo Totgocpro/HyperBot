@@ -3,13 +3,34 @@ import Path from "node:path";
 import Chokidar from "chokidar";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
-import type { ChatInputCommandInteraction, Client, GuildMember, Interaction, Message, MessageReaction, PartialGuildMember, PartialMessage, PartialUser, User, VoiceState } from "discord.js";
+import {
+  ActionRowBuilder,
+  EmbedBuilder,
+  StringSelectMenuBuilder,
+  type ChatInputCommandInteraction,
+  type Client,
+  type GuildMember,
+  type Interaction,
+  type Message,
+  type MessageReaction,
+  type PartialGuildMember,
+  type PartialMessage,
+  type PartialUser,
+  type StringSelectMenuInteraction,
+  type User,
+  type VoiceState
+} from "discord.js";
 import { PluginLogger } from "./Logger.js";
 import { ScanPluginManifests } from "./PluginScanner.js";
 import { IsPluginDisabled } from "./PluginState.js";
 import { PluginStorage } from "./Storage.js";
 import { PluginScope } from "./Types.js";
-import type { CommandAliasDefinition, CommandDefinition, LoadedPlugin, PluginConstructor } from "./Types.js";
+import type { CommandAliasDefinition, CommandDefinition, CommandOptionDefinition, LoadedPlugin, PluginConstructor } from "./Types.js";
+
+const HelpCommandName = "help";
+const HelpSelectCustomIdPrefix = "HyperBotHelp:";
+const MaxDiscordSelectOptions = 25;
+const HyperBotColor = 0x5865f2;
 
 export class PluginLoader {
   private readonly PluginDirectory: string;
@@ -74,7 +95,7 @@ export class PluginLoader {
   }
 
   public async GetCommandDefinitions(): Promise<CommandDefinition[]> {
-    const BaseCommands = this.GetBaseCommandDefinitions();
+    const BaseCommands = [this.BuildHelpCommandDefinition(), ...this.GetBaseCommandDefinitions()];
     const Aliases = await this.GetAliasDefinitions();
     const BaseCommandMap = new Map(BaseCommands.map((Command) => [Command.Name, Command]));
     const RegisteredCommandNames = new Set(BaseCommands.map((Command) => Command.Name));
@@ -167,6 +188,11 @@ export class PluginLoader {
   }
 
   public async DispatchInteraction(InteractionValue: Interaction): Promise<void> {
+    if (InteractionValue.isStringSelectMenu() && InteractionValue.customId.startsWith(HelpSelectCustomIdPrefix)) {
+      await this.HandleHelpSelect(InteractionValue);
+      return;
+    }
+
     for (const LoadedPluginValue of this.Plugins.values()) {
       await LoadedPluginValue.Instance.OnInteraction(InteractionValue);
     }
@@ -174,6 +200,12 @@ export class PluginLoader {
 
   public async DispatchSlashCommand(Interaction: ChatInputCommandInteraction): Promise<void> {
     const CommandName = Interaction.commandName;
+
+    if (CommandName === HelpCommandName) {
+      await this.HandleHelpCommand(Interaction);
+      return;
+    }
+
     const ResolvedCommandName = await this.ResolveCommandName(CommandName);
     const LoadedPluginValue = Array.from(this.Plugins.values()).find((PluginValue) =>
       PluginValue.Manifest.Commands.some((CommandDefinition) => CommandDefinition.Name === ResolvedCommandName)
@@ -188,7 +220,233 @@ export class PluginLoader {
   }
 
   private GetBaseCommandDefinitions(): CommandDefinition[] {
-    return Array.from(this.Plugins.values()).flatMap((LoadedPluginValue) => LoadedPluginValue.Manifest.Commands);
+    return Array.from(this.Plugins.values()).flatMap((LoadedPluginValue) =>
+      LoadedPluginValue.Manifest.Commands.filter((Command) => Command.Name !== HelpCommandName)
+    );
+  }
+
+  private BuildHelpCommandDefinition(): CommandDefinition {
+    const Modules = this.GetHelpModules();
+
+    return {
+      Name: HelpCommandName,
+      Description: "Show HyperBot help.",
+      Options: [
+        {
+          Name: "module",
+          Description: "Module to show help for.",
+          Type: "String",
+          Required: false,
+          Choices: Modules.length <= MaxDiscordSelectOptions ? Modules.map((PluginValue) => ({
+            Name: this.Truncate(PluginValue.Manifest.Metadata.DisplayName, 100),
+            Value: PluginValue.Manifest.Metadata.Id
+          })) : undefined
+        }
+      ]
+    };
+  }
+
+  private async HandleHelpCommand(Interaction: ChatInputCommandInteraction): Promise<void> {
+    const RequestedModule = Interaction.options.getString("module")?.trim();
+
+    if (RequestedModule) {
+      const PluginValue = this.FindHelpModule(RequestedModule);
+
+      if (!PluginValue) {
+        await Interaction.reply({ content: "Unknown help module.", ephemeral: true });
+        return;
+      }
+
+      await Interaction.reply({
+        embeds: [this.BuildModuleHelpEmbed(PluginValue)],
+        components: this.BuildHelpSelectRows(Interaction.user.id, PluginValue.Manifest.Metadata.Id),
+        ephemeral: true
+      });
+      return;
+    }
+
+    await Interaction.reply({
+      embeds: [this.BuildHelpOverviewEmbed()],
+      components: this.BuildHelpSelectRows(Interaction.user.id),
+      ephemeral: true
+    });
+  }
+
+  private async HandleHelpSelect(InteractionValue: StringSelectMenuInteraction): Promise<void> {
+    const OwnerId = InteractionValue.customId.slice(HelpSelectCustomIdPrefix.length);
+
+    if (OwnerId !== InteractionValue.user.id) {
+      await InteractionValue.reply({ content: "This help menu belongs to another user.", ephemeral: true });
+      return;
+    }
+
+    const PluginId = InteractionValue.values[0];
+    const PluginValue = PluginId ? this.FindHelpModule(PluginId) : null;
+
+    if (!PluginValue) {
+      await InteractionValue.update({
+        embeds: [this.BuildHelpOverviewEmbed()],
+        components: this.BuildHelpSelectRows(InteractionValue.user.id)
+      });
+      return;
+    }
+
+    await InteractionValue.update({
+      embeds: [this.BuildModuleHelpEmbed(PluginValue)],
+      components: this.BuildHelpSelectRows(InteractionValue.user.id, PluginValue.Manifest.Metadata.Id)
+    });
+  }
+
+  private BuildHelpOverviewEmbed(): EmbedBuilder {
+    const Modules = this.GetHelpModules();
+    const Embed = new EmbedBuilder()
+      .setColor(HyperBotColor)
+      .setTitle("HyperBot Help")
+      .setDescription("Select a module from the menu below to view its help.");
+
+    if (Modules.length === 0) {
+      return Embed.addFields({ name: "Modules", value: "No module is currently loaded." });
+    }
+
+    if (Modules.length > 25) {
+      Embed.addFields({
+        name: "More modules",
+        value: `Only the first ${MaxDiscordSelectOptions} modules can be displayed in the menu. Use \`/help module:<module id>\` for the others.`
+      });
+    }
+
+    return Embed;
+  }
+
+  private BuildModuleHelpEmbed(PluginValue: LoadedPlugin): EmbedBuilder {
+    const Manifest = PluginValue.Manifest;
+    const Commands = Manifest.Commands.filter((Command) => Command.Name !== HelpCommandName);
+    const Description = Manifest.Help?.Description ?? `${Manifest.Metadata.DisplayName} module.`;
+    const Embed = new EmbedBuilder()
+      .setColor(HyperBotColor)
+      .setTitle(`${Manifest.Metadata.DisplayName} Help`)
+      .setDescription(this.Truncate(Description, 4096))
+      .addFields({
+        name: "Module",
+        value: [
+          `Id: \`${Manifest.Metadata.Id}\``,
+          `Scope: \`${Manifest.Scope}\``,
+          Manifest.Category ? `Category: \`${Manifest.Category}\`` : null
+        ].filter((Line): Line is string => Line !== null).join("\n")
+      });
+
+    if (Manifest.Help?.Details?.length) {
+      Embed.addFields({
+        name: "Help info",
+        value: this.Truncate(Manifest.Help.Details.map((Detail) => `- ${Detail}`).join("\n"), 1024)
+      });
+    }
+
+    if (Commands.length === 0) {
+      Embed.addFields({
+        name: "Commands",
+        value: "This module has no slash commands. Configure it from the dashboard."
+      });
+      return Embed;
+    }
+
+    const MaxCommandFields = Manifest.Help?.Details?.length ? 22 : 23;
+
+    for (const Command of Commands.slice(0, MaxCommandFields)) {
+      Embed.addFields({
+        name: `/${Command.Name}`,
+        value: this.BuildCommandHelpValue(Command)
+      });
+    }
+
+    if (Commands.length > MaxCommandFields) {
+      Embed.addFields({
+        name: "More commands",
+        value: `${Commands.length - MaxCommandFields} additional command(s) are not shown in this embed.`
+      });
+    }
+
+    return Embed;
+  }
+
+  private BuildCommandHelpValue(Command: CommandDefinition): string {
+    const Lines = [
+      Command.Help?.Description ?? Command.Description,
+      `Usage: \`${Command.Help?.Usage ?? this.BuildCommandUsage(Command)}\``
+    ];
+
+    if (Command.Options?.length) {
+      Lines.push("Arguments:");
+      Lines.push(...Command.Options.map((OptionValue) => this.FormatCommandOption(OptionValue)));
+    }
+
+    if (Command.Help?.Details?.length) {
+      Lines.push(...Command.Help.Details.map((Detail) => `- ${Detail}`));
+    }
+
+    return this.Truncate(Lines.join("\n"), 1024);
+  }
+
+  private BuildCommandUsage(Command: CommandDefinition): string {
+    const Options = Command.Options?.map((OptionValue) =>
+      OptionValue.Required ? `<${OptionValue.Name}>` : `[${OptionValue.Name}]`
+    ) ?? [];
+
+    return [`/${Command.Name}`, ...Options].join(" ");
+  }
+
+  private FormatCommandOption(OptionValue: CommandOptionDefinition): string {
+    const RequiredLabel = OptionValue.Required ? "required" : "optional";
+    const Choices = OptionValue.Choices?.length
+      ? ` Choices: ${OptionValue.Choices.map((Choice) => Choice.Name).join(", ")}.`
+      : "";
+
+    return `- \`${OptionValue.Name}\` (${OptionValue.Type}, ${RequiredLabel}): ${OptionValue.Description}${Choices}`;
+  }
+
+  private BuildHelpSelectRows(UserId: string, SelectedPluginId?: string): Array<ActionRowBuilder<StringSelectMenuBuilder>> {
+    const Modules = this.GetHelpModules().slice(0, MaxDiscordSelectOptions);
+
+    if (Modules.length === 0) {
+      return [];
+    }
+
+    const Select = new StringSelectMenuBuilder()
+      .setCustomId(`${HelpSelectCustomIdPrefix}${UserId}`)
+      .setPlaceholder("Select a module")
+      .addOptions(Modules.map((PluginValue) => ({
+        label: this.Truncate(PluginValue.Manifest.Metadata.DisplayName, 100),
+        value: PluginValue.Manifest.Metadata.Id,
+        description: this.Truncate(PluginValue.Manifest.Help?.Description ?? PluginValue.Manifest.Metadata.Id, 100),
+        default: PluginValue.Manifest.Metadata.Id === SelectedPluginId
+      })));
+
+    return [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(Select)];
+  }
+
+  private FindHelpModule(Value: string): LoadedPlugin | null {
+    const NormalizedValue = Value.trim().toLowerCase();
+    return this.GetHelpModules().find((PluginValue) =>
+      PluginValue.Manifest.Metadata.Id.toLowerCase() === NormalizedValue ||
+      PluginValue.Manifest.Metadata.DisplayName.toLowerCase() === NormalizedValue
+    ) ?? null;
+  }
+
+  private GetHelpModules(): LoadedPlugin[] {
+    return Array.from(this.Plugins.values())
+      .sort((First, Second) => First.Manifest.Metadata.DisplayName.localeCompare(Second.Manifest.Metadata.DisplayName));
+  }
+
+  private Truncate(Value: string, MaxLength: number): string {
+    if (Value.length <= MaxLength) {
+      return Value;
+    }
+
+    if (MaxLength <= 3) {
+      return Value.slice(0, MaxLength);
+    }
+
+    return `${Value.slice(0, MaxLength - 3)}...`;
   }
 
   private async ResolveCommandName(CommandName: string): Promise<string> {

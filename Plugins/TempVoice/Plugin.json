@@ -7,6 +7,9 @@
     "Icon": "TV"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Creates temporary voice rooms with owner controls, locks, bans, protected roles, music controls, and optional TTS."
+  },
   "Commands": [],
   "WebInterface": [
     {

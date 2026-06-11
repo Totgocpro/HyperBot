@@ -7,6 +7,9 @@
     "Icon": "WM"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Sends welcome and leave messages as embeds or generated images, and can publish captcha verification."
+  },
   "Commands": [],
   "WebInterface": [
     {

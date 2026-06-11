@@ -7,6 +7,9 @@
     "Icon": "Stats"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Tracks messages, reactions, voice time, joins, leaves, channel counters, and member activity status."
+  },
   "Commands": [
     {
       "Name": "stats",

@@ -7,6 +7,9 @@
     "Icon": "GA"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Runs button-based giveaways with winner limits, role checks, bonus entry rules, messages, and button labels."
+  },
   "Commands": [
     {
       "Name": "giveaway-start",

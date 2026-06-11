@@ -7,6 +7,9 @@
     "Icon": "RM"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Schedules dashboard-managed reminders and exposes slash commands to list, run, enable, disable, or delete them."
+  },
   "Commands": [
     {
       "Name": "reminder-list",

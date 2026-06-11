@@ -7,6 +7,9 @@
     "Icon": "CA"
   },
   "Scope": "Global",
+  "Help": {
+    "Description": "Registers global command aliases from dashboard-managed alias entries."
+  },
   "Commands": [],
   "WebInterface": [
     {

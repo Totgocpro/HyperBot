@@ -7,6 +7,9 @@
     "Icon": "TKT"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Publishes a ticket panel, creates private ticket channels, tracks ticket status, and can save transcripts."
+  },
   "Commands": [],
   "WebInterface": [
     {

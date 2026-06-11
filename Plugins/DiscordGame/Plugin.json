@@ -7,6 +7,9 @@
     "Icon": "DG"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Provides Discord games and generated image interactions."
+  },
   "Commands": [
     {
       "Name": "minesweeper",

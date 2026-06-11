@@ -7,6 +7,9 @@
     "Icon": "CC"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Builds prefix commands with configurable channel checks, role checks, denied messages, and command definitions."
+  },
   "Commands": [],
   "WebInterface": [
     {

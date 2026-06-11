@@ -7,6 +7,9 @@
     "Icon": "CS"
   },
   "Scope": "Global",
+  "Help": {
+    "Description": "Configures the bot presence, activity type, rotating status text, emoji placement, and rotation interval."
+  },
   "Commands": [],
   "WebInterface": [
     {

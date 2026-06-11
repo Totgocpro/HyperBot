@@ -40,6 +40,15 @@ const SettingsFieldSchema = z.object({
     .optional()
 });
 
+const PluginHelpSchema = z.object({
+  Description: z.string().min(1).optional(),
+  Details: z.array(z.string().min(1)).optional()
+});
+
+const CommandHelpSchema = PluginHelpSchema.extend({
+  Usage: z.string().min(1).optional()
+});
+
 const PluginManifestSchema = z.object({
   Metadata: z.object({
     Id: z.string().min(1),
@@ -49,12 +58,14 @@ const PluginManifestSchema = z.object({
     Icon: z.string().min(1)
   }),
   Scope: z.nativeEnum(PluginScope).default(PluginScope.Guild),
+  Help: PluginHelpSchema.optional(),
   Category: z.string().min(1).optional(),
   Dependencies: z.array(z.string().min(1)).optional(),
   Commands: z.array(
     z.object({
       Name: z.string().min(1),
       Description: z.string().min(1),
+      Help: CommandHelpSchema.optional(),
       Options: z
         .array(
           z.object({

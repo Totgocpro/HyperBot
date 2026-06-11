@@ -7,6 +7,9 @@
     "Icon": "BK"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Creates and restores Discord server backups from the dashboard."
+  },
   "Commands": [],
   "WebInterface": [
     {

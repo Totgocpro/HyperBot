@@ -49,6 +49,13 @@ export type CommandDefinition = {
   Name: string;
   Description: string;
   Options?: CommandOptionDefinition[];
+  Help?: CommandHelpInfo;
+};
+
+export type CommandHelpInfo = {
+  Description?: string;
+  Usage?: string;
+  Details?: string[];
 };
 
 export type CommandAliasDefinition = {
@@ -111,12 +118,18 @@ export type DashboardElement = {
 export type PluginManifest = {
   Metadata: PluginMetadata;
   Scope: PluginScope;
+  Help?: PluginHelpInfo;
   Category?: string;
   Dependencies?: string[];
   Commands: CommandDefinition[];
   WebInterface: SettingsField[];
   DashboardElements?: DashboardElement[];
   EntryPoint: string;
+};
+
+export type PluginHelpInfo = {
+  Description?: string;
+  Details?: string[];
 };
 
 export type LoadedPlugin = {

@@ -7,6 +7,9 @@
     "Icon": "Mod"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Stores sanctions, logs moderation events, supports AutoMod, invite blocking, word replacement, and word censorship."
+  },
   "Commands": [
     {
       "Name": "warn",

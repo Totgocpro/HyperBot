@@ -7,6 +7,9 @@
     "Icon": "INV"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Tracks invite usage, fake joins, leaves, unknown joins, invite logs, and leaderboard data."
+  },
   "Commands": [
     {
       "Name": "invites",

@@ -7,6 +7,9 @@
     "Icon": "SE"
   },
   "Scope": "Guild",
+  "Help": {
+    "Description": "Builds, previews, saves, and sends Discord embeds through the dashboard embed editor."
+  },
   "Commands": [],
   "WebInterface": [
     {
