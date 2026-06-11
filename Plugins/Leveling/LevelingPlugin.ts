@@ -74,6 +74,8 @@ export default class LevelingPlugin extends BasePlugin {
   }
 
   private async BuildLeaderboardRows(GuildId: string, Config: LevelingConfig): Promise<UserXpRow[]> {
+    const Guild = this.DiscordClient.guilds.cache.get(GuildId);
+    const Members = await Guild?.members.fetch().catch(() => Guild.members.cache);
     const StoredValues = await Prisma.userPluginValue.findMany({
       where: {
         BotId: this.BotId,
@@ -112,6 +114,7 @@ export default class LevelingPlugin extends BasePlugin {
     }
 
     return Array.from(Rows.values())
+      .filter((Row) => Members?.get(Row.UserId)?.user.bot !== true)
       .map((Row) => ({
         ...Row,
         Xp: Math.floor(Row.MessageCount * Config.MessageXp + Math.floor(Row.VoiceSeconds / 60) * Config.VoiceMinuteXp)
