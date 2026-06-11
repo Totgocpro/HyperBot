@@ -73,6 +73,30 @@
       "Section": "Sanctions"
     },
     {
+      "Key": "ModerationRoleIds",
+      "Type": "List",
+      "ItemType": "RolePicker",
+      "Label": "Moderation command roles",
+      "Default": [],
+      "Section": "Sanctions",
+      "Description": "Members with one of these roles can use moderation commands."
+    },
+    {
+      "Key": "PunishmentMuteReason",
+      "Type": "String",
+      "Label": "Mute punishment reason",
+      "Default": "Muted by AutoMod for %duration%: %reason%",
+      "Section": "Sanctions"
+    },
+    {
+      "Key": "PunishmentMuteDurationMinutes",
+      "Type": "Number",
+      "Label": "Mute duration minutes",
+      "Default": 10,
+      "Section": "Sanctions",
+      "Description": "Discord timeout duration in minutes. Maximum is 40320 minutes."
+    },
+    {
       "Key": "DeletedMessageLog",
       "Type": "String",
       "Label": "Deleted message log",
@@ -138,8 +162,24 @@
           "Value": "Warn"
         },
         {
+          "Label": "Mute user",
+          "Value": "Mute"
+        },
+        {
           "Label": "Delete and warn",
           "Value": "DeleteAndWarn"
+        },
+        {
+          "Label": "Delete and mute",
+          "Value": "DeleteAndMute"
+        },
+        {
+          "Label": "Warn and mute",
+          "Value": "WarnAndMute"
+        },
+        {
+          "Label": "Delete, warn and mute",
+          "Value": "DeleteWarnAndMute"
         }
       ],
       "VisibleWhenAny": [
@@ -224,8 +264,24 @@
           "Value": "Warn"
         },
         {
+          "Label": "Mute user",
+          "Value": "Mute"
+        },
+        {
           "Label": "Delete and warn",
           "Value": "DeleteAndWarn"
+        },
+        {
+          "Label": "Delete and mute",
+          "Value": "DeleteAndMute"
+        },
+        {
+          "Label": "Warn and mute",
+          "Value": "WarnAndMute"
+        },
+        {
+          "Label": "Delete, warn and mute",
+          "Value": "DeleteWarnAndMute"
         }
       ],
       "VisibleWhenAny": [
@@ -272,8 +328,24 @@
           "Value": "Warn"
         },
         {
+          "Label": "Mute user",
+          "Value": "Mute"
+        },
+        {
           "Label": "Delete and warn",
           "Value": "DeleteAndWarn"
+        },
+        {
+          "Label": "Delete and mute",
+          "Value": "DeleteAndMute"
+        },
+        {
+          "Label": "Warn and mute",
+          "Value": "WarnAndMute"
+        },
+        {
+          "Label": "Delete, warn and mute",
+          "Value": "DeleteWarnAndMute"
         }
       ],
       "VisibleWhenAny": [

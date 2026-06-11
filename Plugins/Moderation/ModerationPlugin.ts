@@ -35,6 +35,8 @@ type ModerationSanction = {
   CreatedAt: string;
 };
 
+type ModerationAutomodAction = "Delete" | "Warn" | "Mute" | "DeleteAndWarn" | "DeleteAndMute" | "WarnAndMute" | "DeleteWarnAndMute";
+
 type WebhookWritableChannel = Message["channel"] & {
   createWebhook(Options: ChannelWebhookCreateOptions): Promise<Webhook>;
 };
@@ -47,20 +49,23 @@ type ModerationConfig = {
   EditedMessageLog: string;
   MemberJoinLog: string;
   MemberLeaveLog: string;
+  ModerationRoleIds: string[];
   AutoModEnabled: boolean;
   AutoModRegexPatterns: string[];
-  AutoModAction: "Delete" | "Warn" | "DeleteAndWarn";
+  AutoModAction: ModerationAutomodAction;
   AutoModReason: string;
   AutoModLogMessage: string;
   RepeatedSpamEnabled: boolean;
   RepeatedSpamWindowSeconds: number;
   RepeatedSpamThreshold: number;
-  RepeatedSpamAction: "Delete" | "Warn" | "DeleteAndWarn";
+  RepeatedSpamAction: ModerationAutomodAction;
   InviteBlockEnabled: boolean;
   AllowedInviteCodes: string[];
-  InviteBlockAction: "Delete" | "Warn" | "DeleteAndWarn";
+  InviteBlockAction: ModerationAutomodAction;
   InviteBlockReason: string;
   InviteBlockLogMessage: string;
+  PunishmentMuteReason: string;
+  PunishmentMuteDurationMinutes: number;
   ReplaceWordEnabled: boolean;
   ReplaceWordRules: string[];
   CensorWordEnabled: boolean;
@@ -73,6 +78,7 @@ type ModerationConfig = {
 
 const LookupPageSize = 10;
 const LookupButtonPrefix = "Moderation:Lookup:";
+const MaxDiscordTimeoutMinutes = 28 * 24 * 60;
 
 const DefaultModerationConfig: ModerationConfig = {
   LogChannelId: "",
@@ -82,6 +88,7 @@ const DefaultModerationConfig: ModerationConfig = {
   EditedMessageLog: "Message edited in %channel% from %user%: before `%old%` after `%new%`",
   MemberJoinLog: "%user% joined the server.",
   MemberLeaveLog: "%user% left the server.",
+  ModerationRoleIds: [],
   AutoModEnabled: false,
   AutoModRegexPatterns: [],
   AutoModAction: "DeleteAndWarn",
@@ -96,6 +103,8 @@ const DefaultModerationConfig: ModerationConfig = {
   InviteBlockAction: "DeleteAndWarn",
   InviteBlockReason: "Invite links to other servers are not allowed: %invite%",
   InviteBlockLogMessage: "Blocked invite from %user% in %channel%: %invite%",
+  PunishmentMuteReason: "Muted by AutoMod for %duration%: %reason%",
+  PunishmentMuteDurationMinutes: 10,
   ReplaceWordEnabled: false,
   ReplaceWordRules: [],
   CensorWordEnabled: false,
@@ -315,14 +324,15 @@ export default class ModerationPlugin extends BasePlugin {
   }
 
   private async HandleWarn(Interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
-    if (!Interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
+    const Config = await this.GetConfig(Interaction.guildId);
+
+    if (!this.HasModerationAccess(Interaction.member, Config)) {
       await Interaction.reply({ content: "You need Moderate Members permission to warn users.", ephemeral: true });
       return;
     }
 
     const TargetUser = Interaction.options.getUser("user", true);
     const Reason = Interaction.options.getString("reason", true);
-    const Config = await this.GetConfig(Interaction.guildId);
 
     if (!Config.LogChannelId) {
       await Interaction.reply({ content: "Moderation log channel is not configured.", ephemeral: true });
@@ -360,7 +370,9 @@ export default class ModerationPlugin extends BasePlugin {
   }
 
   private async HandleLookup(Interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
-    if (!Interaction.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
+    const Config = await this.GetConfig(Interaction.guildId);
+
+    if (!this.HasModerationAccess(Interaction.member, Config)) {
       await Interaction.reply({ content: "You need Moderate Members permission to lookup sanctions.", ephemeral: true });
       return;
     }
@@ -389,7 +401,9 @@ export default class ModerationPlugin extends BasePlugin {
       return;
     }
 
-    if (!InteractionValue.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
+    const Config = await this.GetConfig(InteractionValue.guildId);
+
+    if (!this.HasModerationAccess(InteractionValue.member, Config)) {
       await InteractionValue.reply({ content: "You need Moderate Members permission to lookup sanctions.", ephemeral: true });
       return;
     }
@@ -773,15 +787,48 @@ export default class ModerationPlugin extends BasePlugin {
     return RoleIds.some((RoleId) => Member?.roles.cache.has(RoleId));
   }
 
+  private HasModerationAccess(Member: GuildMember | null, Config: ModerationConfig): boolean {
+    return Member?.permissions.has(PermissionFlagsBits.ModerateMembers) === true || this.HasAnyRole(Member, Config.ModerationRoleIds);
+  }
+
   private EscapeRegExp(Value: string): string {
     return Value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  }
+
+  private NormalizeMuteDurationMinutes(DurationMinutes: number): number {
+    if (!Number.isFinite(DurationMinutes)) {
+      return DefaultModerationConfig.PunishmentMuteDurationMinutes;
+    }
+
+    return Math.min(Math.max(Math.trunc(DurationMinutes), 1), MaxDiscordTimeoutMinutes);
+  }
+
+  private FormatDuration(DurationMinutes: number): string {
+    const Days = Math.floor(DurationMinutes / 1440);
+    const Hours = Math.floor((DurationMinutes % 1440) / 60);
+    const Minutes = DurationMinutes % 60;
+    const Parts: string[] = [];
+
+    if (Days > 0) {
+      Parts.push(`${Days}d`);
+    }
+
+    if (Hours > 0) {
+      Parts.push(`${Hours}h`);
+    }
+
+    if (Minutes > 0 || Parts.length === 0) {
+      Parts.push(`${Minutes}m`);
+    }
+
+    return Parts.join(" ");
   }
 
   private async ApplyAutomodAction(
     MessageValue: Message,
     Config: ModerationConfig,
     Options: {
-      Action: "Delete" | "Warn" | "DeleteAndWarn";
+      Action: ModerationAutomodAction;
       Title: string;
       ReasonTemplate: string;
       LogTemplate: string;
@@ -809,8 +856,24 @@ export default class ModerationPlugin extends BasePlugin {
       Pattern: Options.Pattern,
       Invite: Options.Invite
     });
-    const ShouldDelete = Options.Action === "Delete" || Options.Action === "DeleteAndWarn";
-    const ShouldWarn = Options.Action === "Warn" || Options.Action === "DeleteAndWarn";
+    const ShouldDelete = Options.Action === "Delete" || Options.Action === "DeleteAndWarn" || Options.Action === "DeleteAndMute" || Options.Action === "DeleteWarnAndMute";
+    const ShouldWarn = Options.Action === "Warn" || Options.Action === "DeleteAndWarn" || Options.Action === "WarnAndMute" || Options.Action === "DeleteWarnAndMute";
+    const ShouldMute = Options.Action === "Mute" || Options.Action === "DeleteAndMute" || Options.Action === "WarnAndMute" || Options.Action === "DeleteWarnAndMute";
+    const MuteDurationMinutes = this.NormalizeMuteDurationMinutes(Config.PunishmentMuteDurationMinutes);
+    const MuteDurationLabel = this.FormatDuration(MuteDurationMinutes);
+    const MuteReason = this.ApplyTemplate(Config.PunishmentMuteReason, {
+      User: MessageValue.author.tag,
+      Moderator: "AutoMod",
+      Reason,
+      Type: "Timeout",
+      Channel: ChannelName,
+      Content: MessageValue.content.slice(0, 900),
+      Old: "",
+      New: "",
+      Pattern: Options.Pattern,
+      Invite: Options.Invite,
+      Duration: MuteDurationLabel
+    });
 
     if (ShouldDelete) {
       if (!MessageValue.deletable) {
@@ -824,6 +887,37 @@ export default class ModerationPlugin extends BasePlugin {
       await MessageValue.delete().catch((ErrorValue: unknown) => {
         this.Logger.Warn("AutoMod could not delete a matching message.", ErrorValue);
       });
+    }
+
+    if (ShouldMute) {
+      const TargetMember = MessageValue.member ?? await MessageValue.guild?.members.fetch(MessageValue.author.id).catch(() => null);
+      let MuteApplied = false;
+
+      if (!TargetMember?.moderatable) {
+        this.Logger.Warn("AutoMod matched a message but cannot mute the member. Check bot permissions and role hierarchy.", {
+          GuildId,
+          UserId: MessageValue.author.id,
+          ChannelId: MessageValue.channelId,
+          MessageId: MessageValue.id
+        });
+      } else {
+        MuteApplied = await TargetMember.timeout(MuteDurationMinutes * 60_000, MuteReason).then(() => true).catch((ErrorValue: unknown) => {
+          this.Logger.Warn("AutoMod could not mute a matching member.", ErrorValue);
+          return false;
+        });
+      }
+
+      if (MuteApplied) {
+        await this.AppendSanction(GuildId, MessageValue.author.id, {
+          Type: "Timeout",
+          UserId: MessageValue.author.id,
+          UserTag: MessageValue.author.tag,
+          ModeratorId: this.DiscordClient.user?.id ?? "AutoMod",
+          ModeratorTag: this.DiscordClient.user?.tag ?? "AutoMod",
+          Reason: MuteReason,
+          CreatedAt: new Date().toISOString()
+        });
+      }
     }
 
     if (ShouldWarn) {
@@ -854,7 +948,8 @@ export default class ModerationPlugin extends BasePlugin {
         Old: "",
         New: "",
         Pattern: Options.Pattern,
-        Invite: Options.Invite
+        Invite: Options.Invite,
+        Duration: MuteDurationLabel
       }),
       Color: Options.Color
     });
@@ -969,6 +1064,7 @@ export default class ModerationPlugin extends BasePlugin {
       EditedMessageLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "EditedMessageLog")) ?? DefaultModerationConfig.EditedMessageLog,
       MemberJoinLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "MemberJoinLog")) ?? DefaultModerationConfig.MemberJoinLog,
       MemberLeaveLog: (await this.Storage.GetGlobalConfig<string>(GuildId, "MemberLeaveLog")) ?? DefaultModerationConfig.MemberLeaveLog,
+      ModerationRoleIds: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "ModerationRoleIds")) ?? DefaultModerationConfig.ModerationRoleIds,
       AutoModEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "AutoModEnabled")) ?? DefaultModerationConfig.AutoModEnabled,
       AutoModRegexPatterns: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "AutoModRegexPatterns")) ?? DefaultModerationConfig.AutoModRegexPatterns,
       AutoModAction: (await this.Storage.GetGlobalConfig<ModerationConfig["AutoModAction"]>(GuildId, "AutoModAction")) ?? DefaultModerationConfig.AutoModAction,
@@ -983,6 +1079,8 @@ export default class ModerationPlugin extends BasePlugin {
       InviteBlockAction: (await this.Storage.GetGlobalConfig<ModerationConfig["InviteBlockAction"]>(GuildId, "InviteBlockAction")) ?? DefaultModerationConfig.InviteBlockAction,
       InviteBlockReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockReason")) ?? DefaultModerationConfig.InviteBlockReason,
       InviteBlockLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "InviteBlockLogMessage")) ?? DefaultModerationConfig.InviteBlockLogMessage,
+      PunishmentMuteReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "PunishmentMuteReason")) ?? DefaultModerationConfig.PunishmentMuteReason,
+      PunishmentMuteDurationMinutes: this.NormalizeMuteDurationMinutes((await this.Storage.GetGlobalConfig<number>(GuildId, "PunishmentMuteDurationMinutes")) ?? DefaultModerationConfig.PunishmentMuteDurationMinutes),
       ReplaceWordEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ReplaceWordEnabled")) ?? DefaultModerationConfig.ReplaceWordEnabled,
       ReplaceWordRules: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "ReplaceWordRules")) ?? DefaultModerationConfig.ReplaceWordRules,
       CensorWordEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "CensorWordEnabled")) ?? DefaultModerationConfig.CensorWordEnabled,
@@ -1016,7 +1114,7 @@ export default class ModerationPlugin extends BasePlugin {
     return "name" in MessageValue.channel && MessageValue.channel?.name ? `#${MessageValue.channel.name}` : null;
   }
 
-  private ApplyTemplate(Template: string, Values: { User: string; Moderator: string; Reason: string; Type: string; Channel: string; Content: string; Old: string; New: string; Pattern?: string; Invite?: string; Words?: string }): string {
+  private ApplyTemplate(Template: string, Values: { User: string; Moderator: string; Reason: string; Type: string; Channel: string; Content: string; Old: string; New: string; Pattern?: string; Invite?: string; Words?: string; Duration?: string }): string {
     return Template
       .replaceAll("%user%", Values.User)
       .replaceAll("%moderator%", Values.Moderator)
@@ -1029,6 +1127,7 @@ export default class ModerationPlugin extends BasePlugin {
       .replaceAll("%pattern%", Values.Pattern ?? "")
       .replaceAll("%invite%", Values.Invite ?? "")
       .replaceAll("%words%", Values.Words ?? "")
+      .replaceAll("%duration%", Values.Duration ?? "")
       .slice(0, 4000);
   }
 }
