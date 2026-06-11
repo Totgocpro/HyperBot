@@ -5,11 +5,48 @@
 :root {
   color: #e2e8f0;
   background: #020617;
+  --hyperbot-scrollbar-track: #020617;
+  --hyperbot-scrollbar-thumb: #334155;
+  --hyperbot-scrollbar-thumb-hover: #475569;
+  --hyperbot-scrollbar-border: #0f172a;
+}
+
+html {
+  scrollbar-color: var(--hyperbot-scrollbar-thumb) var(--hyperbot-scrollbar-track);
+  scrollbar-width: thin;
 }
 
 body {
   min-height: 100vh;
   background: #020617;
+}
+
+* {
+  scrollbar-color: var(--hyperbot-scrollbar-thumb) var(--hyperbot-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--hyperbot-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--hyperbot-scrollbar-thumb);
+  border: 2px solid var(--hyperbot-scrollbar-border);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--hyperbot-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--hyperbot-scrollbar-track);
 }
 
 html[data-theme="light"] {
