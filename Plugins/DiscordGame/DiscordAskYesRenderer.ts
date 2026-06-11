@@ -3,10 +3,21 @@ import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
 export type AskYesImageOptions = {
   AccentColor: string;
   Answer: "YES" | "NO";
+  MentionHighlights?: AskYesMentionHighlight[];
   NoLabel: string;
   Question: string;
   Title: string;
   YesLabel: string;
+};
+
+export type AskYesMentionHighlight = {
+  UserId: string;
+  Username: string;
+};
+
+type InlineTextToken = {
+  Highlight: boolean;
+  Text: string;
 };
 
 type RgbColor = {
@@ -39,8 +50,8 @@ export class DiscordAskYesRenderer {
     this.StrokeRoundedRect(Context, 54, 46, 892, 328, 34);
 
     this.DrawCenteredText(Context, this.TruncateText(Context, Options.Title, 760, 28, 900), 500, 92, 28, 900, "#ffffff");
-    const QuestionLines = this.WrapText(Context, Options.Question, 780, 30, 700, 3);
-    this.DrawTextBlock(Context, QuestionLines, 500, 160, 42, 30, 700, "#e2e8f0");
+    const QuestionLines = this.WrapInlineText(Context, Options.Question, Options.MentionHighlights ?? [], 780, 30, 700, 3);
+    this.DrawInlineTextBlock(Context, QuestionLines, 500, 160, 42, 30, 700, "#e2e8f0");
 
     const AnswerColor = Options.Answer === "YES" ? "#22c55e" : "#ef4444";
     this.DrawRoundedRect(Context, 330, 280, 340, 74, 24, AnswerColor);
@@ -49,50 +60,165 @@ export class DiscordAskYesRenderer {
     return Canvas.encodeSync("png");
   }
 
-  private WrapText(Context: SKRSContext2D, Text: string, MaxWidth: number, FontSize: number, FontWeight: number, MaxLines: number): string[] {
+  private WrapInlineText(Context: SKRSContext2D, Text: string, Mentions: AskYesMentionHighlight[], MaxWidth: number, FontSize: number, FontWeight: number, MaxLines: number): InlineTextToken[][] {
     Context.font = this.FormatFont(FontSize, FontWeight);
-    const Words = Text.replace(/\s+/gu, " ").trim().split(" ").filter(Boolean);
-    const Lines: string[] = [];
-    let CurrentLine = "";
+    const Tokens = this.TokenizeInlineText(Text, Mentions);
+    const Lines: InlineTextToken[][] = [];
+    let CurrentLine: InlineTextToken[] = [];
+    let CurrentWidth = 0;
+    let Overflow = false;
 
-    for (const Word of Words) {
-      const Candidate = CurrentLine ? `${CurrentLine} ${Word}` : Word;
+    for (let Index = 0; Index < Tokens.length; Index += 1) {
+      const Token = Tokens[Index];
+      const IsWhitespace = Token.Text.trim() === "";
 
-      if (Context.measureText(Candidate).width <= MaxWidth) {
-        CurrentLine = Candidate;
+      if (IsWhitespace && CurrentLine.length === 0) {
         continue;
       }
 
-      if (CurrentLine) {
+      const TokenWidth = this.MeasureInlineToken(Context, Token);
+
+      if (!IsWhitespace && CurrentLine.length > 0 && CurrentWidth + TokenWidth > MaxWidth) {
+        this.TrimTrailingWhitespaceTokens(CurrentLine);
         Lines.push(CurrentLine);
+
+        if (Lines.length >= MaxLines) {
+          Overflow = true;
+          break;
+        }
+
+        CurrentLine = [];
+        CurrentWidth = 0;
       }
 
-      CurrentLine = Word;
-
-      if (Lines.length >= MaxLines) {
-        break;
-      }
+      CurrentLine.push({ ...Token });
+      CurrentWidth += TokenWidth;
     }
 
-    if (CurrentLine && Lines.length < MaxLines) {
+    if (!Overflow && CurrentLine.length > 0 && Lines.length < MaxLines) {
+      this.TrimTrailingWhitespaceTokens(CurrentLine);
       Lines.push(CurrentLine);
+    } else if (CurrentLine.length > 0) {
+      Overflow = true;
     }
 
     if (Lines.length === 0) {
-      Lines.push("");
+      Lines.push([{ Highlight: false, Text: "" }]);
     }
 
-    const LastIndex = Lines.length - 1;
-    Lines[LastIndex] = this.TruncateText(Context, Lines[LastIndex], MaxWidth, FontSize, FontWeight);
+    for (let Index = 0; Index < Lines.length; Index += 1) {
+      const IsLastVisibleLine = Index === Lines.length - 1;
+      const NeedsEllipsis = IsLastVisibleLine && (Overflow || this.MeasureInlineLine(Context, Lines[Index]) > MaxWidth);
+      Lines[Index] = NeedsEllipsis
+        ? this.TruncateInlineLine(Context, Lines[Index], MaxWidth)
+        : Lines[Index];
+    }
+
     return Lines;
   }
 
-  private DrawTextBlock(Context: SKRSContext2D, Lines: string[], CenterX: number, StartY: number, LineHeight: number, FontSize: number, FontWeight: number, Color: string): void {
+  private TokenizeInlineText(Text: string, Mentions: AskYesMentionHighlight[]): InlineTextToken[] {
+    const MentionUsernames = new Map(Mentions.map((Mention) => [Mention.UserId, Mention.Username]));
+    const Tokens: InlineTextToken[] = [];
+    const MentionPattern = /<@!?(\d{17,20})>/gu;
+    let LastIndex = 0;
+
+    for (const Match of Text.matchAll(MentionPattern)) {
+      if (Match.index > LastIndex) {
+        Tokens.push(...this.TokenizePlainText(Text.slice(LastIndex, Match.index)));
+      }
+
+      const Username = MentionUsernames.get(Match[1]);
+      Tokens.push({
+        Highlight: Username !== undefined,
+        Text: Username ? `@${Username}` : Match[0]
+      });
+      LastIndex = Match.index + Match[0].length;
+    }
+
+    if (LastIndex < Text.length) {
+      Tokens.push(...this.TokenizePlainText(Text.slice(LastIndex)));
+    }
+
+    return Tokens.length > 0 ? Tokens : [{ Highlight: false, Text: "" }];
+  }
+
+  private TokenizePlainText(Text: string): InlineTextToken[] {
+    return (Text.replace(/\s+/gu, " ").match(/\s+|[^\s]+/gu) ?? [])
+      .map((Token) => ({ Highlight: false, Text: Token }));
+  }
+
+  private DrawInlineTextBlock(Context: SKRSContext2D, Lines: InlineTextToken[][], CenterX: number, StartY: number, LineHeight: number, FontSize: number, FontWeight: number, Color: string): void {
     const TotalHeight = (Lines.length - 1) * LineHeight;
 
     for (let Index = 0; Index < Lines.length; Index += 1) {
-      this.DrawCenteredText(Context, Lines[Index], CenterX, StartY + Index * LineHeight - TotalHeight / 2, FontSize, FontWeight, Color);
+      this.DrawInlineLine(Context, Lines[Index], CenterX, StartY + Index * LineHeight - TotalHeight / 2, FontSize, FontWeight, Color);
     }
+  }
+
+  private DrawInlineLine(Context: SKRSContext2D, Line: InlineTextToken[], CenterX: number, Y: number, FontSize: number, FontWeight: number, Color: string): void {
+    Context.font = this.FormatFont(FontSize, FontWeight);
+    Context.textAlign = "start";
+    Context.textBaseline = "middle";
+
+    let X = CenterX - this.MeasureInlineLine(Context, Line) / 2;
+
+    for (const Token of Line) {
+      const TextWidth = Context.measureText(Token.Text).width;
+
+      if (Token.Highlight) {
+        const PaddingX = 10;
+        const TokenHeight = FontSize + 8;
+        this.DrawRoundedRect(Context, X, Y - TokenHeight / 2, TextWidth + PaddingX * 2, TokenHeight, 7, "rgba(88, 101, 242, 0.34)");
+        Context.fillStyle = "#dbeafe";
+        Context.fillText(Token.Text, X + PaddingX, Y);
+        X += TextWidth + PaddingX * 2;
+        continue;
+      }
+
+      Context.fillStyle = Color;
+      Context.fillText(Token.Text, X, Y);
+      X += TextWidth;
+    }
+
+    Context.textBaseline = "alphabetic";
+  }
+
+  private MeasureInlineLine(Context: SKRSContext2D, Line: InlineTextToken[]): number {
+    return Line.reduce((Width, Token) => Width + this.MeasureInlineToken(Context, Token), 0);
+  }
+
+  private MeasureInlineToken(Context: SKRSContext2D, Token: InlineTextToken): number {
+    const TextWidth = Context.measureText(Token.Text).width;
+    return Token.Highlight ? TextWidth + 20 : TextWidth;
+  }
+
+  private TrimTrailingWhitespaceTokens(Line: InlineTextToken[]): void {
+    while (Line.length > 0 && Line[Line.length - 1].Text.trim() === "") {
+      Line.pop();
+    }
+  }
+
+  private TruncateInlineLine(Context: SKRSContext2D, Line: InlineTextToken[], MaxWidth: number): InlineTextToken[] {
+    const TruncatedLine = Line.map((Token) => ({ ...Token }));
+    const Ellipsis: InlineTextToken = { Highlight: false, Text: "..." };
+    this.TrimTrailingWhitespaceTokens(TruncatedLine);
+
+    while (TruncatedLine.length > 0 && this.MeasureInlineLine(Context, TruncatedLine) + this.MeasureInlineToken(Context, Ellipsis) > MaxWidth) {
+      const LastToken = TruncatedLine[TruncatedLine.length - 1];
+
+      if (LastToken.Text.length <= 1) {
+        TruncatedLine.pop();
+        this.TrimTrailingWhitespaceTokens(TruncatedLine);
+        continue;
+      }
+
+      LastToken.Text = LastToken.Text.slice(0, -1).trimEnd();
+    }
+
+    this.TrimTrailingWhitespaceTokens(TruncatedLine);
+    TruncatedLine.push(Ellipsis);
+    return TruncatedLine;
   }
 
   private DrawCenteredText(Context: SKRSContext2D, Text: string, X: number, Y: number, FontSize: number, FontWeight: number, Color: string): void {

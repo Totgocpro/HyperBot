@@ -1,6 +1,6 @@
 import { AttachmentBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
 import type { PluginStorageContract } from "../../src/Core/Types.js";
-import { DiscordAskYesRenderer } from "./DiscordAskYesRenderer.js";
+import { DiscordAskYesRenderer, type AskYesMentionHighlight } from "./DiscordAskYesRenderer.js";
 
 type AskYesConfig = {
   AskYesTitle: string;
@@ -45,10 +45,12 @@ export class DiscordAskYesFeature {
     const AnswerLabel = Answer === "YES" ? Config.AskYesYesLabel : Config.AskYesNoLabel;
     const Color = Answer === "YES" ? Config.AskYesYesColor : Config.AskYesNoColor;
     const AttachmentName = `askyes-${InteractionValue.id}.png`;
+    const MentionHighlights = await this.ResolveQuestionMentionHighlights(InteractionValue, Question);
     const Attachment = new AttachmentBuilder(
       this.Renderer.BuildAskYesImage({
         AccentColor: Color,
         Answer,
+        MentionHighlights,
         NoLabel: Config.AskYesNoLabel,
         Question,
         Title: Config.AskYesImageTitle,
@@ -86,6 +88,35 @@ export class DiscordAskYesFeature {
     return Template
       .replaceAll("%question%", Question)
       .replaceAll("%answer%", Answer);
+  }
+
+  private async ResolveQuestionMentionHighlights(InteractionValue: ChatInputCommandInteraction, Question: string): Promise<AskYesMentionHighlight[]> {
+    const UserIds = Array.from(new Set([...Question.matchAll(/<@!?(\d{17,20})>/gu)].map((Match) => Match[1])));
+
+    if (UserIds.length === 0) {
+      return [];
+    }
+
+    const Highlights = await Promise.all(
+      UserIds.map(async (UserId): Promise<AskYesMentionHighlight | null> => {
+        let Username = InteractionValue.guild?.members.cache.get(UserId)?.user.username
+          ?? InteractionValue.client.users.cache.get(UserId)?.username;
+
+        if (!Username && InteractionValue.guild) {
+          const Member = await InteractionValue.guild.members.fetch(UserId).catch(() => null);
+          Username = Member?.user.username;
+        }
+
+        if (!Username) {
+          const User = await InteractionValue.client.users.fetch(UserId).catch(() => null);
+          Username = User?.username;
+        }
+
+        return Username ? { UserId, Username } : null;
+      })
+    );
+
+    return Highlights.filter((Highlight): Highlight is AskYesMentionHighlight => Highlight !== null);
   }
 
   private ParseColor(ColorValue: string): number {
