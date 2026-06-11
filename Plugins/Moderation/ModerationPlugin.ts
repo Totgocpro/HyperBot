@@ -1,12 +1,17 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   EmbedBuilder,
   PermissionFlagsBits,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type ChannelWebhookCreateOptions,
   type ForumChannel,
   type GuildBasedChannel,
   type GuildMember,
+  type Interaction,
   type Message,
   type PartialGuildMember,
   type PartialMessage,
@@ -65,6 +70,9 @@ type ModerationConfig = {
   RewriteWarnReason: string;
   RewriteLogMessage: string;
 };
+
+const LookupPageSize = 10;
+const LookupButtonPrefix = "Moderation:Lookup:";
 
 const DefaultModerationConfig: ModerationConfig = {
   LogChannelId: "",
@@ -151,6 +159,14 @@ export default class ModerationPlugin extends BasePlugin {
     if (CommandName === "lookup") {
       await this.HandleLookup(Interaction);
     }
+  }
+
+  public async OnInteraction(InteractionValue: Interaction): Promise<void> {
+    if (!InteractionValue.isButton() || !InteractionValue.customId.startsWith(LookupButtonPrefix)) {
+      return;
+    }
+
+    await this.HandleLookupButton(InteractionValue);
   }
 
   public async OnMessage(MessageValue: Message): Promise<void> {
@@ -351,21 +367,114 @@ export default class ModerationPlugin extends BasePlugin {
 
     const TargetUser = Interaction.options.getUser("user", true);
     const Sanctions = await this.GetSanctions(Interaction.guildId, TargetUser.id);
-    const Embed = new EmbedBuilder()
-      .setTitle(`Moderation lookup: ${TargetUser.tag}`)
-      .setColor(0x2563eb)
-      .setThumbnail(TargetUser.displayAvatarURL())
-      .setDescription(Sanctions.length === 0 ? "No sanction found." : `Found ${Sanctions.length} sanction(s).`);
+    const Page = 0;
+    const TotalPages = this.GetLookupTotalPages(Sanctions);
+    const PageSanctions = this.GetLookupPageSanctions(Sanctions, Page);
+    const Embed = this.BuildLookupEmbed(TargetUser.tag, TargetUser.displayAvatarURL(), Sanctions.length, PageSanctions, Page, TotalPages);
+    const Components = this.BuildLookupComponents(Interaction.user.id, TargetUser.id, Page, TotalPages);
 
-    for (const Sanction of Sanctions.slice(-20).reverse()) {
+    await Interaction.reply({ embeds: [Embed], components: Components, ephemeral: true });
+  }
+
+  private async HandleLookupButton(InteractionValue: ButtonInteraction): Promise<void> {
+    if (!InteractionValue.guildId || !InteractionValue.inCachedGuild()) {
+      await InteractionValue.reply({ content: "This lookup is only available in a server.", ephemeral: true });
+      return;
+    }
+
+    const [, , Action, OwnerId, TargetUserId, PageValue] = InteractionValue.customId.split(":");
+
+    if (InteractionValue.user.id !== OwnerId) {
+      await InteractionValue.reply({ content: "Only the user who launched this lookup can use these buttons.", ephemeral: true });
+      return;
+    }
+
+    if (!InteractionValue.memberPermissions?.has(PermissionFlagsBits.ModerateMembers)) {
+      await InteractionValue.reply({ content: "You need Moderate Members permission to lookup sanctions.", ephemeral: true });
+      return;
+    }
+
+    const CurrentPage = Number.parseInt(PageValue ?? "0", 10);
+    const PageDelta = Action === "Next" ? 1 : Action === "Previous" ? -1 : 0;
+    const Sanctions = await this.GetSanctions(InteractionValue.guildId, TargetUserId);
+    const TotalPages = this.GetLookupTotalPages(Sanctions);
+    const NextPage = Math.min(Math.max(CurrentPage + PageDelta, 0), TotalPages - 1);
+    const TargetUser = await this.DiscordClient.users.fetch(TargetUserId).catch(() => null);
+    const Embed = this.BuildLookupEmbed(
+      TargetUser?.tag ?? TargetUserId,
+      TargetUser?.displayAvatarURL() ?? null,
+      Sanctions.length,
+      this.GetLookupPageSanctions(Sanctions, NextPage),
+      NextPage,
+      TotalPages
+    );
+
+    await InteractionValue.update({
+      embeds: [Embed],
+      components: this.BuildLookupComponents(OwnerId, TargetUserId, NextPage, TotalPages)
+    });
+  }
+
+  private BuildLookupEmbed(
+    TargetUserTag: string,
+    TargetUserAvatarUrl: string | null,
+    SanctionCount: number,
+    PageSanctions: ModerationSanction[],
+    Page: number,
+    TotalPages: number
+  ): EmbedBuilder {
+    const Embed = new EmbedBuilder()
+      .setTitle(`Moderation lookup: ${TargetUserTag}`)
+      .setColor(0x2563eb)
+      .setDescription(SanctionCount === 0 ? "No sanction found." : `Found ${SanctionCount} sanction(s). Showing page ${Page + 1}/${TotalPages}.`);
+
+    if (TargetUserAvatarUrl) {
+      Embed.setThumbnail(TargetUserAvatarUrl);
+    }
+
+    for (const Sanction of PageSanctions) {
       Embed.addFields({
         name: `${Sanction.Type} | ${new Date(Sanction.CreatedAt).toLocaleString("en-US")}`,
-        value: `Moderator: ${Sanction.ModeratorTag} (${Sanction.ModeratorId})\nReason: ${Sanction.Reason}`,
+        value: this.TruncateDiscordField(`Moderator: ${Sanction.ModeratorTag} (${Sanction.ModeratorId})\nReason: ${Sanction.Reason}`),
         inline: false
       });
     }
 
-    await Interaction.reply({ embeds: [Embed], ephemeral: true });
+    return Embed;
+  }
+
+  private BuildLookupComponents(OwnerId: string, TargetUserId: string, Page: number, TotalPages: number): ActionRowBuilder<ButtonBuilder>[] {
+    if (TotalPages <= 1) {
+      return [];
+    }
+
+    return [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${LookupButtonPrefix}Previous:${OwnerId}:${TargetUserId}:${Page}`)
+          .setLabel("Previous Page")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(Page <= 0),
+        new ButtonBuilder()
+          .setCustomId(`${LookupButtonPrefix}Next:${OwnerId}:${TargetUserId}:${Page}`)
+          .setLabel("Next Page")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(Page >= TotalPages - 1)
+      )
+    ];
+  }
+
+  private GetLookupPageSanctions(Sanctions: ModerationSanction[], Page: number): ModerationSanction[] {
+    const StartIndex = Math.max(0, Page) * LookupPageSize;
+    return Sanctions.slice().reverse().slice(StartIndex, StartIndex + LookupPageSize);
+  }
+
+  private GetLookupTotalPages(Sanctions: ModerationSanction[]): number {
+    return Math.max(1, Math.ceil(Sanctions.length / LookupPageSize));
+  }
+
+  private TruncateDiscordField(Value: string): string {
+    return Value.length <= 1024 ? Value : `${Value.slice(0, 1021)}...`;
   }
 
   private async SendSanctionLog(GuildId: string, Config: ModerationConfig, Sanction: ModerationSanction, TargetUser: User, Moderator: User): Promise<void> {
