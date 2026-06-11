@@ -19,8 +19,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
-REPOSITORY_URL = "git@github.com:Totgocpro/HyperBot.git"
+REPOSITORY_URL = "https://github.com/Totgocpro/HyperBot.git"
+UPDATE_BRANCH_CANDIDATES = ("master", "main")
 DEFAULT_PORT = 3000
+UPDATE_SOURCE_BACKUP_EXCLUDES = {
+    ".git",
+    ".hyperbot-cli-venv",
+    ".next",
+    "Backups",
+    "dist",
+    "Exports",
+    "node_modules",
+    "tsconfig.tsbuildinfo",
+}
 
 
 class Ui:
@@ -582,31 +593,34 @@ def command_export(args: argparse.Namespace) -> None:
     ui.warn("The export contains .env and therefore secrets. Keep this file private.")
 
 
-def command_update(args: argparse.Namespace) -> None:
-    ui.title("HyperBot - Update")
-    require_command("git")
-    if not (ROOT / ".git").exists():
-        raise HyperBotError("This folder is not a HyperBot git repository.")
-
-    timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+def backup_plugins_for_update(timestamp: str) -> Path:
     plugin_backup = ROOT / "Backups" / "Updates" / f"Plugins-{timestamp}"
     plugin_backup.parent.mkdir(parents=True, exist_ok=True)
     if (ROOT / "Plugins").exists():
         shutil.copytree(ROOT / "Plugins", plugin_backup)
         ui.ok(f"Plugins backed up to {plugin_backup}")
+    return plugin_backup
 
-    tracked = run(["git", "status", "--porcelain", "--untracked-files=no"], capture=True)
-    if tracked.stdout and not args.allow_dirty:
-        raise HyperBotError(
-            "The repository has tracked local changes. "
-            "Commit/stash those changes or rerun with --allow-dirty."
-        )
 
-    run(["git", "remote", "set-url", "origin", REPOSITORY_URL])
-    branch = run(["git", "branch", "--show-current"], capture=True).stdout.strip() or "main"
-    run(["git", "fetch", "origin"])
-    run(["git", "pull", "--ff-only", "origin", branch])
+def backup_source_for_update(timestamp: str) -> Path:
+    source_backup = ROOT / "Backups" / "Updates" / f"Source-{timestamp}"
+    source_backup.mkdir(parents=True, exist_ok=True)
 
+    for child in ROOT.iterdir():
+        if child.name in UPDATE_SOURCE_BACKUP_EXCLUDES:
+            continue
+
+        target = source_backup / child.name
+        if child.is_dir():
+            shutil.copytree(child, target, ignore=shutil.ignore_patterns(*UPDATE_SOURCE_BACKUP_EXCLUDES))
+        elif child.is_file():
+            shutil.copy2(child, target)
+
+    ui.ok(f"Current source backed up to {source_backup}")
+    return source_backup
+
+
+def restore_missing_plugins(plugin_backup: Path) -> int:
     restored = 0
     plugins_dir = ROOT / "Plugins"
     plugins_dir.mkdir(exist_ok=True)
@@ -615,6 +629,97 @@ def command_update(args: argparse.Namespace) -> None:
         if not target.exists():
             shutil.copytree(backup_child, target)
             restored += 1
+    return restored
+
+
+def git_has_head_commit() -> bool:
+    return run(["git", "rev-parse", "--verify", "HEAD"], check=False, capture=True).returncode == 0
+
+
+def ensure_origin_remote() -> None:
+    remotes = run(["git", "remote"], check=False, capture=True)
+    if "origin" in (remotes.stdout or "").splitlines():
+        run(["git", "remote", "set-url", "origin", REPOSITORY_URL])
+    else:
+        run(["git", "remote", "add", "origin", REPOSITORY_URL])
+
+
+def resolve_remote_update_branch(preferred_branch: str | None = None) -> str:
+    candidates: list[str] = []
+    if preferred_branch:
+        candidates.append(preferred_branch)
+
+    remote_head = run(["git", "ls-remote", "--symref", "origin", "HEAD"], check=False, capture=True)
+    if remote_head.returncode == 0:
+        for line in (remote_head.stdout or "").splitlines():
+            parts = line.split()
+            branch_prefix = "refs/heads/"
+            if len(parts) >= 2 and parts[0] == "ref:" and parts[1].startswith(branch_prefix):
+                candidates.append(parts[1][len(branch_prefix):])
+                break
+
+    candidates.extend(UPDATE_BRANCH_CANDIDATES)
+
+    seen: set[str] = set()
+    for branch in candidates:
+        if not branch or branch in seen:
+            continue
+        seen.add(branch)
+        remote_branch = run(["git", "ls-remote", "--heads", "origin", branch], check=False, capture=True)
+        if remote_branch.returncode == 0 and (remote_branch.stdout or "").strip():
+            return branch
+
+    raise HyperBotError("Could not find an update branch on GitHub. Tried: " + ", ".join(seen))
+
+
+def convert_unversioned_installation_to_git(timestamp: str, had_git_directory: bool) -> None:
+    if had_git_directory:
+        ui.warn("A .git folder exists, but it has no commit yet. Continuing ZIP conversion.")
+    else:
+        ui.warn("No .git folder found. This looks like a GitHub ZIP installation.")
+    backup_source_for_update(timestamp)
+    if not had_git_directory:
+        run(["git", "init"])
+    ensure_origin_remote()
+    branch = resolve_remote_update_branch()
+    run(["git", "fetch", "--depth", "1", "origin", branch])
+    run(["git", "symbolic-ref", "HEAD", f"refs/heads/{branch}"])
+    run(["git", "reset", "--hard", f"origin/{branch}"])
+    ui.ok("ZIP installation converted to a Git repository.")
+
+
+def command_update(args: argparse.Namespace) -> None:
+    ui.title("HyperBot - Update")
+    require_command("git")
+
+    timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    plugin_backup = backup_plugins_for_update(timestamp)
+    has_git_directory = (ROOT / ".git").exists()
+
+    if not has_git_directory or not git_has_head_commit():
+        convert_unversioned_installation_to_git(timestamp, has_git_directory)
+        restored = restore_missing_plugins(plugin_backup)
+        ui.ok("HyperBot code updated.")
+        if restored:
+            ui.ok(f"{restored} local plugin(s) restored.")
+        ui.warn("Official files, including official plugins, were replaced by the GitHub version. Local copies are in Backups/Updates/.")
+        ui.warn("Run `start` again to rebuild the Docker image with the new version.")
+        return
+
+    tracked = run(["git", "status", "--porcelain", "--untracked-files=no"], capture=True)
+    if tracked.stdout and not args.allow_dirty:
+        raise HyperBotError(
+            "The repository has tracked local changes. "
+            "Commit/stash those changes or rerun with --allow-dirty."
+        )
+
+    ensure_origin_remote()
+    current_branch = run(["git", "branch", "--show-current"], capture=True).stdout.strip()
+    branch = resolve_remote_update_branch(current_branch)
+    run(["git", "fetch", "origin", branch])
+    run(["git", "pull", "--ff-only", "origin", branch])
+
+    restored = restore_missing_plugins(plugin_backup)
 
     ui.ok("HyperBot code updated.")
     if restored:
@@ -710,7 +815,7 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("-o", "--output", help="Path of the zip file to create.")
     export.set_defaults(func=command_export)
 
-    update = subparsers.add_parser("update", help="Updates from git@github.com:Totgocpro/HyperBot.git while keeping local plugins.")
+    update = subparsers.add_parser("update", help="Updates from GitHub while keeping local instance data and plugin backups.")
     update.add_argument("--allow-dirty", action="store_true", help="Allows a repository with modified tracked files.")
     update.set_defaults(func=command_update)
 
@@ -719,7 +824,55 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def normalize_chained_command(segment: list[str]) -> list[str]:
+    normalized = list(segment)
+
+    if len(normalized) >= 2 and Path(normalized[0]).name in {"sh", "bash", "dash"} and Path(normalized[1]).name in {"HyperBot.sh", "HyperBot.bat"}:
+        normalized = normalized[2:]
+
+    if normalized and Path(normalized[0]).name in {"HyperBot.sh", "HyperBot.bat", "hyperbot"}:
+        normalized = normalized[1:]
+
+    return normalized
+
+
+def split_chained_commands(argv: list[str]) -> list[list[str]] | None:
+    if "&&" not in argv:
+        return None
+
+    commands: list[list[str]] = [[]]
+    for token in argv:
+        if token == "&&":
+            commands.append([])
+        else:
+            commands[-1].append(token)
+
+    normalized = [normalize_chained_command(command) for command in commands]
+    if any(not command for command in normalized):
+        raise HyperBotError("Invalid chained command. Use: sh HyperBot.sh start && sh HyperBot.sh logs -f")
+
+    return normalized
+
+
+def run_chained_commands(commands: list[list[str]]) -> int:
+    exit_code = 0
+    for command in commands:
+        exit_code = main(command)
+        if exit_code != 0:
+            return exit_code
+    return exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    try:
+        chained_commands = split_chained_commands(argv)
+        if chained_commands is not None:
+            return run_chained_commands(chained_commands)
+    except HyperBotError as exc:
+        ui.error(str(exc))
+        return 1
+
     parser = build_parser()
     args = parser.parse_args(argv)
     if not hasattr(args, "func"):

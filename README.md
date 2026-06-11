@@ -195,9 +195,11 @@ Warning: `.env` contains secrets. Keep exports private.
 The update command:
 
 - backs up `Plugins/` to `Backups/Updates/`;
-- sets the git remote to `git@github.com:Totgocpro/HyperBot.git`;
+- sets the git remote to `https://github.com/Totgocpro/HyperBot.git`;
 - pulls the latest version of the current branch;
 - restores local plugins that do not exist in the pulled version.
+
+If HyperBot was downloaded as a GitHub ZIP and does not contain a `.git` folder, the CLI first backs up the current source to `Backups/Updates/`, initializes Git, detects the GitHub default branch, and replaces official files with the GitHub version. Local-only files such as `.env`, backups, exports, runtime folders, and custom plugin folders are kept. If an official file was edited locally, the GitHub version wins and the previous local copy remains in the update backup.
 
 If Git reports tracked local changes, the CLI stops before updating. Commit or stash those changes, then run the update again.
 
