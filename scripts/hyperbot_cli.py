@@ -708,10 +708,9 @@ def command_update(args: argparse.Namespace) -> None:
 
     tracked = run(["git", "status", "--porcelain", "--untracked-files=no"], capture=True)
     if tracked.stdout and not args.allow_dirty:
-        raise HyperBotError(
-            "The repository has tracked local changes. "
-            "Commit/stash those changes or rerun with --allow-dirty."
-        )
+        ui.warn("Tracked local changes detected. They will be backed up, then replaced by the GitHub version.")
+        backup_source_for_update(timestamp)
+        run(["git", "reset", "--hard", "HEAD"])
 
     ensure_origin_remote()
     current_branch = run(["git", "branch", "--show-current"], capture=True).stdout.strip()
@@ -816,7 +815,7 @@ def build_parser() -> argparse.ArgumentParser:
     export.set_defaults(func=command_export)
 
     update = subparsers.add_parser("update", help="Updates from GitHub while keeping local instance data and plugin backups.")
-    update.add_argument("--allow-dirty", action="store_true", help="Allows a repository with modified tracked files.")
+    update.add_argument("--allow-dirty", action="store_true", help="Attempts the update without resetting modified tracked files.")
     update.set_defaults(func=command_update)
 
     menu = subparsers.add_parser("menu", help="Opens the interactive menu.")

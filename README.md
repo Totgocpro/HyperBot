@@ -201,7 +201,7 @@ The update command:
 
 If HyperBot was downloaded as a GitHub ZIP and does not contain a `.git` folder, the CLI first backs up the current source to `Backups/Updates/`, initializes Git, detects the GitHub default branch, and replaces official files with the GitHub version. Local-only files such as `.env`, backups, exports, runtime folders, and custom plugin folders are kept. If an official file was edited locally, the GitHub version wins and the previous local copy remains in the update backup.
 
-If Git reports tracked local changes, the CLI stops before updating. Commit or stash those changes, then run the update again.
+If Git reports tracked local changes, the CLI backs up the current source to `Backups/Updates/`, resets official files to the current Git version, then updates from GitHub. Use `--allow-dirty` only if you intentionally want Git to try updating while tracked files are still modified.
 
 ## Configuration
 
