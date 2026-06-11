@@ -13,7 +13,23 @@
   "Commands": [
     {
       "Name": "stats",
-      "Description": "Show your server statistics"
+      "Description": "Show your server statistics",
+      "Help": {
+        "Usage": "/stats",
+        "Details": [
+          "Shows your personal tracked messages and voice time."
+        ]
+      }
+    },
+    {
+      "Name": "server-statistics",
+      "Description": "Generate a server activity statistics image.",
+      "Help": {
+        "Usage": "/server-statistics",
+        "Details": [
+          "Generates a branded image with the server logo, theme color, recent activity graph, activity score, global stats, and top 3 active members."
+        ]
+      }
     }
   ],
   "WebInterface": [
