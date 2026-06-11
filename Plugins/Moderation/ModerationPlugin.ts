@@ -60,6 +60,7 @@ type ModerationConfig = {
   ReplaceWordRules: string[];
   CensorWordEnabled: boolean;
   CensorWords: string[];
+  RewriteBlockedRoleIds: string[];
   RewriteWarnUser: boolean;
   RewriteWarnReason: string;
   RewriteLogMessage: string;
@@ -116,6 +117,7 @@ const DefaultModerationConfig: ModerationConfig = {
     "bombe",
     "viol"
   ],
+  RewriteBlockedRoleIds: [],
   RewriteWarnUser: false,
   RewriteWarnReason: "Message cleaned by moderation: %words%",
   RewriteLogMessage: "Cleaned message from %user% in %channel%: `%old%` -> `%new%`"
@@ -454,6 +456,10 @@ export default class ModerationPlugin extends BasePlugin {
       return false;
     }
 
+    if (this.HasAnyRole(MessageValue.member, Config.RewriteBlockedRoleIds)) {
+      return false;
+    }
+
     const RewriteResult = this.BuildCleanContent(MessageValue.content, Config);
 
     if (!RewriteResult.Changed) {
@@ -652,6 +658,10 @@ export default class ModerationPlugin extends BasePlugin {
 
   private CanCreateWebhookInChannel(Channel: Message["channel"]): Channel is WebhookWritableChannel {
     return "createWebhook" in Channel && typeof Channel.createWebhook === "function";
+  }
+
+  private HasAnyRole(Member: GuildMember | null, RoleIds: string[]): boolean {
+    return RoleIds.some((RoleId) => Member?.roles.cache.has(RoleId));
   }
 
   private EscapeRegExp(Value: string): string {
@@ -868,6 +878,7 @@ export default class ModerationPlugin extends BasePlugin {
       ReplaceWordRules: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "ReplaceWordRules")) ?? DefaultModerationConfig.ReplaceWordRules,
       CensorWordEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "CensorWordEnabled")) ?? DefaultModerationConfig.CensorWordEnabled,
       CensorWords: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "CensorWords")) ?? DefaultModerationConfig.CensorWords,
+      RewriteBlockedRoleIds: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "RewriteBlockedRoleIds")) ?? DefaultModerationConfig.RewriteBlockedRoleIds,
       RewriteWarnUser: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "RewriteWarnUser")) ?? DefaultModerationConfig.RewriteWarnUser,
       RewriteWarnReason: (await this.Storage.GetGlobalConfig<string>(GuildId, "RewriteWarnReason")) ?? DefaultModerationConfig.RewriteWarnReason,
       RewriteLogMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "RewriteLogMessage")) ?? DefaultModerationConfig.RewriteLogMessage

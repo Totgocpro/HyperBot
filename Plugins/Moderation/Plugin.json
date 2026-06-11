@@ -370,6 +370,15 @@
       "Section": "Message rewriting"
     },
     {
+      "Key": "RewriteBlockedRoleIds",
+      "Type": "List",
+      "ItemType": "RolePicker",
+      "Label": "Rewrite blocked roles",
+      "Default": [],
+      "Section": "Message rewriting",
+      "Description": "Members with one of these roles will not have their messages rewritten."
+    },
+    {
       "Key": "RewriteWarnReason",
       "Type": "String",
       "Label": "Rewrite warn reason",
