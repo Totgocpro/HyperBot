@@ -520,10 +520,7 @@ export class TempVoiceMusicPlayer {
 
         return Tracks;
       } catch (ErrorValue) {
-        this.Logger.Warn("TempVoice music playlist load failed.", {
-          ...Debug,
-          Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue)
-        });
+        this.LogResolveFailure("TempVoice music playlist load failed.", Debug, ErrorValue);
         throw this.BuildYoutubeDlError("Playlist could not be loaded.", ErrorValue, Debug);
       }
     }
@@ -544,17 +541,38 @@ export class TempVoiceMusicPlayer {
           VideoId: VideoId ?? undefined
         }];
       } catch (ErrorValue) {
-        this.Logger.Warn("TempVoice music video info failed.", {
-          ...Debug,
-          Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
-          TrackUrl
-        });
+        this.LogResolveFailure("TempVoice music video info failed.", Debug, ErrorValue, { TrackUrl });
         throw this.BuildYoutubeDlError("Video could not be loaded.", ErrorValue, Debug);
       }
     }
 
-    this.Logger.Warn("TempVoice music URL rejected.", Debug);
+    this.LogResolveFailure("TempVoice music URL rejected.", Debug);
     throw new TempVoiceMusicError("Use a valid YouTube video or playlist URL.", Debug);
+  }
+
+  private LogResolveFailure(Message: string, Debug: Record<string, unknown>, ErrorValue?: unknown, Extra: Record<string, unknown> = {}): void {
+    const ErrorMessage = ErrorValue instanceof Error ? ErrorValue.message : ErrorValue === undefined ? undefined : String(ErrorValue);
+
+    if (this.IsReleaseMode()) {
+      this.Logger.Info(Message, {
+        Error: ErrorMessage,
+        NormalizedUrl: Debug.NormalizedUrl,
+        PlaylistId: Debug.PlaylistId,
+        VideoId: Debug.VideoId,
+        ...Extra
+      });
+      return;
+    }
+
+    this.Logger.Warn(Message, {
+      ...Debug,
+      Error: ErrorMessage,
+      ...Extra
+    });
+  }
+
+  private IsReleaseMode(): boolean {
+    return process.env.NODE_ENV === "production";
   }
 
   private NormalizeYouTubeUrl(Value: string): string {

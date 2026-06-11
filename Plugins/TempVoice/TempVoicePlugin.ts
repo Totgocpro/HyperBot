@@ -1318,7 +1318,10 @@ export default class TempVoicePlugin extends BasePlugin {
       if (ExistingMessage) {
         let FailedWithUnknownMessage = false;
         const Edited = await ExistingMessage.edit(EditPayload).then(() => true).catch((ErrorValue: unknown) => {
-          this.Logger.Warn("Could not edit temporary voice control panel.", ErrorValue);
+          this.LogDiscordPanelWarning("Could not edit temporary voice control panel.", ErrorValue, {
+            ChannelId: Session.ChannelId,
+            MessageId: Session.ControlPanelMessageId
+          });
           FailedWithUnknownMessage = this.IsDiscordUnknownMessageError(ErrorValue);
           return false;
         });
@@ -1337,7 +1340,9 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     const MessageValue = await TextChannel.send(Payload).catch((ErrorValue: unknown) => {
-      this.Logger.Warn("Could not send temporary voice control panel.", ErrorValue);
+      this.LogDiscordPanelWarning("Could not send temporary voice control panel.", ErrorValue, {
+        ChannelId: Session.ChannelId
+      });
       return null;
     });
 
@@ -1419,6 +1424,10 @@ export default class TempVoicePlugin extends BasePlugin {
       }
 
       await this.UpsertMusicPanelMessage(Channel, Session, Config, Reason, SimpleMode);
+
+      if (!this.MusicPanelActiveChannelIds.has(ChannelId)) {
+        return;
+      }
 
       if (SimpleMode || MusicState.Paused) {
         this.StopMusicPanelRefreshLoop(ChannelId);
@@ -1567,11 +1576,16 @@ export default class TempVoicePlugin extends BasePlugin {
 
       if (ExistingMessage) {
         this.MusicPanelMessages.set(Session.ChannelId, ExistingMessage);
-        let FailedWithUnknownMessage = false;
+        let FailedWithUnknownChannel = false;
+        let FailedWithUnknownResource = false;
         let FailedWithRateLimit = false;
         const Edited = await ExistingMessage.edit(EditPayload).then(() => true).catch((ErrorValue: unknown) => {
-          this.Logger.Warn("Could not edit temporary voice music panel.", ErrorValue);
-          FailedWithUnknownMessage = this.IsDiscordUnknownMessageError(ErrorValue);
+          this.LogDiscordPanelWarning("Could not edit temporary voice music panel.", ErrorValue, {
+            ChannelId: Session.ChannelId,
+            MessageId: Session.MusicPanelMessageId
+          });
+          FailedWithUnknownChannel = this.IsDiscordUnknownChannelError(ErrorValue);
+          FailedWithUnknownResource = this.IsDiscordUnknownResourceError(ErrorValue);
           FailedWithRateLimit = this.RecordDiscordRateLimitFromError(ErrorValue);
           return false;
         });
@@ -1585,7 +1599,12 @@ export default class TempVoicePlugin extends BasePlugin {
           return;
         }
 
-        if (!FailedWithUnknownMessage) {
+        if (FailedWithUnknownChannel) {
+          await this.ClearStaleMusicPanel(Session);
+          return;
+        }
+
+        if (!FailedWithUnknownResource) {
           return;
         }
       }
@@ -1595,9 +1614,16 @@ export default class TempVoicePlugin extends BasePlugin {
       await this.SaveSession(Session);
     }
 
-    const MessageValue = await TextChannel.send(Payload).catch((ErrorValue: unknown) => {
-      this.Logger.Warn("Could not send temporary voice music panel.", ErrorValue);
+    const MessageValue = await TextChannel.send(Payload).catch(async (ErrorValue: unknown) => {
+      this.LogDiscordPanelWarning("Could not send temporary voice music panel.", ErrorValue, {
+        ChannelId: Session.ChannelId
+      });
       this.RecordDiscordRateLimitFromError(ErrorValue);
+
+      if (this.IsDiscordUnknownChannelError(ErrorValue)) {
+        await this.ClearStaleMusicPanel(Session);
+      }
+
       return null;
     });
 
@@ -1641,12 +1667,22 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     await MessageValue.delete().catch((ErrorValue: unknown) => {
-      if (!this.IsDiscordUnknownMessageError(ErrorValue)) {
-        this.Logger.Warn("Could not delete temporary voice music panel.", ErrorValue);
+      if (!this.IsDiscordUnknownResourceError(ErrorValue)) {
+        this.LogDiscordPanelWarning("Could not delete temporary voice music panel.", ErrorValue, {
+          ChannelId: Session.ChannelId,
+          MessageId
+        });
       }
 
       this.RecordDiscordRateLimitFromError(ErrorValue);
     });
+  }
+
+  private async ClearStaleMusicPanel(Session: TempVoiceSession): Promise<void> {
+    Session.MusicPanelMessageId = undefined;
+    this.ClearMusicPanelRuntimeState(Session.ChannelId);
+    this.StopMusicPanelRefreshLoop(Session.ChannelId);
+    await this.SaveSession(Session);
   }
 
   private ClearMusicPanelRuntimeState(ChannelId: string): void {
@@ -1999,8 +2035,8 @@ export default class TempVoicePlugin extends BasePlugin {
     MessageId: string
   ): Promise<Message | null> {
     return await TextChannel.messages.fetch(MessageId).catch((ErrorValue: unknown) => {
-      if (!this.IsDiscordUnknownMessageError(ErrorValue)) {
-        this.Logger.Warn("Could not fetch temporary voice control panel.", ErrorValue);
+      if (!this.IsDiscordUnknownResourceError(ErrorValue)) {
+        this.LogDiscordPanelWarning("Could not fetch temporary voice control panel.", ErrorValue, { MessageId });
       }
 
       return null;
@@ -2016,16 +2052,57 @@ export default class TempVoicePlugin extends BasePlugin {
     MessageId: string
   ): Promise<Message | null> {
     return await TextChannel.messages.fetch(MessageId).catch((ErrorValue: unknown) => {
-      if (!this.IsDiscordUnknownMessageError(ErrorValue)) {
-        this.Logger.Warn("Could not fetch temporary voice music panel.", ErrorValue);
+      if (!this.IsDiscordUnknownResourceError(ErrorValue)) {
+        this.LogDiscordPanelWarning("Could not fetch temporary voice music panel.", ErrorValue, { MessageId });
       }
 
       return null;
     });
   }
 
+  private LogDiscordPanelWarning(Message: string, ErrorValue: unknown, Metadata: Record<string, unknown> = {}): void {
+    if (this.IsReleaseMode()) {
+      if (this.IsDiscordUnknownResourceError(ErrorValue)) {
+        return;
+      }
+
+      this.Logger.Warn(Message, {
+        ...Metadata,
+        DiscordCode: this.GetDiscordErrorCode(ErrorValue),
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        Status: this.GetDiscordErrorStatus(ErrorValue)
+      });
+      return;
+    }
+
+    this.Logger.Warn(Message, ErrorValue);
+  }
+
+  private IsReleaseMode(): boolean {
+    return process.env.NODE_ENV === "production";
+  }
+
+  private IsDiscordUnknownResourceError(ErrorValue: unknown): boolean {
+    return this.IsDiscordUnknownMessageError(ErrorValue) || this.IsDiscordUnknownChannelError(ErrorValue);
+  }
+
   private IsDiscordUnknownMessageError(ErrorValue: unknown): boolean {
     const Candidate = ErrorValue as { code?: unknown; rawError?: { code?: unknown } } | null;
     return Candidate?.code === 10008 || Candidate?.rawError?.code === 10008;
+  }
+
+  private IsDiscordUnknownChannelError(ErrorValue: unknown): boolean {
+    const Candidate = ErrorValue as { code?: unknown; rawError?: { code?: unknown } } | null;
+    return Candidate?.code === 10003 || Candidate?.rawError?.code === 10003;
+  }
+
+  private GetDiscordErrorCode(ErrorValue: unknown): unknown {
+    const Candidate = ErrorValue as { code?: unknown; rawError?: { code?: unknown } } | null;
+    return Candidate?.code ?? Candidate?.rawError?.code;
+  }
+
+  private GetDiscordErrorStatus(ErrorValue: unknown): unknown {
+    const Candidate = ErrorValue as { status?: unknown } | null;
+    return Candidate?.status;
   }
 }
