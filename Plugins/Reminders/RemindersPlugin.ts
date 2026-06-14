@@ -159,12 +159,19 @@ export default class RemindersPlugin extends BasePlugin {
       return true;
     }
 
-    const NextAt = new Date(ReminderValue.NextRunAt).getTime();
     const [Hours, Minutes] = (ReminderValue.TimeOfDay || "13:00").split(":").map((Part) => Number.parseInt(Part, 10));
-    const ExpectedDate = new Date(NextAt);
-    ExpectedDate.setHours(Number.isFinite(Hours) ? Hours : 13, Number.isFinite(Minutes) ? Minutes : 0, 0, 0);
+    const NowDate = new Date(Now);
+    const ExpectedDate = new Date(Date.UTC(
+      NowDate.getUTCFullYear(),
+      NowDate.getUTCMonth(),
+      NowDate.getUTCDate(),
+      Number.isFinite(Hours) ? Hours : 13,
+      Number.isFinite(Minutes) ? Minutes : 0,
+      0,
+      0
+    ));
 
-    return Math.abs(NextAt - ExpectedDate.getTime()) < 60_000;
+    return Math.abs(Now - ExpectedDate.getTime()) < 60_000;
   }
 
   private async HandleCreateCommand(Interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
@@ -376,11 +383,17 @@ export default class RemindersPlugin extends BasePlugin {
     const FromDate = new Date(FromTimestamp);
 
     for (let Offset = 0; Offset <= 7; Offset += 1) {
-      const Candidate = new Date(FromDate);
-      Candidate.setDate(FromDate.getDate() + Offset);
-      Candidate.setHours(Number.isFinite(Hours) ? Hours : 13, Number.isFinite(Minutes) ? Minutes : 0, 0, 0);
+      const Candidate = new Date(Date.UTC(
+        FromDate.getUTCFullYear(),
+        FromDate.getUTCMonth(),
+        FromDate.getUTCDate() + Offset,
+        Number.isFinite(Hours) ? Hours : 13,
+        Number.isFinite(Minutes) ? Minutes : 0,
+        0,
+        0
+      ));
 
-      if (Weekdays.includes(Candidate.getDay()) && Candidate.getTime() > FromTimestamp) {
+      if (Weekdays.includes(Candidate.getUTCDay()) && Candidate.getTime() > FromTimestamp) {
         return Candidate.toISOString();
       }
     }

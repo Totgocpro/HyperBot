@@ -4,7 +4,7 @@ import { CustomSelect } from "../CustomSelect";
 import { BuildConfigSections, RenderField, type BotPreviewIdentity, type DashboardPlugin } from "../PluginInterfaceRenderer";
 import type { SettingsField } from "../../../Core/Types";
 import type { CustomCommandActionDraft, CustomCommandActionType, CustomCommandDraft, NotificationSourceDraft, NotificationSourceType, ReminderDraft } from "./PluginSettingsTypes";
-import { AdvancedEmbedEditor, BuildNotificationSourceName, BuildReminderDraftId, ComputeReminderNextRun, CreateClientId, CreateDefaultEmbed, EmbedInputClassName, FormatReminderDate, IsoToLocalDateTime, LocalDateTimeToIso, MultiSelectField, NotificationSourceUsesKeys, ParseCustomCommands, ParseNotificationSources, ParseReminderDrafts, ParseReminderDuration, ReminderWeekdays, SanitizeCommandDraftName, SplitCommaList, StringArray, ActionNeedsEmbed, ActionNeedsMessage, ActionNeedsRole } from "./PluginSettingsShared";
+import { AdvancedEmbedEditor, BuildNotificationSourceName, BuildReminderDraftId, ComputeReminderNextRun, CreateClientId, CreateDefaultEmbed, EmbedInputClassName, FormatReminderDate, IsoToLocalDateTime, LocalDateTimeToIso, LocalTimeToUtc, MultiSelectField, NotificationSourceUsesKeys, ParseCustomCommands, ParseNotificationSources, ParseReminderDrafts, ParseReminderDuration, ReminderWeekdays, SanitizeCommandDraftName, SplitCommaList, StringArray, ActionNeedsEmbed, ActionNeedsMessage, ActionNeedsRole, UtcTimeToLocal } from "./PluginSettingsShared";
 
 export function CustomCommandsEditor(Properties: {
   BotIdentity?: BotPreviewIdentity | null;
@@ -478,7 +478,10 @@ export function RemindersEditor(Properties: {
                   </div>
                   <label className="mt-3 block text-sm font-bold text-slate-200">
                     Time
-                    <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { TimeOfDay: Event.target.value, NextRunAt: ComputeReminderNextRun("Weekly", { ...ReminderValue, TimeOfDay: Event.target.value }) })} type="time" value={ReminderValue.TimeOfDay} />
+                    <input className={EmbedInputClassName} onChange={(Event) => {
+                      const UtcTime = LocalTimeToUtc(Event.target.value);
+                      UpdateReminder(ReminderValue.Id, { TimeOfDay: UtcTime, NextRunAt: ComputeReminderNextRun("Weekly", { ...ReminderValue, TimeOfDay: UtcTime }) });
+                    }} type="time" value={UtcTimeToLocal(ReminderValue.TimeOfDay)} />
                   </label>
                 </div>
               )}

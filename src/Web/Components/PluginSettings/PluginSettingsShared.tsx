@@ -431,11 +431,17 @@ export function ComputeReminderNextRun(ScheduleMode: ReminderDraft["ScheduleMode
   let BestDate: Date | null = null;
 
   for (let Offset = 0; Offset <= 7; Offset += 1) {
-    const Candidate = new Date(Now);
-    Candidate.setDate(Now.getDate() + Offset);
-    Candidate.setHours(Number.isFinite(Hours) ? Hours : 13, Number.isFinite(Minutes) ? Minutes : 0, 0, 0);
+    const Candidate = new Date(Date.UTC(
+      Now.getUTCFullYear(),
+      Now.getUTCMonth(),
+      Now.getUTCDate() + Offset,
+      Number.isFinite(Hours) ? Hours : 13,
+      Number.isFinite(Minutes) ? Minutes : 0,
+      0,
+      0
+    ));
 
-    if (!Weekdays.includes(Candidate.getDay()) || Candidate.getTime() <= Now.getTime()) {
+    if (!Weekdays.includes(Candidate.getUTCDay()) || Candidate.getTime() <= Now.getTime()) {
       continue;
     }
 
@@ -489,8 +495,23 @@ export function IsoToLocalDateTime(Value: string): string {
     return "";
   }
 
-  const LocalDate = new Date(DateValue.getTime() - DateValue.getTimezoneOffset() * 60_000);
-  return LocalDate.toISOString().slice(0, 16);
+  return DateValue.toLocaleString("sv-SE", { formatMatcher: "basic" }).replace(" ", "T").slice(0, 16);
+}
+
+export function UtcTimeToLocal(Value: string): string {
+  const [Hours, Minutes] = Value.split(":").map((Part) => Number.parseInt(Part, 10));
+  if (!Number.isFinite(Hours) || !Number.isFinite(Minutes)) return Value;
+  const UtcDate = new Date();
+  UtcDate.setUTCHours(Hours, Minutes, 0, 0);
+  return `${String(UtcDate.getHours()).padStart(2, "0")}:${String(UtcDate.getMinutes()).padStart(2, "0")}`;
+}
+
+export function LocalTimeToUtc(Value: string): string {
+  const [Hours, Minutes] = Value.split(":").map((Part) => Number.parseInt(Part, 10));
+  if (!Number.isFinite(Hours) || !Number.isFinite(Minutes)) return Value;
+  const LocalDate = new Date();
+  LocalDate.setHours(Hours, Minutes, 0, 0);
+  return `${String(LocalDate.getUTCHours()).padStart(2, "0")}:${String(LocalDate.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 export function LocalDateTimeToIso(Value: string): string {
