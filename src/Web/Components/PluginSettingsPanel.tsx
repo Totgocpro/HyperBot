@@ -13,7 +13,7 @@ import {
 } from "./PluginInterfaceRenderer";
 import { BuildGuildHeaders } from "./PluginSettings/PluginSettingsShared";
 import { BackupsManager, DashboardElementRenderer, SendEmbedEditor, StatisticsEditor } from "./PluginSettings/PluginSettingsDataEditors";
-import { BuildDraftValues, BuildPersistablePluginValues, BuildPluginDraftValues, HasPluginUnsavedChanges, PluginHamburgerIcon, ScrollToPluginSection, UpdatePluginSavedValues } from "./PluginSettings/PluginSettingsState";
+import { BuildDraftValues, BuildPersistablePluginValues, BuildPluginDraftValues, ComputeDirtyValues, HasPluginUnsavedChanges, MergeServerDraftValues, PluginHamburgerIcon, ScrollToPluginSection, UpdatePluginSavedValues } from "./PluginSettings/PluginSettingsState";
 import { CustomCommandsEditor, NotificationsEditor, RemindersEditor } from "./PluginSettings/PluginSettingsWorkflowEditors";
 import { EmojiAdderEditor } from "./PluginSettingsCustom/EmojiAdderEditor";
 import type { SaveFeedback } from "./PluginSettings/PluginSettingsTypes";
@@ -54,11 +54,17 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
     void LoadGuild();
     void LoadBotIdentity();
 
-    const RefreshInterval = window.setInterval(() => {
-      void LoadPlugins(true);
-    }, 5_000);
+    const EventSourceInstance = new EventSource(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/stream`);
 
-    return () => window.clearInterval(RefreshInterval);
+    EventSourceInstance.addEventListener("message", (Event) => {
+      if (Event.data === "updated") {
+        void LoadPlugins(true);
+      }
+    });
+
+    return () => {
+      EventSourceInstance.close();
+    };
   }, [Properties.BotId, Properties.GuildId]);
 
   UseEffect(() => {
@@ -112,6 +118,8 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
 
     if (!PreserveDraftValues) {
       SetDraftValues(BuildDraftValues(Payload.Plugins));
+    } else {
+      SetDraftValues((PreviousValues) => MergeServerDraftValues(Plugins, Payload.Plugins, PreviousValues));
     }
 
     SetStatus(`${Payload.Plugins.length} plugin(s) available.`);
@@ -127,8 +135,16 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
       return;
     }
 
+    const DirtyValues = ComputeDirtyValues(Plugin, DraftValues);
+
+    if (Object.keys(DirtyValues).length === 0) {
+      SetStatus("No changes to save.");
+      ShowSaveFeedback("No changes to save.", "Error");
+      return;
+    }
+
     SetSavingPluginId(Plugin.Metadata.Id);
-    const PersistableValues = BuildPersistablePluginValues(Plugin, PluginDraftValues);
+    const PersistableValues = BuildPersistablePluginValues(Plugin, DirtyValues);
 
     try {
       const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}`, {
@@ -147,6 +163,13 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
         const Message = "Settings saved successfully.";
 
         SetPlugins((PreviousPlugins) => UpdatePluginSavedValues(PreviousPlugins, Plugin.Metadata.Id, PersistableValues));
+        SetDraftValues((PreviousValues) => ({
+          ...PreviousValues,
+          [Plugin.Metadata.Id]: {
+            ...PreviousValues[Plugin.Metadata.Id],
+            ...PersistableValues
+          }
+        }));
         SetBlockedPluginId("");
         SetStatus(`${Plugin.Metadata.DisplayName} saved.`);
         ShowSaveFeedback(Message, "Success");

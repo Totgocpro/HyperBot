@@ -1,5 +1,6 @@
 import Path from "node:path";
 import { NextResponse } from "next/server";
+import { EmitPluginChange } from "@/src/Core/PluginChangeBus";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { ScanPluginManifests } from "@/src/Core/PluginScanner";
 import { GetDisabledPluginIds } from "@/src/Core/PluginState";
@@ -155,7 +156,7 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
 
   const Storage = new PluginStorage(Prisma, RedisClient, botId, Body.PluginId);
   const PersistableKeys = new Set(
-    ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button && FieldValue.Type !== SettingsFieldType.Custom).map((Field) => Field.Key)
+    ManifestEntry.Manifest.WebInterface.filter((FieldValue) => FieldValue.Type !== SettingsFieldType.Button && FieldValue.Type !== SettingsFieldType.Custom && FieldValue.ReadOnly !== true).map((Field) => Field.Key)
   );
 
   for (const [Key, Value] of Object.entries(Body.Values)) {
@@ -164,9 +165,11 @@ async function Put(Request: Request, Context: RouteContext): Promise<Response> {
     }
 
     await Storage.SetGlobalConfig(guildId, Key, Value);
-  }
+    }
 
-  return NextResponse.json({ GuildId: guildId, PluginId: Body.PluginId, Saved: true });
+    EmitPluginChange(botId, guildId, Body.PluginId);
+
+    return NextResponse.json({ GuildId: guildId, PluginId: Body.PluginId, Saved: true });
 }
 
 function BuildDependencyErrors(Dependencies: string[], AvailablePluginIds: Set<string>): string[] {

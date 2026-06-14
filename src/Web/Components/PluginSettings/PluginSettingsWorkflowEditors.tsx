@@ -484,7 +484,7 @@ export function RemindersEditor(Properties: {
               )}
               <label className="block text-sm font-bold text-slate-200">
                 Next run
-                <input className={EmbedInputClassName} onChange={(Event) => UpdateReminder(ReminderValue.Id, { NextRunAt: LocalDateTimeToIso(Event.target.value) })} type="datetime-local" value={IsoToLocalDateTime(ReminderValue.NextRunAt)} />
+                <input className={`${EmbedInputClassName} cursor-not-allowed text-slate-400`} disabled={true} type="datetime-local" value={IsoToLocalDateTime(ReminderValue.NextRunAt)} />
               </label>
               {ReminderValue.Mode === "Embed" ? (
                 <div className="lg:col-span-2">

@@ -81,6 +81,7 @@ export type SettingsField = {
   ValidateAs?: "Regex";
   SupportedChannelTypes?: string[];
   RequireWritable?: boolean;
+  ReadOnly?: boolean;
   VisibleWhen?: SettingsFieldVisibilityRule | SettingsFieldVisibilityRule[];
   VisibleWhenAny?: SettingsFieldVisibilityRule[];
   Options?: Array<{

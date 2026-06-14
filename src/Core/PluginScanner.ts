@@ -17,6 +17,7 @@ const SettingsFieldSchema = z.object({
   Description: z.string().optional(),
   Section: z.string().min(1).optional(),
   Required: z.boolean().optional(),
+  ReadOnly: z.boolean().optional(),
   ButtonLabel: z.string().min(1).optional(),
   ActionKey: z.string().min(1).optional(),
   ActionKeys: z.array(z.string().min(1)).optional(),

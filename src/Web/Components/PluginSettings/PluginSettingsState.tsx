@@ -32,7 +32,7 @@ export function BuildPluginDraftValues(Plugin: DashboardPlugin): Record<string, 
 }
 
 export function BuildPersistablePluginValues(Plugin: DashboardPlugin, Values: Record<string, unknown>): Record<string, unknown> {
-  const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button" && Field.Type !== "Custom").map((Field) => Field.Key));
+  const PersistableKeys = new Set(Plugin.WebInterface.filter((Field) => Field.Type !== "Button" && Field.Type !== "Custom" && Field.ReadOnly !== true).map((Field) => Field.Key));
 
   return Object.fromEntries(Object.entries(Values).filter(([Key]) => PersistableKeys.has(Key)));
 }
@@ -46,6 +46,55 @@ export function HasPluginUnsavedChanges(Plugin: DashboardPlugin, DraftValues: Re
   });
 
   return StableStringify(SavedValues) !== StableStringify(CurrentValues);
+}
+
+export function MergeServerDraftValues(
+  OldPlugins: DashboardPlugin[],
+  NewPlugins: DashboardPlugin[],
+  CurrentDraftValues: Record<string, Record<string, unknown>>
+): Record<string, Record<string, unknown>> {
+  const NewDraftValues = BuildDraftValues(NewPlugins);
+  const Merged = { ...CurrentDraftValues };
+
+  for (const NewPlugin of NewPlugins) {
+    const PluginId = NewPlugin.Metadata.Id;
+    const OldPlugin = OldPlugins.find((Plugin) => Plugin.Metadata.Id === PluginId);
+
+    if (!OldPlugin) {
+      Merged[PluginId] = NewDraftValues[PluginId];
+      continue;
+    }
+
+    if (!HasPluginUnsavedChanges(OldPlugin, CurrentDraftValues)) {
+      Merged[PluginId] = NewDraftValues[PluginId];
+    }
+  }
+
+  return Merged;
+}
+
+export function ComputeDirtyValues(
+  Plugin: DashboardPlugin,
+  DraftValues: Record<string, Record<string, unknown>>
+): Record<string, unknown> {
+  const SavedValues = BuildPluginDraftValues(Plugin);
+  const PluginDraftValues = DraftValues[Plugin.Metadata.Id] ?? {};
+  const PersistableKeys = new Set(Plugin.WebInterface.filter(
+    (Field) => Field.Type !== "Button" && Field.Type !== "Custom" && Field.ReadOnly !== true
+  ).map((Field) => Field.Key));
+
+  const DirtyValues: Record<string, unknown> = {};
+
+  for (const Key of PersistableKeys) {
+    const Saved = SavedValues[Key];
+    const Draft = PluginDraftValues[Key];
+
+    if (StableStringify(Saved) !== StableStringify(Draft)) {
+      DirtyValues[Key] = Draft;
+    }
+  }
+
+  return DirtyValues;
 }
 
 export function UpdatePluginSavedValues(Plugins: DashboardPlugin[], PluginId: string, SavedValues: Record<string, unknown>): DashboardPlugin[] {

@@ -9,6 +9,7 @@ import {
   type VoiceChannel
 } from "discord.js";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
+import { EmitPluginChange } from "../../src/Core/PluginChangeBus.js";
 
 type ReminderMode = "Message" | "Embed";
 
@@ -123,6 +124,18 @@ export default class RemindersPlugin extends BasePlugin {
           continue;
         }
 
+        const ShouldSend = this.IsDueForSchedule(ReminderValue, Now);
+
+        if (!ShouldSend) {
+          const FixedNextRun = this.ComputeNextRun(ReminderValue, Now);
+          Reminders[ReminderValue.Id] = {
+            ...ReminderValue,
+            NextRunAt: FixedNextRun
+          };
+          HasChanges = true;
+          continue;
+        }
+
         const Sent = await this.SendReminder(ReminderValue);
         const NextRunAt = this.ComputeNextRun(ReminderValue, Now);
         Reminders[ReminderValue.Id] = {
@@ -136,8 +149,22 @@ export default class RemindersPlugin extends BasePlugin {
 
       if (HasChanges) {
         await this.SetReminders(Guild.id, Reminders);
+        EmitPluginChange(this.BotId, Guild.id, "Reminders");
       }
     }
+  }
+
+  private IsDueForSchedule(ReminderValue: Reminder, Now: number): boolean {
+    if (ReminderValue.ScheduleMode !== "Weekly") {
+      return true;
+    }
+
+    const NextAt = new Date(ReminderValue.NextRunAt).getTime();
+    const [Hours, Minutes] = (ReminderValue.TimeOfDay || "13:00").split(":").map((Part) => Number.parseInt(Part, 10));
+    const ExpectedDate = new Date(NextAt);
+    ExpectedDate.setHours(Number.isFinite(Hours) ? Hours : 13, Number.isFinite(Minutes) ? Minutes : 0, 0, 0);
+
+    return Math.abs(NextAt - ExpectedDate.getTime()) < 60_000;
   }
 
   private async HandleCreateCommand(Interaction: ChatInputCommandInteraction<"cached">): Promise<void> {
@@ -230,7 +257,7 @@ export default class RemindersPlugin extends BasePlugin {
     Reminders[Id] = {
       ...ReminderValue,
       Enabled,
-      NextRunAt: Enabled && new Date(ReminderValue.NextRunAt).getTime() < Date.now() ? new Date(Date.now() + ReminderValue.IntervalMs).toISOString() : ReminderValue.NextRunAt
+      NextRunAt: Enabled && new Date(ReminderValue.NextRunAt).getTime() < Date.now() ? this.ComputeNextRun(ReminderValue, Date.now()) : ReminderValue.NextRunAt
     };
     await this.SetReminders(Interaction.guildId, Reminders);
     await Interaction.reply({ content: `Reminder \`${Id}\` ${Enabled ? "enabled" : "disabled"}.`, ephemeral: true });

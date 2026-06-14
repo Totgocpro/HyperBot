@@ -163,13 +163,14 @@ export function RenderField(
 ) {
   const Value = DraftValues[PluginId]?.[Field.Key] ?? Field.Default;
   const BaseClassName = "mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
+  const IsReadOnly = Field.ReadOnly === true;
 
   if (Field.Type === "Boolean") {
     return (
       <label className="block rounded-2xl border border-slate-800 bg-slate-950 p-4 font-semibold text-slate-100">
         <span className="flex items-center justify-between">
           {Field.Label}
-          <input checked={Boolean(Value)} className="h-5 w-5 accent-blue-600" onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.checked)} type="checkbox" />
+          <input checked={Boolean(Value)} className="h-5 w-5 accent-blue-600" disabled={IsReadOnly} onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Event.target.checked)} type="checkbox" />
         </span>
         {Field.Description ? <span className="mt-2 block text-xs font-medium text-slate-500">{Field.Description}</span> : null}
       </label>
@@ -177,24 +178,31 @@ export function RenderField(
   }
 
   if (Field.Type === "Select" || Field.Type === "ChannelPicker" || Field.Type === "RolePicker") {
+    const ReadOnlyOption = IsReadOnly ? Field.Options?.find((Option) => String(Option.Value) === String(Value)) : undefined;
     return (
       <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
         {Field.Label}
-        <CustomSelect
-          ClassName="mt-2"
-          CreateButtonLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
-          CreateColorEnabled={Field.Type !== "ChannelPicker"}
-          CreateErrorMessage={Field.Type === "ChannelPicker" ? "Channel creation failed." : "Role creation failed."}
-          CreateInputPlaceholder={Field.Type === "ChannelPicker" ? "channel-name" : "Role name"}
-          CreateLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
-          EmptyCreateError={Field.Type === "ChannelPicker" ? "Channel name is required." : "Role name is required."}
-          EmptyLabel={Field.Required ? "Select a required value" : "Select"}
-          OnChange={(NextValue) => UpdateDraftValue(PluginId, Field.Key, NextValue)}
-          OnCreate={Field.Type === "RolePicker" ? OnCreateRole : Field.Type === "ChannelPicker" ? OnCreateChannel : undefined}
-          Options={Field.Options ?? []}
-          Required={Field.Required}
-          Value={String(Value ?? "")}
-        />
+        {IsReadOnly ? (
+          <div className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-400">
+            {ReadOnlyOption?.Label ?? String(Value ?? "")}
+          </div>
+        ) : (
+          <CustomSelect
+            ClassName="mt-2"
+            CreateButtonLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
+            CreateColorEnabled={Field.Type !== "ChannelPicker"}
+            CreateErrorMessage={Field.Type === "ChannelPicker" ? "Channel creation failed." : "Role creation failed."}
+            CreateInputPlaceholder={Field.Type === "ChannelPicker" ? "channel-name" : "Role name"}
+            CreateLabel={Field.Type === "ChannelPicker" ? "Create channel" : "Create role"}
+            EmptyCreateError={Field.Type === "ChannelPicker" ? "Channel name is required." : "Role name is required."}
+            EmptyLabel={Field.Required ? "Select a required value" : "Select"}
+            OnChange={(NextValue) => UpdateDraftValue(PluginId, Field.Key, NextValue)}
+            OnCreate={Field.Type === "RolePicker" ? OnCreateRole : Field.Type === "ChannelPicker" ? OnCreateChannel : undefined}
+            Options={Field.Options ?? []}
+            Required={Field.Required}
+            Value={String(Value ?? "")}
+          />
+        )}
         {Field.Description ? <p className="mt-2 text-xs font-medium text-slate-500">{Field.Description}</p> : null}
         {Field.Type === "ChannelPicker" ? <p className="mt-2 text-xs text-slate-500">Only supported writable channels can be selected.</p> : null}
         {Field.Type === "RolePicker" ? <p className="mt-2 text-xs text-slate-500">Only selectable server roles are listed.</p> : null}
@@ -209,6 +217,7 @@ export function RenderField(
         OnCreateChannel={OnCreateChannel}
         OnCreateRole={OnCreateRole}
         PluginId={PluginId}
+        ReadOnly={IsReadOnly}
         UpdateDraftValue={UpdateDraftValue}
         Value={Array.isArray(Value) ? Value : []}
       />
@@ -224,6 +233,7 @@ export function RenderField(
           BotIdentity={BotIdentity}
           EmbedValue={ParseEditableEmbed(Value)}
           GuildId={GuildId}
+          ReadOnly={IsReadOnly}
           OnChange={(NextEmbed) => UpdateDraftValue(PluginId, Field.Key, NextEmbed)}
           PlaceholderText={Field.Description}
         />
@@ -243,7 +253,8 @@ export function RenderField(
     <label className="block text-sm font-bold text-slate-200">
       {Field.Label}
       <input
-        className={BaseClassName}
+        className={`${BaseClassName} ${IsReadOnly ? "cursor-not-allowed text-slate-400" : ""}`}
+        disabled={IsReadOnly}
         onChange={(Event) => UpdateDraftValue(PluginId, Field.Key, Field.Type === "Number" ? Number(Event.target.value) : Event.target.value)}
         type={Field.Type === "Number" ? "number" : Field.Type === "Password" ? "password" : "text"}
         value={String(Value ?? "")}
@@ -258,9 +269,11 @@ function ListField(Properties: {
   OnCreateChannel: (Name: string) => Promise<string | null>;
   OnCreateRole: (Name: string, Color: string) => Promise<string | null>;
   PluginId: string;
+  ReadOnly?: boolean;
   UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
   Value: unknown[];
 }) {
+  const IsReadOnly = Properties.ReadOnly === true;
   const BaseClassName = "w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500";
 
   function UpdateItem(Index: number, Value: unknown): void {
@@ -282,9 +295,11 @@ function ListField(Properties: {
     <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
       <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
         <p className="font-bold text-slate-100">{Properties.Field.Label}</p>
-        <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddItem} type="button">
-          Add
-        </button>
+        {IsReadOnly ? null : (
+          <button className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500" onClick={AddItem} type="button">
+            Add
+          </button>
+        )}
       </div>
       <div className="mt-4 grid gap-2">
         {Properties.Value.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-3 text-sm text-slate-500">No value configured.</p> : null}
@@ -307,14 +322,17 @@ function ListField(Properties: {
             ) : (
               <input
                 className={BaseClassName}
+                disabled={IsReadOnly}
                 onChange={(Event) => UpdateItem(Index, Properties.Field.ItemType === "Number" ? Number(Event.target.value) : Event.target.value)}
                 type={Properties.Field.ItemType === "Number" ? "number" : "text"}
                 value={String(ItemValue ?? "")}
               />
             )}
-            <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveItem(Index)} type="button">
-              Remove
-            </button>
+            {IsReadOnly ? null : (
+              <button className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10" onClick={() => RemoveItem(Index)} type="button">
+                Remove
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -382,6 +400,7 @@ export function AdvancedEmbedEditor(Properties: {
   GuildId?: string;
   OnChange: (EmbedValue: EditableEmbed) => void;
   PlaceholderText?: string;
+  ReadOnly?: boolean;
 }) {
   const CurrentEmbed = Properties.EmbedValue;
   const [SelectedPart, SetSelectedPart] = UseState<"Content" | "Author" | "Media" | "Footer" | "Fields">("Content");
@@ -396,13 +415,17 @@ export function AdvancedEmbedEditor(Properties: {
     });
   }
 
+  const IsReadOnly = Properties.ReadOnly === true;
+
   function AddField(): void {
+    if (IsReadOnly) return;
     UpdateEmbed({
       Fields: [...CurrentEmbed.Fields, { Name: "Field title", Value: "Field value", Inline: false }]
     });
   }
 
   function RemoveField(Index: number): void {
+    if (IsReadOnly) return;
     UpdateEmbed({
       Fields: CurrentEmbed.Fields.filter((_, FieldIndex) => FieldIndex !== Index)
     });
@@ -431,11 +454,12 @@ export function AdvancedEmbedEditor(Properties: {
       <section className="rounded-3xl border border-slate-800 bg-slate-950 p-4">
         <div className="mb-4 flex flex-wrap gap-2">
           {(["Content", "Author", "Media", "Footer", "Fields"] as const).map((Part) => (
-            <button className={SelectedPart === Part ? "rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white" : "rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-slate-800"} key={Part} onClick={() => SetSelectedPart(Part)} type="button">
+            <button className={SelectedPart === Part ? "rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white" : "rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-slate-800"} disabled={IsReadOnly} key={Part} onClick={() => SetSelectedPart(Part)} type="button">
               {Part}
             </button>
           ))}
         </div>
+        <div className={IsReadOnly ? "pointer-events-none select-none opacity-70" : ""}>
 
         {SelectedPart === "Content" ? (
           <div className="grid gap-3">
@@ -532,6 +556,7 @@ export function AdvancedEmbedEditor(Properties: {
             ))}
           </div>
         ) : null}
+        </div>
       </section>
     </div>
   );

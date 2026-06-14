@@ -111,7 +111,8 @@
       "Type": "Number",
       "Label": "Maximum reminders per server",
       "Default": 25,
-      "Section": "Limits"
+      "Section": "Limits",
+      "ReadOnly": true
     },
     {
       "Key": "Reminders",
