@@ -82,21 +82,6 @@
       "Description": "Members with one of these roles can use moderation commands."
     },
     {
-      "Key": "PunishmentMuteReason",
-      "Type": "String",
-      "Label": "Mute punishment reason",
-      "Default": "Muted by AutoMod for %duration%: %reason%",
-      "Section": "Sanctions"
-    },
-    {
-      "Key": "PunishmentMuteDurationMinutes",
-      "Type": "Number",
-      "Label": "Mute duration minutes",
-      "Default": 10,
-      "Section": "Sanctions",
-      "Description": "Discord timeout duration in minutes. Maximum is 40320 minutes."
-    },
-    {
       "Key": "DeletedMessageLog",
       "Type": "String",
       "Label": "Deleted message log",
@@ -289,6 +274,84 @@
           "Key": "RepeatedSpamEnabled",
           "Value": true
         } 
+      ]
+    },
+    {
+      "Key": "RepeatedSpamWhitelistRoleIds",
+      "Type": "List",
+      "ItemType": "RolePicker",
+      "Label": "Spam whitelist roles",
+      "Default": [],
+      "Section": "Repeated spam",
+      "Description": "Members with one of these roles won't be sanctioned for repeated spam.",
+      "VisibleWhenAny": [
+        {
+          "Key": "RepeatedSpamEnabled",
+          "Value": true
+        }
+      ]
+    },
+    {
+      "Key": "PunishmentMuteReason",
+      "Type": "String",
+      "Label": "Mute punishment reason",
+      "Default": "Muted by AutoMod for %duration%: %reason%",
+      "Section": "Repeated spam",
+      "VisibleWhen": [
+        {
+          "Key": "RepeatedSpamEnabled",
+          "Value": true
+        }
+      ],
+      "VisibleWhenAny": [
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "Mute"
+        },
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "DeleteAndMute"
+        },
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "WarnAndMute"
+        },
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "DeleteWarnAndMute"
+        }
+      ]
+    },
+    {
+      "Key": "PunishmentMuteDurationMinutes",
+      "Type": "Number",
+      "Label": "Mute duration minutes",
+      "Default": 10,
+      "Section": "Repeated spam",
+      "Description": "Discord timeout duration in minutes. Maximum is 40320 minutes.",
+      "VisibleWhen": [
+        {
+          "Key": "RepeatedSpamEnabled",
+          "Value": true
+        }
+      ],
+      "VisibleWhenAny": [
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "Mute"
+        },
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "DeleteAndMute"
+        },
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "WarnAndMute"
+        },
+        {
+          "Key": "RepeatedSpamAction",
+          "Value": "DeleteWarnAndMute"
+        }
       ]
     },
     {

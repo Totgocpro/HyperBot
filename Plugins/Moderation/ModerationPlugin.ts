@@ -59,6 +59,7 @@ type ModerationConfig = {
   RepeatedSpamWindowSeconds: number;
   RepeatedSpamThreshold: number;
   RepeatedSpamAction: ModerationAutomodAction;
+  RepeatedSpamWhitelistRoleIds: string[];
   InviteBlockEnabled: boolean;
   AllowedInviteCodes: string[];
   InviteBlockAction: ModerationAutomodAction;
@@ -98,6 +99,7 @@ const DefaultModerationConfig: ModerationConfig = {
   RepeatedSpamWindowSeconds: 10,
   RepeatedSpamThreshold: 3,
   RepeatedSpamAction: "DeleteAndWarn",
+  RepeatedSpamWhitelistRoleIds: [],
   InviteBlockEnabled: false,
   AllowedInviteCodes: [],
   InviteBlockAction: "DeleteAndWarn",
@@ -532,7 +534,7 @@ export default class ModerationPlugin extends BasePlugin {
       return;
     }
 
-    if (Config.RepeatedSpamEnabled && this.IsRepeatedSpam(MessageValue, Config)) {
+    if (Config.RepeatedSpamEnabled && !this.HasAnyRole(MessageValue.member, Config.RepeatedSpamWhitelistRoleIds) && this.IsRepeatedSpam(MessageValue, Config)) {
       await this.ApplyAutomodAction(MessageValue, Config, {
         Action: Config.RepeatedSpamAction,
         Title: "Repeated spam detected",
@@ -1074,6 +1076,7 @@ export default class ModerationPlugin extends BasePlugin {
       RepeatedSpamWindowSeconds: (await this.Storage.GetGlobalConfig<number>(GuildId, "RepeatedSpamWindowSeconds")) ?? DefaultModerationConfig.RepeatedSpamWindowSeconds,
       RepeatedSpamThreshold: (await this.Storage.GetGlobalConfig<number>(GuildId, "RepeatedSpamThreshold")) ?? DefaultModerationConfig.RepeatedSpamThreshold,
       RepeatedSpamAction: (await this.Storage.GetGlobalConfig<ModerationConfig["RepeatedSpamAction"]>(GuildId, "RepeatedSpamAction")) ?? DefaultModerationConfig.RepeatedSpamAction,
+      RepeatedSpamWhitelistRoleIds: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "RepeatedSpamWhitelistRoleIds")) ?? DefaultModerationConfig.RepeatedSpamWhitelistRoleIds,
       InviteBlockEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "InviteBlockEnabled")) ?? DefaultModerationConfig.InviteBlockEnabled,
       AllowedInviteCodes: (await this.Storage.GetGlobalConfig<string[]>(GuildId, "AllowedInviteCodes")) ?? DefaultModerationConfig.AllowedInviteCodes,
       InviteBlockAction: (await this.Storage.GetGlobalConfig<ModerationConfig["InviteBlockAction"]>(GuildId, "InviteBlockAction")) ?? DefaultModerationConfig.InviteBlockAction,
