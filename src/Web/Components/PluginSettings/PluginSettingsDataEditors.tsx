@@ -156,7 +156,7 @@ export function StatisticsEditor(Properties: {
                     <input className={EmbedInputClassName} onChange={(Event) => UpdateCounter(Counter.Id, { Template: Event.target.value })} value={Counter.Template} />
                   </label>
                   <div className="relative block text-sm font-bold text-slate-200 focus-within:z-10">
-                    Existing voice channel
+                    Voice Channel
                     <CustomSelect
                       ClassName="mt-2"
                       CreateButtonLabel="Create channel"
@@ -164,6 +164,7 @@ export function StatisticsEditor(Properties: {
                       CreateErrorMessage="Channel creation failed."
                       CreateInputPlaceholder="counter-channel"
                       CreateLabel="Create channel"
+                      Disabled={Boolean(Counter.ChannelId)}
                       EmptyCreateError="Channel name is required."
                       EmptyLabel="Auto-create channel"
                       OnChange={(ChannelId) => UpdateCounter(Counter.Id, { ChannelId })}

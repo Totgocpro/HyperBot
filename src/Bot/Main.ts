@@ -30,6 +30,7 @@ const DiscordGatewayIntentBits = {
   GuildModeration: 4,
   GuildMembers: 2,
   GuildVoiceStates: 128,
+  GuildPresences: 65536,
   MessageContent: 32768
 } as const;
 
@@ -483,7 +484,8 @@ function BuildGatewayIntents(): number[] {
     DiscordGatewayIntentBits.GuildMessageReactions,
     DiscordGatewayIntentBits.GuildModeration,
     DiscordGatewayIntentBits.GuildMembers,
-    DiscordGatewayIntentBits.GuildVoiceStates
+    DiscordGatewayIntentBits.GuildVoiceStates,
+    DiscordGatewayIntentBits.GuildPresences
   ];
   if (EnableMessageEvents) {
     Intents.push(DiscordGatewayIntentBits.MessageContent);

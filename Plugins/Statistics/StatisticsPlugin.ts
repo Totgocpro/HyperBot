@@ -1551,7 +1551,28 @@ export default class StatisticsPlugin extends BasePlugin {
       let HasChanges = false;
 
       for (const Counter of Counters) {
-        if (!Counter.Enabled || !Counter.Template.trim()) {
+        if (!Counter.Enabled) {
+          if (Counter.ChannelId) {
+            const ExistingChannel = Guild.channels.cache.get(Counter.ChannelId);
+
+            if (ExistingChannel?.type === ChannelType.GuildVoice) {
+              await ExistingChannel.delete("Statistics channel counter disabled").catch((ErrorValue: unknown) => {
+                this.Logger.Warn("Statistics counter channel could not be deleted.", {
+                  ChannelId: Counter.ChannelId,
+                  Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+                  GuildId: Guild.id
+                });
+              });
+            }
+
+            Counter.ChannelId = "";
+            HasChanges = true;
+          }
+
+          continue;
+        }
+
+        if (!Counter.Template.trim()) {
           continue;
         }
 
@@ -1596,6 +1617,12 @@ export default class StatisticsPlugin extends BasePlugin {
     }
 
     const Name = this.BuildCounterChannelName(Counter.Template, Guild);
+    const BotId = this.DiscordClient.user?.id;
+
+    if (!BotId) {
+      return null;
+    }
+
     const CreatedChannel = await Guild.channels.create({
       name: Name,
       type: ChannelType.GuildVoice,
@@ -1604,6 +1631,10 @@ export default class StatisticsPlugin extends BasePlugin {
         {
           id: Guild.id,
           deny: [PermissionFlagsBits.Connect]
+        },
+        {
+          id: BotId,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels]
         }
       ]
     }).catch((ErrorValue: unknown) => {
@@ -1618,11 +1649,36 @@ export default class StatisticsPlugin extends BasePlugin {
   }
 
   private async EnsureCounterChannelLocked(Channel: VoiceChannel): Promise<void> {
-    const EveryoneOverwrite = Channel.permissionOverwrites.cache.get(Channel.guild.id);
+    const BotId = this.DiscordClient.user?.id;
 
-    if (EveryoneOverwrite?.deny.has(PermissionFlagsBits.Connect)) {
+    if (!BotId) {
       return;
     }
+
+    const EveryoneOverwrite = Channel.permissionOverwrites.cache.get(Channel.guild.id);
+    const BotOverwrite = Channel.permissionOverwrites.cache.get(BotId);
+
+    if (
+      EveryoneOverwrite?.deny.has(PermissionFlagsBits.Connect) &&
+      BotOverwrite?.allow.has(PermissionFlagsBits.ViewChannel) &&
+      BotOverwrite?.allow.has(PermissionFlagsBits.ManageChannels)
+    ) {
+      return;
+    }
+
+    await Channel.permissionOverwrites.edit(BotId, {
+      ViewChannel: true,
+      Connect: true,
+      ManageChannels: true
+    }, {
+      reason: "Statistics channel counter bot permissions"
+    }).catch((ErrorValue: unknown) => {
+      this.Logger.Warn("Statistics counter channel bot permissions could not be set.", {
+        ChannelId: Channel.id,
+        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+        GuildId: Channel.guild.id
+      });
+    });
 
     await Channel.permissionOverwrites.edit(Channel.guild.id, {
       Connect: false
