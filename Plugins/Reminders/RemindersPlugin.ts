@@ -160,7 +160,13 @@ export default class RemindersPlugin extends BasePlugin {
     }
 
     const [Hours, Minutes] = (ReminderValue.TimeOfDay || "13:00").split(":").map((Part) => Number.parseInt(Part, 10));
+    const NextAtDate = new Date(ReminderValue.NextRunAt);
     const NowDate = new Date(Now);
+
+    if (NextAtDate.getUTCFullYear() !== NowDate.getUTCFullYear() || NextAtDate.getUTCMonth() !== NowDate.getUTCMonth() || NextAtDate.getUTCDate() !== NowDate.getUTCDate()) {
+      return false;
+    }
+
     const ExpectedDate = new Date(Date.UTC(
       NowDate.getUTCFullYear(),
       NowDate.getUTCMonth(),
@@ -319,7 +325,8 @@ export default class RemindersPlugin extends BasePlugin {
 
     const Config = await this.GetConfig(Channel.guild.id);
     const EmbedSource = ReminderValue.Embed;
-    const Message = this.ApplyTemplate(EmbedSource?.Description || ReminderValue.Message, ReminderValue, Channel.guild.name);
+    const RawMessage = ReminderValue.Mode === "Message" ? ReminderValue.Message : (EmbedSource?.Description || ReminderValue.Message);
+    const Message = this.ApplyTemplate(RawMessage, ReminderValue, Channel.guild.name);
 
     if (ReminderValue.Mode === "Embed") {
       const UploadedImage = this.ParseDataImage(EmbedSource?.ImageDataUrl, EmbedSource?.ImageName || "embed-image.png");
