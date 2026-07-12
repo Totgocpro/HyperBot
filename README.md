@@ -138,6 +138,7 @@ These entries are based on the current `Plugin.json` manifests in `Plugins/`.
 
 | Plugin | Scope | Category | Commands | Dashboard and behavior |
 | --- | --- | --- | --- | --- |
+| `Automation` | Guild | Automation | Dashboard only | Defines If-Then automation rules with triggers (message, join, leave, voice, schedule), AND/OR condition gates, and actions (send message, add/remove role, add reaction, delete message, DM). Custom dashboard rule builder. |
 | `Backups` | Guild | Administration | Dashboard only | Creates and restores Discord server backups from the dashboard. Covers backup naming, restore safety, and backup action buttons. |
 | `CommandAliases` | Global | General | Dashboard only | Registers global command aliases from dashboard-managed alias entries. |
 | `CustomCommands` | Guild | Automation | Dashboard only | Builds prefix commands with a configurable prefix, default channel checks, default role checks, denied messages, and command definitions. |

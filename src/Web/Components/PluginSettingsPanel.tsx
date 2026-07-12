@@ -16,6 +16,7 @@ import { BackupsManager, DashboardElementRenderer, SendEmbedEditor, StatisticsEd
 import { BuildDraftValues, BuildPersistablePluginValues, BuildPluginDraftValues, ComputeDirtyValues, HasPluginUnsavedChanges, MergeServerDraftValues, PluginHamburgerIcon, ScrollToPluginSection, UpdatePluginSavedValues } from "./PluginSettings/PluginSettingsState";
 import { CustomCommandsEditor, NotificationsEditor, RemindersEditor } from "./PluginSettings/PluginSettingsWorkflowEditors";
 import { EmojiAdderEditor } from "./PluginSettingsCustom/EmojiAdderEditor";
+import { AutomationEditor } from "../../../Plugins/Automation/AutomationEditor";
 import type { SaveFeedback } from "./PluginSettings/PluginSettingsTypes";
 
 type PluginSettingsPanelProperties = {
@@ -449,7 +450,17 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       {SelectedPlugin.DependencyErrors.join(" ")}
                     </div>
                   ) : null}
-                  {SelectedPlugin.Metadata.Id === "SendEmbed" ? (
+                  {SelectedPlugin.Metadata.Id === "Automation" ? (
+                    <AutomationEditor
+                      BotIdentity={BotIdentity}
+                      BotId={Properties.BotId}
+                      DraftValues={DraftValues}
+                      GuildId={Properties.GuildId}
+                      Plugin={SelectedPlugin}
+                      SetStatus={SetStatus}
+                      UpdateDraftValue={UpdateDraftValue}
+                    />
+                  ) : SelectedPlugin.Metadata.Id === "SendEmbed" ? (
                     <SendEmbedEditor
                       BotIdentity={BotIdentity}
                       BotId={Properties.BotId}

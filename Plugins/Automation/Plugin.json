@@ -1,0 +1,45 @@
+{
+  "Metadata": {
+    "Id": "Automation",
+    "DisplayName": "Automation",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "AU"
+  },
+  "Scope": "Guild",
+  "Help": {
+    "Description": "Defines automated If-Then rules with AND/OR conditions, triggers, and actions."
+  },
+  "Category": "Automation",
+  "Commands": [],
+  "WebInterface": [
+    {
+      "Key": "ChannelOptions",
+      "Type": "ChannelPicker",
+      "Label": "Available channels",
+      "Default": "",
+      "Section": "Internal",
+      "SupportedChannelTypes": ["GuildText", "GuildAnnouncement", "GuildVoice"],
+      "RequireWritable": true,
+      "ReadOnly": true
+    },
+    {
+      "Key": "RoleOptions",
+      "Type": "RolePicker",
+      "Label": "Available roles",
+      "Default": "",
+      "Section": "Internal",
+      "ReadOnly": true
+    },
+    {
+      "Key": "Rules",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Automation rules",
+      "Default": [],
+      "Section": "Rules",
+      "CustomRenderer": "AutomationEditor"
+    }
+  ],
+  "EntryPoint": "./AutomationPlugin.ts"
+}
