@@ -604,7 +604,7 @@ function SaveFeedbackToast(Properties: { Feedback: SaveFeedback }) {
   return (
     <div
       aria-live="polite"
-      className={`hyperbot-save-toast fixed right-4 top-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-2xl border p-4 shadow-2xl shadow-black/30 sm:right-6 sm:top-6 ${
+      className={`hyperbot-save-toast fixed right-4 top-4 z-50 flex w-[calc(100vw-2rem)] max-w-sm items-center gap-3 rounded-2xl border p-4 shadow-2xl shadow-black/30 sm:right-6 sm:top-6 lg:top-16 ${
         IsSuccess ? "border-emerald-400/40 bg-emerald-950 text-emerald-50" : "border-red-400/40 bg-red-950 text-red-50"
       }`}
       key={Properties.Feedback.Key}
