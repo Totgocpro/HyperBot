@@ -49,7 +49,7 @@
       "Label": "Moderation log channel",
       "Default": "",
       "Section": "Log channel",
-      "Required": true,
+      "Required": false,
       "SupportedChannelTypes": [
         "GuildText",
         "GuildAnnouncement",
