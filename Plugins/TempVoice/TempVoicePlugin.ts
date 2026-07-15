@@ -54,6 +54,8 @@ type TempVoiceConfig = {
   MusicYoutubeAccountMode: string;
   MusicYoutubeCookiesPath: string;
   MusicRequiresAccountMessage: string;
+  SpotifyClientId: string;
+  SpotifyClientSecret: string;
   MusicStartedMessage: string;
   MusicBusyMessage: string;
   MusicControlAppliedMessage: string;
@@ -117,15 +119,17 @@ const DefaultConfig: TempVoiceConfig = {
   MusicButtonSkipLabel: "Skip",
   MusicButtonStopLabel: "Stop",
   MusicAskButtonLabel: "Ask music / playlist",
-  MusicModalTitle: "Play YouTube music",
-  MusicModalUrlLabel: "YouTube video or playlist URL",
-  MusicAskModalTitle: "Ask music / playlist",
+  MusicModalTitle: "Play music from any platform",
+  MusicModalUrlLabel: "Music URL (YouTube, Spotify, Apple Music, Deezer, SoundCloud, Bandcamp, Tidal...)",
+  MusicAskModalTitle: "Ask music / playlist (any platform)",
   MusicAskSubmittedMessage: "Music request sent to the room owner.",
   MusicPanelAddButtonLabel: "Add to waitlist",
   MusicPanelEnabled: true,
   MusicYoutubeAccountMode: "Environment",
   MusicYoutubeCookiesPath: "",
   MusicRequiresAccountMessage: "This YouTube video is unavailable or requires a linked account.",
+  SpotifyClientId: "",
+  SpotifyClientSecret: "",
   MusicStartedMessage: "Music started: %title%%queued_suffix%.",
   MusicBusyMessage: "Music is already playing in %channel%.",
   MusicControlAppliedMessage: "Music control applied.",
@@ -874,8 +878,10 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.deferReply({ ephemeral: true });
 
     try {
+      const spotifyCreds = this.ResolveSpotifyCredentials(Config);
       const Result = await this.MusicPlayer.Play(Channel, Url, {
-        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config)
+        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config),
+        ...spotifyCreds,
       });
       await InteractionValue.editReply(this.ApplyMusicTemplate(Config.MusicStartedMessage, {
         ChannelId: Session.ChannelId,
@@ -1001,8 +1007,10 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.deferReply({ ephemeral: true });
 
     try {
+      const spotifyCreds = this.ResolveSpotifyCredentials(Config);
       const Result = await this.MusicPlayer.Enqueue(Channel, Url, {
-        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config)
+        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config),
+        ...spotifyCreds,
       });
       const Status = Result.Started
         ? this.ApplyMusicTemplate(Config.MusicStartedMessage, {
@@ -1142,7 +1150,11 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.deferUpdate();
 
     try {
-      const Options = { YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config) };
+      const spotifyCreds = this.ResolveSpotifyCredentials(Config);
+      const Options = {
+        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config),
+        ...spotifyCreds,
+      };
       const Result = Action === "MusicRequestQueue"
         ? await this.MusicPlayer.Enqueue(Channel, Request.Url, Options)
         : await this.MusicPlayer.Play(Channel, Request.Url, Options);
@@ -1771,6 +1783,8 @@ export default class TempVoicePlugin extends BasePlugin {
       MusicYoutubeAccountMode: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicYoutubeAccountMode")) ?? DefaultConfig.MusicYoutubeAccountMode,
       MusicYoutubeCookiesPath: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicYoutubeCookiesPath")) ?? DefaultConfig.MusicYoutubeCookiesPath,
       MusicRequiresAccountMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicRequiresAccountMessage")) ?? DefaultConfig.MusicRequiresAccountMessage,
+      SpotifyClientId: (await this.Storage.GetGlobalConfig<string>(GuildId, "SpotifyClientId")) ?? DefaultConfig.SpotifyClientId,
+      SpotifyClientSecret: (await this.Storage.GetGlobalConfig<string>(GuildId, "SpotifyClientSecret")) ?? DefaultConfig.SpotifyClientSecret,
       MusicStartedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicStartedMessage")) ?? DefaultConfig.MusicStartedMessage,
       MusicBusyMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicBusyMessage")) ?? DefaultConfig.MusicBusyMessage,
       MusicControlAppliedMessage: (await this.Storage.GetGlobalConfig<string>(GuildId, "MusicControlAppliedMessage")) ?? DefaultConfig.MusicControlAppliedMessage,
@@ -1909,6 +1923,15 @@ export default class TempVoicePlugin extends BasePlugin {
     }
 
     return undefined;
+  }
+
+  private ResolveSpotifyCredentials(Config: TempVoiceConfig): { clientId?: string; clientSecret?: string } {
+    const clientId = Config.SpotifyClientId.trim() || process.env.SPOTIFY_CLIENT_ID?.trim() || "";
+    const clientSecret = Config.SpotifyClientSecret.trim() || process.env.SPOTIFY_CLIENT_SECRET?.trim() || "";
+    return {
+      ...(clientId ? { clientId } : {}),
+      ...(clientSecret ? { clientSecret } : {}),
+    };
   }
 
   private ApplyMusicTemplate(Template: string, Values: { ChannelId: string; Count: number; Error: string; Title: string }): string {

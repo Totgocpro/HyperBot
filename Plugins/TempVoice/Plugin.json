@@ -139,21 +139,21 @@
       "Key": "MusicModalTitle",
       "Type": "String",
       "Label": "Music modal title",
-      "Default": "Play YouTube music",
+      "Default": "Play music from any platform",
       "Section": "Music"
     },
     {
       "Key": "MusicModalUrlLabel",
       "Type": "String",
       "Label": "Music URL input label",
-      "Default": "YouTube video or playlist URL",
+      "Default": "Music URL (YouTube, Spotify, Apple Music, Deezer, SoundCloud, Bandcamp, Tidal...)",
       "Section": "Music"
     },
     {
       "Key": "MusicAskModalTitle",
       "Type": "String",
       "Label": "Ask music modal title",
-      "Default": "Ask music / playlist",
+      "Default": "Ask music / playlist (any platform)",
       "Section": "Music"
     },
     {
@@ -220,6 +220,28 @@
         "Key": "MusicYoutubeAccountMode",
         "Value": "GuildFile"
       }
+    },
+    {
+      "Key": "SpotifyClientId",
+      "Type": "String",
+      "Label": "Spotify Client ID",
+      "Default": "",
+      "Section": "Music account",
+      "Description": "Spotify API Client ID. Required for Spotify track, album, and playlist support. Get one at https://developer.spotify.com/dashboard. Leave empty to use SPOTIFY_CLIENT_ID env var or skip Spotify resolution."
+    },
+    {
+      "Key": "SpotifyClientSecret",
+      "Type": "Password",
+      "Label": "Spotify Client Secret",
+      "Default": "",
+      "Section": "Music account",
+      "Description": "Spotify API Client Secret. Required for Spotify track, album, and playlist support. Leave empty to use SPOTIFY_CLIENT_SECRET env var or skip Spotify resolution.",
+      "VisibleWhenAny": [
+        {
+          "Key": "SpotifyClientId",
+          "Value": ""
+        }
+      ]
     },
     {
       "Key": "MusicRequiresAccountMessage",

@@ -153,7 +153,7 @@ These entries are based on the current `Plugin.json` manifests in `Plugins/`.
 | `Reminders` | Guild | Automation | `/reminder-list`, `/reminder-enable`, `/reminder-disable`, `/reminder-delete`, `/reminder-run` | Schedules dashboard-managed reminders with default channel, embed mode, interval, color, footer text, reminder limits, and slash command management. |
 | `SendEmbed` | Guild | Messages | Dashboard only | Builds, saves, previews, and sends Discord embeds to selected text, announcement, or voice channels through the shared embed editor. |
 | `Statistics` | Guild | Analytics | `/stats` | Tracks messages, reactions, voice time, joins, leaves, hourly activity, channel counters, and member activity status. Provides dashboard charts, an activity pie chart, configurable active/inactive thresholds, optional active/inactive role assignment, and a configurable `/stats` embed. |
-| `TempVoice` | Guild | Voice | Dashboard only | Creates temporary voice rooms from a creator channel with owner controls, locks, bans, protected roles, music controls, YouTube cookie-file support, a generated music panel, and optional TTS. |
+| `TempVoice` | Guild | Voice | Dashboard only | Creates temporary voice rooms from a creator channel with owner controls, locks, bans, protected roles, music controls (many platforms), YouTube cookie-file support, a generated music panel, and optional TTS. |
 | `Tickets` | Guild | Support | Dashboard only | Publishes a ticket panel, creates private ticket channels, applies support role permissions, tracks ticket status, can save transcripts, logs ticket events, and shows open/closed ticket charts. |
 | `WelcomeMessage` | Guild | Community | Dashboard only | Sends welcome and leave messages as embeds or generated images, supports background and avatar styling, and can publish a captcha verification panel with role grants. |
 
@@ -162,7 +162,7 @@ These entries are based on the current `Plugin.json` manifests in `Plugins/`.
 - `Leveling` depends on `Statistics`, because XP is calculated from tracked message and voice activity.
 - `InviteTracker` needs enough Discord permissions to fetch server invites. Without that, invite attribution can show unknown joins.
 - `EmojiAdder` needs the bot permission for managing guild expressions.
-- `TempVoice` needs permissions to create and manage voice channels. Music playback can use public YouTube videos or a server-side `cookies.txt` path.
+- `TempVoice` needs permissions to create and manage voice channels. Music playback can use public YouTube videos or a server-side `cookies.txt` path and Spotify integration need apis keys
 - `Tickets` needs permission to create/manage text channels and permission overwrites in the configured category.
 
 ## Export an Instance

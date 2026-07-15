@@ -1,5 +1,6 @@
 import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import type { TempVoiceMusicState } from "./TempVoiceMusicPlayer.js";
+import { SourceInfo } from "./TempVoiceMusicResolver.js";
 
 type TempVoiceMusicPanelLogger = {
   Warn(Message: string, Metadata?: unknown): void;
@@ -8,6 +9,8 @@ type TempVoiceMusicPanelLogger = {
 type TempVoiceMusicPanelRenderOptions = {
   HideTiming?: boolean;
 };
+
+const LogoCache = new Map<string, Promise<Image | null>>();
 
 export class TempVoiceMusicPanelRenderer {
   private readonly ThumbnailCache = new Map<string, Promise<Image | null>>();
@@ -33,9 +36,9 @@ export class TempVoiceMusicPanelRenderer {
 
     this.DrawGlow(Context, 280, 210, "rgba(239, 68, 68, 0.22)");
     this.DrawGlow(Context, 790, 95, "rgba(56, 189, 248, 0.16)");
-    this.DrawYoutubeBadge(Context, 54, 42);
+    await this.DrawSourceBadge(Context, 54, 42, State.Source);
 
-    this.DrawThumbnail(Context, 54, 104, 520, 292, Thumbnail);
+    this.DrawThumbnail(Context, 54, 104, 520, 292, Thumbnail, State);
     this.DrawTrackInfo(Context, State, Options, 610, 104, 526);
     this.DrawQueue(Context, State, 610, 258, 526, 190);
 
@@ -62,7 +65,7 @@ export class TempVoiceMusicPanelRenderer {
     const Pending = loadImage(SafeUrl).catch((ErrorValue: unknown) => {
       this.Logger.Warn("TempVoice music panel thumbnail could not be loaded.", {
         Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
-        ThumbnailUrl: SafeUrl
+        ThumbnailUrl: SafeUrl,
       });
       return null;
     });
@@ -71,24 +74,53 @@ export class TempVoiceMusicPanelRenderer {
     return await Pending;
   }
 
-  private DrawYoutubeBadge(Context: SKRSContext2D, X: number, Y: number): void {
-    this.DrawRoundedRect(Context, X, Y, 178, 42, 14, "rgba(15, 23, 42, 0.76)");
-    this.DrawRoundedRect(Context, X + 12, Y + 9, 40, 24, 8, "#ef4444");
-    Context.beginPath();
-    Context.moveTo(X + 29, Y + 16);
-    Context.lineTo(X + 29, Y + 26);
-    Context.lineTo(X + 39, Y + 21);
-    Context.closePath();
-    Context.fillStyle = "#ffffff";
-    Context.fill();
+  private async LoadLogo(LogoUrl: string): Promise<Image | null> {
+    if (!LogoUrl) return null;
+
+    const Existing = LogoCache.get(LogoUrl);
+    if (Existing) return await Existing;
+
+    const Pending = loadImage(LogoUrl).catch(() => null);
+    LogoCache.set(LogoUrl, Pending);
+    return await Pending;
+  }
+
+  private async DrawSourceBadge(Context: SKRSContext2D, X: number, Y: number, Source: string): Promise<void> {
+    const info = SourceInfo[Source] ?? { label: "MU", logoUrl: "", color: "#64748B", name: "Music" };
+    const badgeWidth = 36 + Context.measureText(info.name).width + 24;
+    this.DrawRoundedRect(Context, X, Y, badgeWidth, 42, 14, "rgba(15, 23, 42, 0.76)");
+
+    const Logo = info.logoUrl ? await this.LoadLogo(info.logoUrl) : null;
+    const IconX = X + 12;
+    const IconY = Y + 9;
+    const IconSize = 24;
+
+    if (Logo) {
+      Context.save();
+      this.RoundedPath(Context, IconX, IconY, IconSize, IconSize, 6);
+      Context.clip();
+      const Scale = Math.max(IconSize / Logo.width, IconSize / Logo.height);
+      const DrawWidth = Logo.width * Scale;
+      const DrawHeight = Logo.height * Scale;
+      Context.drawImage(Logo, IconX + (IconSize - DrawWidth) / 2, IconY + (IconSize - DrawHeight) / 2, DrawWidth, DrawHeight);
+      Context.restore();
+    } else {
+      this.DrawRoundedRect(Context, IconX, IconY, IconSize, IconSize, 6, info.color);
+      Context.font = "700 14px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
+      Context.fillStyle = "#ffffff";
+      Context.textAlign = "center";
+      Context.textBaseline = "middle";
+      Context.fillText(info.label, IconX + IconSize / 2, IconY + IconSize / 2);
+    }
+
     Context.font = "700 20px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
     Context.fillStyle = "#f8fafc";
     Context.textAlign = "left";
     Context.textBaseline = "middle";
-    Context.fillText("YT Music", X + 64, Y + 22);
+    Context.fillText(info.name, X + 48, Y + 22);
   }
 
-  private DrawThumbnail(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Thumbnail: Image | null): void {
+  private DrawThumbnail(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Thumbnail: Image | null, State: TempVoiceMusicState): void {
     this.DrawRoundedRect(Context, X - 4, Y - 4, Width + 8, Height + 8, 22, "rgba(255, 255, 255, 0.08)");
     this.DrawRoundedRect(Context, X, Y, Width, Height, 18, "#020617");
     Context.save();
@@ -103,16 +135,17 @@ export class TempVoiceMusicPanelRenderer {
       Context.imageSmoothingQuality = "high";
       Context.drawImage(Thumbnail, X + (Width - DrawWidth) / 2, Y + (Height - DrawHeight) / 2, DrawWidth, DrawHeight);
     } else {
+      const info = SourceInfo[State.Source] ?? { label: "MU", logoUrl: "", color: "#1e293b", name: "Music" };
       const Gradient = Context.createLinearGradient(X, Y, X + Width, Y + Height);
       Gradient.addColorStop(0, "#1e293b");
-      Gradient.addColorStop(1, "#0f172a");
+      Gradient.addColorStop(1, info.color ? `${info.color}55` : "#0f172a");
       Context.fillStyle = Gradient;
       Context.fillRect(X, Y, Width, Height);
-      Context.font = "800 96px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
+      Context.font = "800 28px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
       Context.fillStyle = "rgba(248, 250, 252, 0.24)";
       Context.textAlign = "center";
       Context.textBaseline = "middle";
-      Context.fillText("YT", X + Width / 2, Y + Height / 2);
+      Context.fillText(info.name, X + Width / 2, Y + Height / 2);
     }
 
     Context.restore();
