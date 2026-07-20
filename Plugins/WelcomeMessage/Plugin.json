@@ -100,6 +100,14 @@
       }
     },
     {
+      "Key": "WelcomeRoleIds",
+      "Type": "List",
+      "Label": "Roles granted on join",
+      "Default": [],
+      "Section": "Welcome",
+      "ItemType": "RolePicker"
+    },
+    {
       "Key": "LeaveEnabled",
       "Type": "Boolean",
       "Label": "Enable leave messages",

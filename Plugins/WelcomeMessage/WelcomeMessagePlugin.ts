@@ -63,6 +63,7 @@ type WelcomeMessageConfig = {
   ImageDescriptionFontSize: number;
   ImageShowInitialsAvatar: boolean;
   PingUser: boolean;
+  WelcomeRoleIds: string[];
   CaptchaEnabled: boolean;
   CaptchaChannelId: string;
   CaptchaRoleIds: string[];
@@ -163,6 +164,7 @@ const DefaultConfig: WelcomeMessageConfig = {
   ImageDescriptionFontSize: 15,
   ImageShowInitialsAvatar: true,
   PingUser: false,
+  WelcomeRoleIds: [],
   CaptchaEnabled: false,
   CaptchaChannelId: "",
   CaptchaRoleIds: [],
@@ -239,6 +241,22 @@ export default class WelcomeMessagePlugin extends BasePlugin {
         Message: Config.WelcomeMessage,
         Type: "Welcome"
       });
+    }
+
+    if (Config.WelcomeRoleIds.length > 0 && !this.HasAllWelcomeRoles(Member, Config)) {
+      for (const RoleId of Config.WelcomeRoleIds) {
+        if (!RoleId || Member.roles.cache.has(RoleId)) {
+          continue;
+        }
+        await Member.roles.add(RoleId, "Welcome message role").catch((ErrorValue: unknown) => {
+          this.Logger.Warn("Welcome role could not be granted.", {
+            Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+            GuildId: Member.guild.id,
+            RoleId,
+            UserId: Member.id
+          });
+        });
+      }
     }
 
     if (Config.CaptchaEnabled && Config.CaptchaChannelId && Config.CaptchaRoleIds.length > 0 && !this.HasAllCaptchaRoles(Member, Config)) {
@@ -743,6 +761,11 @@ export default class WelcomeMessagePlugin extends BasePlugin {
     return Canvas.encodeSync("png");
   }
 
+  private HasAllWelcomeRoles(Member: GuildMember, Config: WelcomeMessageConfig): boolean {
+    const RoleIds = Config.WelcomeRoleIds.filter(Boolean);
+    return RoleIds.length > 0 && RoleIds.every((RoleId) => Member.roles.cache.has(RoleId));
+  }
+
   private HasAllCaptchaRoles(Member: GuildMember, Config: WelcomeMessageConfig): boolean {
     const RoleIds = Config.CaptchaRoleIds.filter(Boolean);
     return RoleIds.length > 0 && RoleIds.every((RoleId) => Member.roles.cache.has(RoleId));
@@ -947,6 +970,7 @@ export default class WelcomeMessagePlugin extends BasePlugin {
       ImageDescriptionFontSize: (await this.Storage.GetGlobalConfig<number>(GuildId, "ImageDescriptionFontSize")) ?? DefaultConfig.ImageDescriptionFontSize,
       ImageShowInitialsAvatar: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "ImageShowInitialsAvatar")) ?? DefaultConfig.ImageShowInitialsAvatar,
       PingUser: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "PingUser")) ?? DefaultConfig.PingUser,
+      WelcomeRoleIds: await this.GetStringListConfig(GuildId, "WelcomeRoleIds", DefaultConfig.WelcomeRoleIds),
       CaptchaEnabled: (await this.Storage.GetGlobalConfig<boolean>(GuildId, "CaptchaEnabled")) ?? DefaultConfig.CaptchaEnabled,
       CaptchaChannelId: (await this.Storage.GetGlobalConfig<string>(GuildId, "CaptchaChannelId")) ?? DefaultConfig.CaptchaChannelId,
       CaptchaRoleIds: await this.GetStringListConfig(GuildId, "CaptchaRoleIds", DefaultConfig.CaptchaRoleIds),
