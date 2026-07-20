@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect as UseEffect, useMemo as UseMemo, useState as UseState } from "react";
 import type { BotGuildSummary } from "../../Core/Types";
+import { FiRefreshCw } from "react-icons/fi";
 
 type GuildPayload = {
   Guilds: BotGuildSummary[];
@@ -302,12 +303,5 @@ function BuildInitials(Name: string): string {
 }
 
 function RefreshIcon() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M21 12a9 9 0 0 1-15.5 6.2" />
-      <path d="M3 12A9 9 0 0 1 18.5 5.8" />
-      <path d="M3 18v-5h5" />
-      <path d="M21 6v5h-5" />
-    </svg>
-  );
+  return <FiRefreshCw aria-hidden="true" className="h-5 w-5" />;
 }
