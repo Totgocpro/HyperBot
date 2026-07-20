@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname as UsePathname, useRouter as UseRouter } from "next/navigation";
 import { useEffect as UseEffect, useState as UseState, type ReactNode } from "react";
+import { Sun, Moon } from "lucide-react";
 
 type AuthStatus = {
   Authenticated: boolean;
@@ -116,8 +117,12 @@ export function AppShell(Properties: { children: ReactNode }) {
                 <p className="font-bold text-white">{User?.DisplayName ?? User?.Username}</p>
                 <p className="text-xs text-slate-400">{User?.Role}</p>
               </div>
-              <button className="shrink-0 rounded-2xl border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800" onClick={ToggleTheme}>
-                {Theme === "dark" ? "Light" : "Dark"}
+              <button className="shrink-0 rounded-2xl border border-slate-700 p-2 text-slate-200 hover:bg-slate-800" onClick={ToggleTheme}>
+                <span className="relative flex items-center justify-center">
+                  <Moon size={18} className={`transition-all duration-700 ease-in-out ${Theme === "dark" ? "scale-100 rotate-0 opacity-100" : "scale-0 rotate-90 opacity-0"} absolute`} />
+                  <Sun size={18} className={`transition-all duration-700 ease-in-out ${Theme === "dark" ? "scale-0 -rotate-90 opacity-0" : "scale-100 rotate-0 opacity-100"} absolute`} />
+                  <span className="invisible"><Moon size={18} /></span>
+                </span>
               </button>
               <button className="shrink-0 rounded-2xl border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800" onClick={() => SetPasswordPanelOpen(true)}>
                 Password
@@ -148,7 +153,14 @@ export function AppShell(Properties: { children: ReactNode }) {
                 </Link>
               ) : null}
               <button className="rounded-2xl border border-slate-700 px-3 py-2 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800" onClick={ToggleTheme}>
-                {Theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                <span className="inline-flex items-center gap-2">
+                  <span className="relative flex items-center justify-center">
+                    <Moon size={18} className={`transition-all duration-500 ${Theme === "dark" ? "scale-100 rotate-0 opacity-100" : "scale-0 rotate-90 opacity-0"} absolute`} />
+                    <Sun size={18} className={`transition-all duration-500 ${Theme === "dark" ? "scale-0 -rotate-90 opacity-0" : "scale-100 rotate-0 opacity-100"} absolute`} />
+                    <span className="invisible"><Moon size={18} /></span>
+                  </span>
+                  {Theme === "dark" ? "Light" : "Dark"}
+                </span>
               </button>
               <button
                 className="rounded-2xl border border-slate-700 px-3 py-2 text-left text-sm font-semibold text-slate-200 hover:bg-slate-800"

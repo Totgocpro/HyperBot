@@ -8,3 +8,4 @@ __pycache__/
 Backups/
 .hyperbot-cli-venv/
 Exports/
+package-lock.json
