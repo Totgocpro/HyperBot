@@ -640,6 +640,17 @@ function AuditLogsPanel(Properties: {
   SetFilters: (Value: AuditLogFilters) => void;
   Total: number;
 }) {
+  const AllColumnKeys = ["Time", "Action", "Actor", "Target", "Bot", "IP", "Result", "Details"] as const;
+  type ColumnKey = (typeof AllColumnKeys)[number];
+  const [VisibleColumns, SetVisibleColumns] = UseState<ColumnKey[]>(["Time", "Action", "Actor"]);
+  function ToggleColumn(Key: ColumnKey): void {
+    SetVisibleColumns((Prev) => {
+      if (Prev.includes(Key)) return Prev.filter((C) => C !== Key);
+      if (Prev.length < 3) return [...Prev, Key];
+      return [...Prev.slice(0, -1), Key];
+    });
+  }
+
   function SetFilter(Key: keyof AuditLogFilters, Value: string): void {
     Properties.SetFilters({ ...Properties.Filters, [Key]: Value });
   }
@@ -694,43 +705,67 @@ function AuditLogsPanel(Properties: {
         </div>
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-950">
+      <div className="mt-4 flex flex-wrap gap-2">
+        {AllColumnKeys.map((Key) => {
+          const IsVisible = VisibleColumns.includes(Key);
+          return (
+            <button
+              key={Key}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+                IsVisible
+                  ? "bg-blue-600 text-white"
+                  : "border border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+              }`}
+              onClick={() => ToggleColumn(Key)}
+              type="button"
+            >
+              {Key}
+            </button>
+          );
+        })}
+      </div>
+
+      <section className="mt-3 overflow-hidden rounded-3xl border border-slate-800 bg-slate-950">
         {Properties.Logs.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">No log found.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full border-collapse text-left text-sm">
+            <table className="w-full border-collapse text-left text-sm">
               <thead className="border-b border-slate-800 bg-slate-900 text-xs uppercase tracking-[0.2em] text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Time</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">Actor</th>
-                  <th className="px-4 py-3">Target</th>
-                  <th className="px-4 py-3">Bot</th>
-                  <th className="px-4 py-3">IP</th>
-                  <th className="px-4 py-3">Result</th>
-                  <th className="px-4 py-3">Details</th>
+                  {VisibleColumns.includes("Time") && <th className="px-2 py-3 sm:px-4">Time</th>}
+                  {VisibleColumns.includes("Action") && <th className="px-2 py-3 sm:px-4">Action</th>}
+                  {VisibleColumns.includes("Actor") && <th className="px-2 py-3 sm:px-4">Actor</th>}
+                  {VisibleColumns.includes("Target") && <th className="px-2 py-3 sm:px-4">Target</th>}
+                  {VisibleColumns.includes("Bot") && <th className="px-2 py-3 sm:px-4">Bot</th>}
+                  {VisibleColumns.includes("IP") && <th className="px-2 py-3 sm:px-4">IP</th>}
+                  {VisibleColumns.includes("Result") && <th className="px-2 py-3 sm:px-4">Result</th>}
+                  {VisibleColumns.includes("Details") && <th className="px-2 py-3 sm:px-4">Details</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {Properties.Logs.map((Log) => (
                   <tr className="align-top text-slate-200" key={Log.Id}>
-                    <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-400">{FormatAuditDate(Log.CreatedAt)}</td>
-                    <td className="px-4 py-4 font-bold text-white">{Log.Action}</td>
-                    <td className="px-4 py-4">
-                      <span className="block font-semibold">{Log.ActorDisplayName ?? Log.ActorId}</span>
-                      {Log.ActorDisplayName ? <span className="mt-1 block text-xs text-slate-500">{Log.ActorId}</span> : null}
-                    </td>
-                    <td className="px-4 py-4 text-slate-300">{Log.Target}</td>
-                    <td className="px-4 py-4 text-xs text-slate-400">{BuildAuditBotLabel(Log.BotId, Properties.Bots)}</td>
-                    <td className="px-4 py-4 font-mono text-xs text-slate-300">{GetAuditMetadataValue(Log.Metadata, "IpAddress") || "-"}</td>
-                    <td className="px-4 py-4">{GetAuditMetadataValue(Log.Metadata, "Result") || "-"}</td>
-                    <td className="max-w-md px-4 py-4">
-                      <details>
-                        <summary className="cursor-pointer text-xs font-bold text-blue-300 hover:text-blue-200">Metadata</summary>
-                        <pre className="mt-2 max-h-48 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">{FormatAuditMetadata(Log.Metadata)}</pre>
-                      </details>
-                    </td>
+                    {VisibleColumns.includes("Time") && <td className="whitespace-nowrap px-2 py-4 text-xs text-slate-400 sm:px-4">{FormatAuditDate(Log.CreatedAt)}</td>}
+                    {VisibleColumns.includes("Action") && <td className="px-2 py-4 font-bold text-white sm:px-4">{Log.Action}</td>}
+                    {VisibleColumns.includes("Actor") && (
+                      <td className="px-2 py-4 sm:px-4">
+                        <span className="block font-semibold">{Log.ActorDisplayName ?? Log.ActorId}</span>
+                        {Log.ActorDisplayName ? <span className="mt-1 block text-xs text-slate-500">{Log.ActorId}</span> : null}
+                      </td>
+                    )}
+                    {VisibleColumns.includes("Target") && <td className="px-2 py-4 text-slate-300 sm:px-4">{Log.Target}</td>}
+                    {VisibleColumns.includes("Bot") && <td className="px-2 py-4 text-xs text-slate-400 sm:px-4">{BuildAuditBotLabel(Log.BotId, Properties.Bots)}</td>}
+                    {VisibleColumns.includes("IP") && <td className="px-2 py-4 font-mono text-xs text-slate-300 sm:px-4">{GetAuditMetadataValue(Log.Metadata, "IpAddress") || "-"}</td>}
+                    {VisibleColumns.includes("Result") && <td className="px-2 py-4 sm:px-4">{GetAuditMetadataValue(Log.Metadata, "Result") || "-"}</td>}
+                    {VisibleColumns.includes("Details") && (
+                      <td className="max-w-md px-2 py-4 sm:px-4">
+                        <details>
+                          <summary className="cursor-pointer text-xs font-bold text-blue-300 hover:text-blue-200">Metadata</summary>
+                          <pre className="mt-2 max-h-48 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">{FormatAuditMetadata(Log.Metadata)}</pre>
+                        </details>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
