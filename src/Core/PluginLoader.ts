@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import Path from "node:path";
+import { existsSync } from "node:fs";
 import Chokidar from "chokidar";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
@@ -507,11 +508,20 @@ export class PluginLoader {
 
     const EntryPointPath = this.ResolveEntryPoint(ManifestEntry.Directory, ManifestEntry.Manifest.EntryPoint);
     const ModuleUrl = `${pathToFileURL(EntryPointPath).href}?Reload=${Date.now()}`;
-    const ImportedModule = (await import(ModuleUrl)) as { default?: PluginConstructor; Plugin?: PluginConstructor };
+    let ImportedModule: { default?: PluginConstructor; Plugin?: PluginConstructor };
+
+    try {
+      ImportedModule = (await import(ModuleUrl)) as { default?: PluginConstructor; Plugin?: PluginConstructor };
+    } catch (Error) {
+      console.error(`Failed to load plugin "${PluginId}" from ${EntryPointPath}:`, (Error as Error).message);
+      return;
+    }
+
     const PluginClass = ImportedModule.default ?? ImportedModule.Plugin;
 
     if (!PluginClass) {
-      throw new Error(`Plugin ${PluginId} does not export a plugin class.`);
+      console.error(`Plugin "${PluginId}" does not export a plugin class from ${EntryPointPath}.`);
+      return;
     }
 
     const Instance = new PluginClass({
@@ -583,7 +593,11 @@ export class PluginLoader {
     const CandidatePath = Path.resolve(Directory, EntryPoint);
 
     if (process.env.NODE_ENV === "production" && CandidatePath.endsWith(".ts")) {
-      return CandidatePath.replace(/\.ts$/, ".js");
+      const JsPath = CandidatePath.replace(/\.ts$/, ".js");
+
+      if (existsSync(JsPath)) {
+        return JsPath;
+      }
     }
 
     return CandidatePath;

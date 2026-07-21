@@ -11,7 +11,7 @@
     "bot:dev": "tsx watch src/Bot/Main.ts",
     "web:dev": "next dev --webpack",
     "build": "prisma generate && tsc -p tsconfig.bot.json && next build --webpack",
-    "start": "concurrently \"node dist/src/Bot/Main.js\" \"next start\"",
+    "start": "concurrently \"tsx dist/src/Bot/Main.js\" \"next start\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "lint": "next lint"
