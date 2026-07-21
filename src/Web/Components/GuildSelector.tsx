@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect as UseEffect, useMemo as UseMemo, useState as UseState } from "react";
 import type { BotGuildSummary } from "../../Core/Types";
-import { FiRefreshCw } from "react-icons/fi";
+import { FiBookmark, FiRefreshCw } from "react-icons/fi";
 
 type GuildPayload = {
   Guilds: BotGuildSummary[];
@@ -35,6 +35,7 @@ export function GuildSelector() {
   const [Bots, SetBots] = UseState<BotSummary[]>([]);
   const [GuildEntries, SetGuildEntries] = UseState<BotGuildEntry[]>([]);
   const [SelectedBotIds, SetSelectedBotIds] = UseState<string[]>([]);
+  const [PinnedGuildIds, SetPinnedGuildIds] = UseState<Set<string>>(new Set());
   const [Status, SetStatus] = UseState("Loading servers...");
   const [Loading, SetLoading] = UseState(true);
   const [BotLoadErrors, SetBotLoadErrors] = UseState<Record<string, string>>({});
@@ -52,8 +53,30 @@ export function GuildSelector() {
 
   const FilteredGuilds = UseMemo(() => {
     const ActiveBotIds = new Set(SelectedBotIds.length ? SelectedBotIds : Bots.map((Bot) => Bot.Id));
-    return AggregateGuildEntries(SafeGuildEntries(GuildEntries).filter((Entry) => ActiveBotIds.has(Entry.Bot.Id)));
-  }, [Bots, GuildEntries, SelectedBotIds]);
+    const Aggregated = AggregateGuildEntries(SafeGuildEntries(GuildEntries).filter((Entry) => ActiveBotIds.has(Entry.Bot.Id)));
+    return SortGuilds(Aggregated, PinnedGuildIds);
+  }, [Bots, GuildEntries, SelectedBotIds, PinnedGuildIds]);
+
+  async function TogglePin(GuildId: string, GuildName: string): Promise<void> {
+    try {
+      const Response = await fetch("/api/pins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ GuildId, GuildName })
+      });
+      if (Response.ok) {
+        const Result = (await Response.json()) as { Pinned: boolean };
+        SetPinnedGuildIds((Previous) => {
+          const Next = new Set(Previous);
+          if (Result.Pinned) Next.add(GuildId);
+          else Next.delete(GuildId);
+          return Next;
+        });
+      }
+    } catch {
+      // Pin toggle failed silently
+    }
+  }
 
   async function LoadData(): Promise<void> {
     SetLoading(true);
@@ -92,6 +115,16 @@ export function GuildSelector() {
     SetSelectedBotIds((PreviousIds) => PreviousIds.filter((BotId) => BotsPayload.some((Bot) => Bot.Id === BotId)));
     SetStatus(BuildStatus(BotsPayload, Entries));
     SetLoading(false);
+
+    try {
+      const PinsResponse = await fetch("/api/pins");
+      if (PinsResponse.ok) {
+        const PinsPayload = (await PinsResponse.json()) as { GuildId: string }[];
+        SetPinnedGuildIds(new Set(PinsPayload.map((P) => P.GuildId)));
+      }
+    } catch {
+      // Pins are optional
+    }
   }
 
   function ToggleBotFilter(BotId: string): void {
@@ -170,7 +203,7 @@ export function GuildSelector() {
       ) : (
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
           {FilteredGuilds.map((Guild) => (
-            <ServerCard Guild={Guild} key={Guild.Id} />
+            <ServerCard Guild={Guild} IsPinned={PinnedGuildIds.has(Guild.Id)} key={Guild.Id} OnTogglePin={() => void TogglePin(Guild.Id, Guild.Name)} />
           ))}
         </div>
       )}
@@ -178,15 +211,15 @@ export function GuildSelector() {
   );
 }
 
-function ServerCard(Properties: { Guild: AggregatedGuild }) {
-  const { Guild } = Properties;
+function ServerCard(Properties: { Guild: AggregatedGuild; IsPinned: boolean; OnTogglePin: () => void }) {
+  const { Guild, IsPinned, OnTogglePin } = Properties;
   const HasDuplicateBots = Guild.Entries.length > 1;
   const PrimaryEntry = Guild.Entries[0];
 
   return (
     <article className={`rounded-2xl border bg-slate-950 p-4 transition ${HasDuplicateBots ? "border-amber-400/70" : "border-slate-800 hover:border-blue-500"}`}>
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-bold text-white">
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-bold text-white">
           {Guild.Icon ? <img alt="" className="h-12 w-12 rounded-2xl object-cover" src={Guild.Icon} /> : Guild.Name.slice(0, 1).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
@@ -195,14 +228,29 @@ function ServerCard(Properties: { Guild: AggregatedGuild }) {
               <p className="truncate font-bold text-white">{Guild.Name}</p>
               <p className="text-sm text-slate-500">{Guild.MemberCount ?? "?"} members</p>
             </div>
-            {PrimaryEntry ? (
-              <Link
-                className="w-full max-w-28 shrink-0 rounded-xl bg-blue-600 px-4 py-2 text-center text-sm font-bold text-white hover:bg-blue-500 sm:w-auto"
-                href={`/dashboard/${PrimaryEntry.Bot.Id}/${Guild.Id}`}
+            <div className="flex items-center gap-2">
+              <button
+                aria-label={IsPinned ? "Unpin server" : "Pin server"}
+                className={`rounded-xl border p-2 text-sm transition ${
+                  IsPinned
+                    ? "border-blue-500 bg-blue-600 text-white"
+                    : "border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                }`}
+                onClick={OnTogglePin}
+                title={IsPinned ? "Unpin server" : "Pin server"}
+                type="button"
               >
-                Manage
-              </Link>
-            ) : null}
+                <FiBookmark className="h-4 w-4" />
+              </button>
+              {PrimaryEntry ? (
+                <Link
+                  className="w-full max-w-28 shrink-0 rounded-xl bg-blue-600 px-4 py-2 text-center text-sm font-bold text-white hover:bg-blue-500 sm:w-auto"
+                  href={`/dashboard/${PrimaryEntry.Bot.Id}/${Guild.Id}`}
+                >
+                  Manage
+                </Link>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-4 grid gap-2">
@@ -255,6 +303,24 @@ function AggregateGuildEntries(Entries: BotGuildEntry[]): AggregatedGuild[] {
   }
 
   return Array.from(GuildsById.values()).sort((FirstGuild, SecondGuild) => FirstGuild.Name.localeCompare(SecondGuild.Name));
+}
+
+function SortGuilds(Guilds: AggregatedGuild[], PinnedIds: Set<string>): AggregatedGuild[] {
+  const Pinned: AggregatedGuild[] = [];
+  const Unpinned: AggregatedGuild[] = [];
+
+  for (const G of Guilds) {
+    if (PinnedIds.has(G.Id)) {
+      Pinned.push(G);
+    } else {
+      Unpinned.push(G);
+    }
+  }
+
+  Pinned.sort((A, B) => A.Name.localeCompare(B.Name));
+  Unpinned.sort((A, B) => A.Name.localeCompare(B.Name));
+
+  return [...Pinned, ...Unpinned];
 }
 
 function SafeGuildEntries(Value: unknown): BotGuildEntry[] {

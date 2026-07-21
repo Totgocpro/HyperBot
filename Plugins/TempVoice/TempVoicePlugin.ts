@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
+  MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
   StringSelectMenuBuilder,
@@ -382,7 +383,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Session = await this.GetSession(ChannelId);
 
     if (!Session) {
-      await InteractionValue.reply({ content: "This temporary channel no longer exists.", ephemeral: true });
+      await InteractionValue.reply({ content: "This temporary channel no longer exists.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -419,7 +420,7 @@ export default class TempVoicePlugin extends BasePlugin {
       const Config = await this.GetConfig(InteractionValue.guildId);
 
       if (!Config.LockEnabled) {
-        await InteractionValue.reply({ content: "Room lock is disabled on this server.", ephemeral: true });
+        await InteractionValue.reply({ content: "Room lock is disabled on this server.", flags: MessageFlags.Ephemeral });
         await this.SendControlPanelFromSession(InteractionValue.guild, Session, Config, InteractionValue);
         return;
       }
@@ -447,7 +448,7 @@ export default class TempVoicePlugin extends BasePlugin {
       const Config = await this.GetConfig(InteractionValue.guildId);
 
       if (!Config.BanEnabled) {
-        await InteractionValue.reply({ content: "Room bans are disabled on this server.", ephemeral: true });
+        await InteractionValue.reply({ content: "Room bans are disabled on this server.", flags: MessageFlags.Ephemeral });
         await this.SendControlPanelFromSession(InteractionValue.guild, Session, Config, InteractionValue);
         return;
       }
@@ -493,7 +494,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(ChannelId).catch(() => null);
 
     if (!TargetMemberId || !Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Target member is not available anymore.", ephemeral: true });
+      await InteractionValue.reply({ content: "Target member is not available anymore.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -510,19 +511,19 @@ export default class TempVoicePlugin extends BasePlugin {
       const Member = await InteractionValue.guild.members.fetch(TargetMemberId).catch(() => null);
 
       if (!Config.BanEnabled) {
-        await InteractionValue.reply({ content: "Room bans are disabled on this server.", ephemeral: true });
+        await InteractionValue.reply({ content: "Room bans are disabled on this server.", flags: MessageFlags.Ephemeral });
         await this.SendControlPanel(Channel, Session, Config);
         return;
       }
 
       if (!this.CanBanFromTemporaryRoom(Channel)) {
-        await InteractionValue.reply({ content: "The bot cannot ban members from this room.", ephemeral: true });
+        await InteractionValue.reply({ content: "The bot cannot ban members from this room.", flags: MessageFlags.Ephemeral });
         await this.SendControlPanel(Channel, Session, Config);
         return;
       }
 
       if (!Member || this.HasProtectedRole(Member, Config.ProtectedRoleIds)) {
-        await InteractionValue.reply({ content: "This member cannot be banned from the room.", ephemeral: true });
+        await InteractionValue.reply({ content: "This member cannot be banned from the room.", flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -547,7 +548,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Session = await this.GetSession(ChannelId);
 
     if (!Session) {
-      await InteractionValue.reply({ content: "This temporary channel no longer exists.", ephemeral: true });
+      await InteractionValue.reply({ content: "This temporary channel no longer exists.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -582,12 +583,12 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(ChannelId).catch(() => null);
     const Name = InteractionValue.fields.getTextInputValue("Name").trim();
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Name) {
-      await InteractionValue.reply({ content: "Invalid channel name.", ephemeral: true });
+      await InteractionValue.reply({ content: "Invalid channel name.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     await Channel.setName(Name.slice(0, 100), "Temporary voice channel renamed by owner.");
-    await InteractionValue.reply({ content: "Room renamed.", ephemeral: true });
+    await InteractionValue.reply({ content: "Room renamed.", flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
   }
 
@@ -595,12 +596,12 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (!this.CanManageTemporaryRoomPermissions(Channel)) {
-      await InteractionValue.reply({ content: "The bot cannot manage this room permissions.", ephemeral: true });
+      await InteractionValue.reply({ content: "The bot cannot manage this room permissions.", flags: MessageFlags.Ephemeral });
       await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
       return;
     }
@@ -610,7 +611,7 @@ export default class TempVoicePlugin extends BasePlugin {
       Connect: !Locked
     });
     await this.SaveSession(Session);
-    await InteractionValue.reply({ content: Locked ? "Room locked." : "Room unlocked.", ephemeral: true });
+    await InteractionValue.reply({ content: Locked ? "Room locked." : "Room unlocked.", flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
@@ -618,7 +619,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -628,7 +629,7 @@ export default class TempVoicePlugin extends BasePlugin {
       UseExternalSounds: !Disabled
     });
     await this.SaveSession(Session);
-    await InteractionValue.reply({ content: Disabled ? "Soundboard disabled." : "Soundboard enabled.", ephemeral: true });
+    await InteractionValue.reply({ content: Disabled ? "Soundboard disabled." : "Soundboard enabled.", flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
@@ -636,13 +637,13 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     Session.TtsDisabled = Disabled;
     await this.SaveSession(Session);
-    await InteractionValue.reply({ content: Disabled ? "TTS disabled for this room." : "TTS enabled for this room.", ephemeral: true });
+    await InteractionValue.reply({ content: Disabled ? "TTS disabled for this room." : "TTS enabled for this room.", flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
@@ -650,14 +651,14 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     Session.UserLimit = this.Clamp((Session.UserLimit || 0) + Delta, 0, 99);
     await Channel.setUserLimit(Session.UserLimit, "Temporary voice user limit changed by owner.");
     await this.SaveSession(Session);
-    await InteractionValue.reply({ content: `User limit set to ${Session.UserLimit || "unlimited"}.`, ephemeral: true });
+    await InteractionValue.reply({ content: `User limit set to ${Session.UserLimit || "unlimited"}.`, flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId), InteractionValue);
   }
 
@@ -665,18 +666,18 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
-      await InteractionValue.reply({ content: "You must be in the room to claim it.", ephemeral: true });
+      await InteractionValue.reply({ content: "You must be in the room to claim it.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (Channel.members.has(Session.OwnerId)) {
-      await InteractionValue.reply({ content: "The current owner is still in the room.", ephemeral: true });
+      await InteractionValue.reply({ content: "The current owner is still in the room.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     Session.OwnerId = InteractionValue.user.id;
     await this.SaveSession(Session);
-    await InteractionValue.reply({ content: "You are now the room owner.", ephemeral: true });
+    await InteractionValue.reply({ content: "You are now the room owner.", flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, await this.GetConfig(InteractionValue.guildId));
   }
 
@@ -684,20 +685,20 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (Action === "Ban" && !Config.BanEnabled) {
-      await InteractionValue.reply({ content: "Room bans are disabled on this server.", ephemeral: true });
+      await InteractionValue.reply({ content: "Room bans are disabled on this server.", flags: MessageFlags.Ephemeral });
       await this.SendControlPanel(Channel, Session, Config, InteractionValue);
       return;
     }
 
     if (Action === "Ban" && !this.CanBanFromTemporaryRoom(Channel)) {
-      await InteractionValue.reply({ content: "The bot cannot ban members from this room.", ephemeral: true });
+      await InteractionValue.reply({ content: "The bot cannot ban members from this room.", flags: MessageFlags.Ephemeral });
       await this.SendControlPanel(Channel, Session, Config, InteractionValue);
       return;
     }
@@ -709,7 +710,7 @@ export default class TempVoicePlugin extends BasePlugin {
       .slice(0, 25);
 
     if (Members.length === 0) {
-      await InteractionValue.reply({ content: "No eligible member found in this room.", ephemeral: true });
+      await InteractionValue.reply({ content: "No eligible member found in this room.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -728,7 +729,7 @@ export default class TempVoicePlugin extends BasePlugin {
     await InteractionValue.reply({
       content: Action === "Transfer" ? "Choose the new room owner." : "Choose the member to ban from this room.",
       components: [Row],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
@@ -774,7 +775,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
-      await InteractionValue.reply({ content: "You must be in this temporary voice room to ask for music.", ephemeral: true });
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to ask for music.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -819,24 +820,24 @@ export default class TempVoicePlugin extends BasePlugin {
     const Channel = await InteractionValue.guild.channels.fetch(Session.ChannelId).catch(() => null);
 
     if (!Config.TTSEnabled) {
-      await InteractionValue.reply({ content: Config.TTSDisabledMessage, ephemeral: true });
+      await InteractionValue.reply({ content: Config.TTSDisabledMessage, flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (Session.TtsDisabled) {
-      await InteractionValue.reply({ content: "TTS is disabled for this temporary room.", ephemeral: true });
+      await InteractionValue.reply({ content: "TTS is disabled for this temporary room.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
-      await InteractionValue.reply({ content: "You must be in this temporary voice room to use TTS.", ephemeral: true });
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to use TTS.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     const BusyChannelId = this.GetBusyAudioChannelId(InteractionValue.guildId, Session.ChannelId);
 
     if (BusyChannelId) {
-      await InteractionValue.reply({ content: this.ApplyTtsTemplate(Config.TTSBusyMessage, { ChannelId: BusyChannelId, Error: "" }), ephemeral: true });
+      await InteractionValue.reply({ content: this.ApplyTtsTemplate(Config.TTSBusyMessage, { ChannelId: BusyChannelId, Error: "" }), flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -872,11 +873,11 @@ export default class TempVoicePlugin extends BasePlugin {
     const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
-    await InteractionValue.deferReply({ ephemeral: true });
+    await InteractionValue.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const spotifyCreds = this.ResolveSpotifyCredentials(Config);
@@ -928,12 +929,12 @@ export default class TempVoicePlugin extends BasePlugin {
     const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
-      await InteractionValue.reply({ content: "You must be in this temporary voice room to ask for music.", ephemeral: true });
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to ask for music.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (!Url) {
-      await InteractionValue.reply({ content: "Music URL is required.", ephemeral: true });
+      await InteractionValue.reply({ content: "Music URL is required.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -1010,11 +1011,11 @@ export default class TempVoicePlugin extends BasePlugin {
     });
 
     if (!MessageValue) {
-      await InteractionValue.reply({ content: "Music request could not be sent.", ephemeral: true });
+      await InteractionValue.reply({ content: "Music request could not be sent.", flags: MessageFlags.Ephemeral });
       return;
     }
 
-    await InteractionValue.reply({ content: Config.MusicAskSubmittedMessage, ephemeral: true });
+    await InteractionValue.reply({ content: Config.MusicAskSubmittedMessage, flags: MessageFlags.Ephemeral });
   }
 
   private async HandleMusicQueueModal(InteractionValue: ModalSubmitInteraction<"cached">, Session: TempVoiceSession): Promise<void> {
@@ -1023,16 +1024,16 @@ export default class TempVoicePlugin extends BasePlugin {
     const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
-      await InteractionValue.reply({ content: "You must be in this temporary voice room to add music.", ephemeral: true });
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to add music.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (!Url) {
-      await InteractionValue.reply({ content: "Music URL is required.", ephemeral: true });
+      await InteractionValue.reply({ content: "Music URL is required.", flags: MessageFlags.Ephemeral });
       return;
     }
 
-    await InteractionValue.deferReply({ ephemeral: true });
+    await InteractionValue.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const spotifyCreds = this.ResolveSpotifyCredentials(Config);
@@ -1079,28 +1080,28 @@ export default class TempVoicePlugin extends BasePlugin {
     const Language = InteractionValue.fields.getTextInputValue("Language").trim() || Config.TTSDefaultLanguage;
 
     if (!Config.TTSEnabled) {
-      await InteractionValue.reply({ content: Config.TTSDisabledMessage, ephemeral: true });
+      await InteractionValue.reply({ content: Config.TTSDisabledMessage, flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (Session.TtsDisabled) {
-      await InteractionValue.reply({ content: "TTS is disabled for this temporary room.", ephemeral: true });
+      await InteractionValue.reply({ content: "TTS is disabled for this temporary room.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice || !Channel.members.has(InteractionValue.user.id)) {
-      await InteractionValue.reply({ content: "You must be in this temporary voice room to use TTS.", ephemeral: true });
+      await InteractionValue.reply({ content: "You must be in this temporary voice room to use TTS.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     const BusyChannelId = this.GetBusyAudioChannelId(InteractionValue.guildId, Session.ChannelId);
 
     if (BusyChannelId) {
-      await InteractionValue.reply({ content: this.ApplyTtsTemplate(Config.TTSBusyMessage, { ChannelId: BusyChannelId, Error: "" }), ephemeral: true });
+      await InteractionValue.reply({ content: this.ApplyTtsTemplate(Config.TTSBusyMessage, { ChannelId: BusyChannelId, Error: "" }), flags: MessageFlags.Ephemeral });
       return;
     }
 
-    await InteractionValue.deferReply({ ephemeral: true });
+    await InteractionValue.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       await this.TtsPlayer.Speak(Channel, Text, Language);
@@ -1128,7 +1129,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -1138,7 +1139,7 @@ export default class TempVoicePlugin extends BasePlugin {
     if (Action === "MusicToggle") this.MusicPlayer.TogglePause(Session.ChannelId);
     if (Action === "MusicSkip") await this.MusicPlayer.Skip(Session.ChannelId);
 
-    await InteractionValue.reply({ content: Config.MusicControlAppliedMessage, ephemeral: true });
+    await InteractionValue.reply({ content: Config.MusicControlAppliedMessage, flags: MessageFlags.Ephemeral });
     await this.SendControlPanel(Channel, Session, Config, InteractionValue);
   }
 
@@ -1150,7 +1151,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Request = RequestId ? this.MusicRequests.get(RequestId) : null;
 
     if (!Request || Request.ChannelId !== Session.ChannelId || Request.GuildId !== Session.GuildId) {
-      await InteractionValue.reply({ content: "This music request is no longer available.", ephemeral: true });
+      await InteractionValue.reply({ content: "This music request is no longer available.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -1162,7 +1163,7 @@ export default class TempVoicePlugin extends BasePlugin {
       });
       await InteractionValue.followUp({
         content: "Music request rejected.",
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
       return;
     }
@@ -1171,7 +1172,7 @@ export default class TempVoicePlugin extends BasePlugin {
     const Config = await this.GetConfig(InteractionValue.guildId);
 
     if (!Channel || Channel.type !== ChannelType.GuildVoice) {
-      await InteractionValue.reply({ content: "Temporary channel not found.", ephemeral: true });
+      await InteractionValue.reply({ content: "Temporary channel not found.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -1201,7 +1202,7 @@ export default class TempVoicePlugin extends BasePlugin {
       });
       await InteractionValue.followUp({
         content: Status,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
       await this.SendControlPanel(Channel, Session, Config);
     } catch (ErrorValue) {
@@ -1226,7 +1227,7 @@ export default class TempVoicePlugin extends BasePlugin {
       });
       await InteractionValue.followUp({
         content: `Music request failed: ${ErrorMessage}`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }
@@ -1772,7 +1773,7 @@ export default class TempVoicePlugin extends BasePlugin {
       return true;
     }
 
-    await InteractionValue.reply({ content: "Only the current room owner can use this control.", ephemeral: true });
+    await InteractionValue.reply({ content: "Only the current room owner can use this control.", flags: MessageFlags.Ephemeral });
     return false;
   }
 

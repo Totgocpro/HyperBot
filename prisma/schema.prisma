@@ -145,6 +145,17 @@ model UserPluginValue {
   @@index([BotId, GuildId, UserId])
 }
 
+model PinnedGuild {
+  Id        String   @id @default(cuid())
+  UserId    String
+  GuildId   String
+  GuildName String
+  CreatedAt DateTime @default(now())
+
+  @@unique([UserId, GuildId])
+  @@index([UserId])
+}
+
 model SystemSetting {
   Key       String   @id
   Value     Json
