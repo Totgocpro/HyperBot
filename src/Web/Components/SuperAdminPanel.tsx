@@ -4,7 +4,7 @@ import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type Re
 import type { HealthReport, SettingsField } from "../../Core/Types";
 import { CustomSelect } from "./CustomSelect";
 
-type AdminSection = "GeneralStatus" | "ConfigTransfer" | "UserManagement" | "AuditLogs";
+type AdminSection = "GeneralStatus" | "ConfigTransfer" | "UserManagement" | "CustomPlugins" | "AuditLogs";
 
 type DashboardUserRow = {
   Id: string;
@@ -47,6 +47,15 @@ type BotAccessScope = {
   Guilds: AdminGuildRow[];
   Plugins: GrantPlugin[];
   Grants: GuildGrantRow[];
+};
+
+type CustomPluginRow = {
+  Id: string;
+  DisplayName: string;
+  Version: string;
+  Author: string;
+  Description: string;
+  Category: string;
 };
 
 type AuditLogRow = {
@@ -110,6 +119,7 @@ const AdminSections: Array<{ Id: AdminSection; Label: string; Description: strin
   { Id: "GeneralStatus", Label: "General and status", Description: "Instance health and quick metrics." },
   { Id: "ConfigTransfer", Label: "Config export/import", Description: "Move every saved configuration as JSON." },
   { Id: "UserManagement", Label: "User Management", Description: "Accounts, roles, bans, and access." },
+  { Id: "CustomPlugins", Label: "Custom Plugins", Description: "Import, manage, and delete custom plugins." },
   { Id: "AuditLogs", Label: "Logs", Description: "Audit trail, login IPs, and filters." }
 ];
 
@@ -131,7 +141,10 @@ export function SuperAdminPanel() {
   const [ImportReplaceExisting, SetImportReplaceExisting] = UseState(false);
   const [ImportFileName, SetImportFileName] = UseState("");
   const [Status, SetStatus] = UseState("Loading admin panel...");
+  const [CustomPlugins, SetCustomPlugins] = UseState<CustomPluginRow[]>([]);
+  const [CustomPluginDeleteId, SetCustomPluginDeleteId] = UseState("");
   const ImportInputRef = UseRef<HTMLInputElement | null>(null);
+  const CustomPluginImportRef = UseRef<HTMLInputElement | null>(null);
   const SelectedUser = Users.find((User) => User.DiscordId === SelectedUserDiscordId) ?? Users[0];
 
   UseEffect(() => {
@@ -141,6 +154,10 @@ export function SuperAdminPanel() {
   UseEffect(() => {
     if (ActiveSection === "AuditLogs") {
       void LoadAuditLogs();
+    }
+
+    if (ActiveSection === "CustomPlugins") {
+      void LoadCustomPlugins();
     }
   }, [ActiveSection]);
 
@@ -190,6 +207,61 @@ export function SuperAdminPanel() {
       SetStatus("Admin data loaded.");
     } catch (ErrorValue) {
       SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Admin data loading failed.");
+    }
+  }
+
+  async function LoadCustomPlugins(): Promise<void> {
+    try {
+      const Response = await fetch("/api/admin/custom-plugins");
+
+      if (!Response.ok) {
+        SetStatus(await Response.text());
+        return;
+      }
+
+      const Payload = (await Response.json()) as { Plugins: CustomPluginRow[] };
+      SetCustomPlugins(Payload.Plugins);
+    } catch (ErrorValue) {
+      SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Failed to load custom plugins.");
+    }
+  }
+
+  async function ImportCustomPlugin(FileValue: File | null): Promise<void> {
+    if (!FileValue) {
+      return;
+    }
+
+    const UploadForm = new FormData();
+    UploadForm.append("plugin", FileValue);
+
+    try {
+      const Response = await fetch("/api/admin/custom-plugins", {
+        method: "POST",
+        body: UploadForm
+      });
+
+      SetStatus(Response.ok ? "Plugin imported." : await Response.text());
+      await LoadCustomPlugins();
+    } catch (ErrorValue) {
+      SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Import failed.");
+    } finally {
+      if (CustomPluginImportRef.current) {
+        CustomPluginImportRef.current.value = "";
+      }
+    }
+  }
+
+  async function DeleteCustomPlugin(PluginId: string): Promise<void> {
+    try {
+      const Response = await fetch(`/api/admin/custom-plugins?pluginId=${encodeURIComponent(PluginId)}`, {
+        method: "DELETE"
+      });
+
+      SetStatus(Response.ok ? "Plugin deleted." : await Response.text());
+      SetCustomPluginDeleteId("");
+      await LoadCustomPlugins();
+    } catch (ErrorValue) {
+      SetStatus(ErrorValue instanceof Error ? ErrorValue.message : "Delete failed.");
     }
   }
 
@@ -512,6 +584,17 @@ export function SuperAdminPanel() {
               SetSelectedUserDiscordId={SetSelectedUserDiscordId}
               Users={Users}
               CreateUser={CreateUser}
+            />
+          ) : null}
+
+          {ActiveSection === "CustomPlugins" ? (
+            <CustomPluginsPanel
+              CustomPlugins={CustomPlugins}
+              CustomPluginDeleteId={CustomPluginDeleteId}
+              CustomPluginImportRef={CustomPluginImportRef}
+              DeleteCustomPlugin={DeleteCustomPlugin}
+              ImportCustomPlugin={ImportCustomPlugin}
+              SetCustomPluginDeleteId={SetCustomPluginDeleteId}
             />
           ) : null}
 
@@ -961,6 +1044,100 @@ function UserManagementPanel(Properties: {
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function CustomPluginsPanel(Properties: {
+  CustomPlugins: CustomPluginRow[];
+  CustomPluginDeleteId: string;
+  CustomPluginImportRef: Ref<HTMLInputElement>;
+  DeleteCustomPlugin: (PluginId: string) => Promise<void>;
+  ImportCustomPlugin: (FileValue: File | null) => Promise<void>;
+  SetCustomPluginDeleteId: (Value: string) => void;
+}) {
+  return (
+    <section className="rounded-[2rem] border border-slate-800 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-[0.35em] text-blue-300">Custom Plugins</p>
+          <h2 className="mt-3 text-2xl font-black text-white sm:text-3xl">Plugin management</h2>
+          <p className="mt-2 max-w-3xl text-sm text-slate-400">
+            Import third-party plugins as zip archives or remove custom plugins.
+          </p>
+        </div>
+      </div>
+
+      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5">
+        <h3 className="text-xl font-black text-white">Import a plugin</h3>
+        <p className="mt-2 text-sm text-slate-400">
+          Upload a zip file containing a Plugin.json manifest and the plugin source files.
+        </p>
+        <input
+          accept=".zip,application/zip,application/x-zip-compressed"
+          className="mt-4 block w-full text-sm text-slate-300 file:mr-4 file:rounded-2xl file:border-0 file:bg-blue-600 file:px-4 file:py-3 file:text-sm file:font-bold file:text-white hover:file:bg-blue-500"
+          onChange={(Event) => void Properties.ImportCustomPlugin(Event.target.files?.[0] ?? null)}
+          ref={Properties.CustomPluginImportRef}
+          type="file"
+        />
+      </section>
+
+      <section className="mt-6">
+        <h3 className="text-xl font-black text-white">Installed custom plugins</h3>
+        {Properties.CustomPlugins.length === 0 ? (
+          <p className="mt-4 rounded-3xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-400">
+            No custom plugin imported yet.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-4">
+            {Properties.CustomPlugins.map((Plugin) => {
+              const IsDeleting = Properties.CustomPluginDeleteId === Plugin.Id;
+              return (
+                <div className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5" key={Plugin.Id}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-lg font-black text-white">{Plugin.DisplayName}</p>
+                      <p className="mt-1 text-sm text-slate-400">
+                        {Plugin.Id} &middot; v{Plugin.Version} &middot; by {Plugin.Author}
+                      </p>
+                      {Plugin.Category ? <p className="mt-1 text-xs text-slate-500">Category: {Plugin.Category}</p> : null}
+                      {Plugin.Description ? <p className="mt-2 text-sm text-slate-300">{Plugin.Description}</p> : null}
+                    </div>
+                    <div className="shrink-0">
+                      {IsDeleting ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500"
+                            onClick={() => void Properties.DeleteCustomPlugin(Plugin.Id)}
+                            type="button"
+                          >
+                            Confirm delete
+                          </button>
+                          <button
+                            className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800"
+                            onClick={() => Properties.SetCustomPluginDeleteId("")}
+                            type="button"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="rounded-2xl border border-red-500/50 px-4 py-2 text-sm font-bold text-red-300 hover:bg-red-950"
+                          onClick={() => Properties.SetCustomPluginDeleteId(Plugin.Id)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </section>
   );
 }

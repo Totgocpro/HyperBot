@@ -2,7 +2,7 @@ import Path from "node:path";
 import { NextResponse } from "next/server";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { NormalizeGuildEmojiLimits, type GuildEmojiLimits } from "@/src/Core/DiscordLimits";
-import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { ScanAllPluginManifests } from "@/src/Core/PluginScanner";
 import { IsPluginDisabled } from "@/src/Core/PluginState";
 import { PluginScope, SettingsFieldType, type BotEmojiSummary, type DiscordGuildSummary } from "@/src/Core/Types";
 import { CreateAccessControl, RequireDashboardUser } from "@/src/Web/Auth";
@@ -32,8 +32,7 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
     return new Response("Insufficient guild plugin permissions.", { status: 403 });
   }
 
-  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find(
+  const ManifestEntry = (await ScanAllPluginManifests()).find(
     (Entry) => Entry.Manifest.Metadata.Id === Body.PluginId
   );
 

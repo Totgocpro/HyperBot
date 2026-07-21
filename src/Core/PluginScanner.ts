@@ -102,6 +102,22 @@ const PluginManifestSchema = z.object({
   EntryPoint: z.string().min(1)
 });
 
+export const PluginManifestValidator = PluginManifestSchema;
+
+export function GetPluginDirectories(): string[] {
+  const PluginDir = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
+  const CustomPluginDir = Path.resolve(process.env.CUSTOM_PLUGIN_DIRECTORY ?? "CustomPlugins");
+  return [PluginDir, CustomPluginDir];
+}
+
+export async function ScanAllPluginManifests(): Promise<Array<{ Manifest: PluginManifest; Directory: string }>> {
+  const Directories = GetPluginDirectories();
+  const AllResults = await Promise.all(
+    Directories.map((Dir) => ScanPluginManifests(Dir).catch(() => [] as Array<{ Manifest: PluginManifest; Directory: string }>))
+  );
+  return AllResults.flat().sort((First, Second) => First.Manifest.Metadata.DisplayName.localeCompare(Second.Manifest.Metadata.DisplayName));
+}
+
 export async function ScanPluginManifests(PluginDirectory: string): Promise<Array<{ Manifest: PluginManifest; Directory: string }>> {
   const DirectoryEntries = await FileSystem.readdir(PluginDirectory, { withFileTypes: true }).catch(() => []);
   const ManifestEntries = DirectoryEntries.filter((DirectoryEntry) => DirectoryEntry.isDirectory());

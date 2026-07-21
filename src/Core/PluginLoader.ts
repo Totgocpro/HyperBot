@@ -21,7 +21,7 @@ import {
   type VoiceState
 } from "discord.js";
 import { PluginLogger } from "./Logger.js";
-import { ScanPluginManifests } from "./PluginScanner.js";
+import { ScanPluginManifests, ScanAllPluginManifests, GetPluginDirectories } from "./PluginScanner.js";
 import { IsPluginDisabled } from "./PluginState.js";
 import { PluginStorage } from "./Storage.js";
 import { PluginScope } from "./Types.js";
@@ -49,7 +49,7 @@ export class PluginLoader {
   }
 
   public async EnableAll(): Promise<void> {
-    const ManifestEntries = await ScanPluginManifests(this.PluginDirectory);
+    const ManifestEntries = await ScanAllPluginManifests();
 
     for (const ManifestEntry of ManifestEntries) {
       if (ManifestEntry.Manifest.Scope !== PluginScope.Global && await IsPluginDisabled(this.Prisma, this.BotId, ManifestEntry.Manifest.Metadata.Id)) {
@@ -61,7 +61,7 @@ export class PluginLoader {
   }
 
   public async EnablePlugin(PluginId: string): Promise<void> {
-    const ManifestEntry = (await ScanPluginManifests(this.PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === PluginId);
+    const ManifestEntry = (await ScanAllPluginManifests()).find((Entry) => Entry.Manifest.Metadata.Id === PluginId);
 
     if (!ManifestEntry) {
       throw new Error(`Plugin ${PluginId} not found.`);
@@ -83,7 +83,8 @@ export class PluginLoader {
   }
 
   public Watch(): void {
-    const Watcher = Chokidar.watch(this.PluginDirectory, {
+    const Directories = GetPluginDirectories();
+    const Watcher = Chokidar.watch(Directories, {
       ignoreInitial: true,
       depth: 3
     });
@@ -493,7 +494,7 @@ export class PluginLoader {
   }
 
   private async EnablePluginFromDirectory(Directory: string): Promise<void> {
-    const ManifestEntry = (await ScanPluginManifests(this.PluginDirectory)).find(
+    const ManifestEntry = (await ScanAllPluginManifests()).find(
       (Entry) => Path.resolve(Entry.Directory) === Path.resolve(Directory)
     );
 
@@ -547,7 +548,7 @@ export class PluginLoader {
       return;
     }
 
-    const ManifestEntry = (await ScanPluginManifests(this.PluginDirectory)).find(
+    const ManifestEntry = (await ScanAllPluginManifests()).find(
       (Entry) => Path.resolve(Entry.Directory) === Path.resolve(Directory)
     );
 
@@ -564,14 +565,18 @@ export class PluginLoader {
   }
 
   private ResolvePluginDirectory(ChangedPath: string): string | null {
-    const RelativePath = Path.relative(this.PluginDirectory, ChangedPath);
-    const DirectoryName = RelativePath.split(Path.sep)[0];
+    const Directories = GetPluginDirectories();
 
-    if (!DirectoryName || DirectoryName.startsWith("..")) {
-      return null;
+    for (const Dir of Directories) {
+      const RelativePath = Path.relative(Dir, ChangedPath);
+      const DirectoryName = RelativePath.split(Path.sep)[0];
+
+      if (DirectoryName && !DirectoryName.startsWith("..")) {
+        return Path.join(Dir, DirectoryName);
+      }
     }
 
-    return Path.join(this.PluginDirectory, DirectoryName);
+    return null;
   }
 
   private ResolveEntryPoint(Directory: string, EntryPoint: string): string {

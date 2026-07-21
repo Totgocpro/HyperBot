@@ -1,8 +1,7 @@
-import Path from "node:path";
 import { Prisma as PrismaNamespace } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
-import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { ScanPluginManifests, ScanAllPluginManifests } from "@/src/Core/PluginScanner";
 import { GetDisabledPluginIds, SetPluginDisabled } from "@/src/Core/PluginState";
 import { PluginStorage } from "@/src/Core/Storage";
 import { PluginScope } from "@/src/Core/Types";
@@ -32,8 +31,7 @@ async function Get(Request: Request): Promise<Response> {
     return new Response("BotId is required.", { status: 400 });
   }
 
-  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const AllManifestEntries = await ScanPluginManifests(PluginDirectory);
+  const AllManifestEntries = await ScanAllPluginManifests();
   const ManifestEntries = AllManifestEntries.filter((ManifestEntry) => ManifestEntry.Manifest.Scope === PluginScope.Global);
   const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, BotId));
   const BotPluginStates = await GetBotPluginStates(BotId);
@@ -107,8 +105,7 @@ async function Put(Request: Request): Promise<Response> {
     return new Response("PluginId and Values are required.", { status: 400 });
   }
 
-  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
+  const ManifestEntry = (await ScanAllPluginManifests()).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
 
   if (!ManifestEntry || ManifestEntry.Manifest.Scope !== PluginScope.Global) {
     return new Response("Global plugin not found.", { status: 404 });
@@ -156,8 +153,7 @@ async function Post(Request: Request): Promise<Response> {
     return new Response("Unsupported plugin action.", { status: 400 });
   }
 
-  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
-  const ManifestEntry = (await ScanPluginManifests(PluginDirectory)).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
+  const ManifestEntry = (await ScanAllPluginManifests()).find((Entry) => Entry.Manifest.Metadata.Id === Body.PluginId);
 
   if (!ManifestEntry) {
     return new Response("Plugin not found.", { status: 404 });

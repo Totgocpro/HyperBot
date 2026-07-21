@@ -20,6 +20,7 @@
     "@discordjs/voice": "^0.19.2",
     "@napi-rs/canvas": "^0.1.100",
     "@prisma/client": "^5.22.0",
+    "adm-zip": "^0.6.0",
     "chokidar": "^3.6.0",
     "discord-api-types": "0.37.120",
     "discord.js": "^14.16.3",

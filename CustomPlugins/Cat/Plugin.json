@@ -1,0 +1,61 @@
+{
+  "Metadata": {
+    "Id": "Cat",
+    "DisplayName": "Cat",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "CAT"
+  },
+  "Scope": "Guild",
+  "Commands": [
+    {
+      "Name": "cat",
+      "Description": "Send a random cat image.",
+      "Options": [
+        {
+          "Name": "texte",
+          "Description": "Optional text to write on the cat image.",
+          "Type": "String",
+          "Required": false
+        },
+        {
+          "Name": "categorie",
+          "Description": "Optional category or tag, for example cute, orange, gif, dev.",
+          "Type": "String",
+          "Required": false
+        }
+      ]
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "MaxTextLength",
+      "Type": "Number",
+      "Label": "Maximum text length",
+      "Default": 80,
+      "Section": "Behavior"
+    },
+    {
+      "Key": "MaxCategoryLength",
+      "Type": "Number",
+      "Label": "Maximum category length",
+      "Default": 60,
+      "Section": "Behavior"
+    },
+    {
+      "Key": "RequestTimeoutMs",
+      "Type": "Number",
+      "Label": "CATAAS request timeout in milliseconds",
+      "Default": 15000,
+      "Section": "Behavior"
+    },
+    {
+      "Key": "ErrorMessage",
+      "Type": "String",
+      "Label": "Error message",
+      "Default": "Impossible de recuperer une image de chat pour le moment.",
+      "Section": "Messages"
+    }
+  ],
+  "EntryPoint": "./CatPlugin.ts"
+}

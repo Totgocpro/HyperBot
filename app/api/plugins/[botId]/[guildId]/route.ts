@@ -2,7 +2,7 @@ import Path from "node:path";
 import { NextResponse } from "next/server";
 import { EmitPluginChange } from "@/src/Core/PluginChangeBus";
 import { Prisma, RedisClient } from "@/src/Core/Clients";
-import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { ScanPluginManifests, ScanAllPluginManifests } from "@/src/Core/PluginScanner";
 import { GetDisabledPluginIds } from "@/src/Core/PluginState";
 import { PluginStorage } from "@/src/Core/Storage";
 import { SettingsFieldType, PluginScope, type BotChannelSummary, type BotRoleSummary, type DiscordGuildSummary, type SettingsField } from "@/src/Core/Types";
@@ -35,10 +35,9 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
       }
   }
 
-  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
   const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, botId));
   
-  const AllManifestEntries = await ScanPluginManifests(PluginDirectory);
+  const AllManifestEntries = await ScanAllPluginManifests();
   const ManifestEntries = AllManifestEntries.filter((ManifestEntry) => {
       const MatchesScope = IsGlobal 
         ? ManifestEntry.Manifest.Scope === PluginScope.Global 

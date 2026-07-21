@@ -1,7 +1,6 @@
-import Path from "node:path";
 import { NextResponse } from "next/server";
 import { Prisma } from "@/src/Core/Clients";
-import { ScanPluginManifests } from "@/src/Core/PluginScanner";
+import { ScanAllPluginManifests } from "@/src/Core/PluginScanner";
 import { GetDisabledPluginIds } from "@/src/Core/PluginState";
 import { PluginScope } from "@/src/Core/Types";
 import { RequireSuperAdmin } from "@/src/Web/Auth";
@@ -20,9 +19,8 @@ async function Get(Request: Request): Promise<Response> {
     return new Response("BotId is required.", { status: 400 });
   }
 
-  const PluginDirectory = Path.resolve(process.env.PLUGIN_DIRECTORY ?? "Plugins");
   const DisabledPluginIds = new Set(await GetDisabledPluginIds(Prisma, BotId));
-  const Plugins = (await ScanPluginManifests(PluginDirectory))
+  const Plugins = (await ScanAllPluginManifests())
     .filter((Entry) => Entry.Manifest.Scope === PluginScope.Guild && !DisabledPluginIds.has(Entry.Manifest.Metadata.Id))
     .map((Entry) => ({
       Id: Entry.Manifest.Metadata.Id,
