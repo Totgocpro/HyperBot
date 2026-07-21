@@ -28,6 +28,16 @@ export type PluginConfigSection = {
   Id: string;
   Label: string;
   Fields: Array<SettingsField & { Value: unknown }>;
+  Collapsible: boolean;
+  DefaultCollapsed: boolean;
+  Group?: string;
+};
+
+export type PluginConfigGroup = {
+  Label: string;
+  Collapsible: boolean;
+  DefaultCollapsed: boolean;
+  Sections: PluginConfigSection[];
 };
 
 export type EditableEmbedField = {
@@ -71,17 +81,61 @@ export function BuildConfigSections(Plugin: DashboardPlugin, Values: Record<stri
 
     if (ExistingSection) {
       ExistingSection.Fields.push(Field);
+      if (Field.Collapsible) {
+        ExistingSection.Collapsible = true;
+      }
+      if (Field.DefaultCollapsed && !ExistingSection.DefaultCollapsed) {
+        ExistingSection.DefaultCollapsed = true;
+      }
+      if (Field.Group && !ExistingSection.Group) {
+        ExistingSection.Group = Field.Group;
+      }
       continue;
     }
 
     Sections.set(Id, {
       Id,
       Label,
-      Fields: [Field]
+      Fields: [Field],
+      Collapsible: Field.Collapsible ?? false,
+      DefaultCollapsed: Field.DefaultCollapsed ?? false,
+      Group: Field.Group
     });
   }
 
   return Array.from(Sections.values());
+}
+
+export function BuildConfigGroups(Sections: PluginConfigSection[]): Array<PluginConfigSection | PluginConfigGroup> {
+  const Groups = new Map<string, PluginConfigSection[]>();
+  const Ungrouped: PluginConfigSection[] = [];
+
+  for (const Section of Sections) {
+    if (Section.Group) {
+      const Existing = Groups.get(Section.Group);
+      if (Existing) {
+        Existing.push(Section);
+      } else {
+        Groups.set(Section.Group, [Section]);
+      }
+    } else {
+      Ungrouped.push(Section);
+    }
+  }
+
+  const Result: Array<PluginConfigSection | PluginConfigGroup> = [...Ungrouped];
+
+  for (const [Label, GroupSections] of Groups) {
+    const AnyCollapsible = GroupSections.some((S) => S.Collapsible);
+    Result.push({
+      Label,
+      Collapsible: true,
+      DefaultCollapsed: true,
+      Sections: GroupSections
+    });
+  }
+
+  return Result;
 }
 
 export function IsFieldVisible(Field: SettingsField, Values: Record<string, unknown>): boolean {

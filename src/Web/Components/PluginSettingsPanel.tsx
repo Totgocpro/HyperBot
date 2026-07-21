@@ -5,11 +5,14 @@ import { useEffect as UseEffect, useRef as UseRef, useState as UseState } from "
 import type { BotGuildSummary } from "../../Core/Types";
 import {
   BuildConfigSections,
+  BuildConfigGroups,
   IsFieldVisible,
   AnimatedVisibility,
   RenderField,
   type DashboardPlugin,
-  type BotPreviewIdentity
+  type BotPreviewIdentity,
+  type PluginConfigSection,
+  type PluginConfigGroup
 } from "./PluginInterfaceRenderer";
 import { BuildGuildHeaders } from "./PluginSettings/PluginSettingsShared";
 import { BackupsManager, DashboardElementRenderer, SendEmbedEditor, StatisticsEditor } from "./PluginSettings/PluginSettingsDataEditors";
@@ -46,6 +49,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
   const SelectedPlugin = Plugins.find((Plugin) => Plugin.Metadata.Id === SelectedPluginId) ?? Plugins[0];
   const SelectedPluginDraftValues = SelectedPlugin ? DraftValues[SelectedPlugin.Metadata.Id] ?? {} : {};
   const ConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin) : [];
+  const ConfigGroups = ConfigSections.length > 0 ? BuildConfigGroups(ConfigSections) : [];
   const VisibleConfigSections = SelectedPlugin ? BuildConfigSections(SelectedPlugin, SelectedPluginDraftValues, true) : [];
   const HasDashboardOverview = Boolean(SelectedPlugin?.DashboardElements?.length);
   const SelectedPluginHasUnsavedChanges = SelectedPlugin ? HasPluginUnsavedChanges(SelectedPlugin, DraftValues) : false;
@@ -547,30 +551,39 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       </div>
                     </section>
                   ) : null}
-                  {ConfigSections.map((Section) => {
-                    const SectionVisible = Section.Fields.some((Field) => IsFieldVisible(Field, SelectedPluginDraftValues));
+                  {ConfigGroups.map((Entry) => {
+                    if ("Sections" in Entry) {
+                      return (
+                        <ConfigGroup
+                          BotId={Properties.BotId}
+                          BotIdentity={BotIdentity}
+                          CreateChannel={CreateChannel}
+                          CreateRole={CreateRole}
+                          DraftValues={DraftValues}
+                          Group={Entry}
+                          GuildId={Properties.GuildId}
+                          key={`group-${Entry.Label}`}
+                          PluginId={SelectedPlugin.Metadata.Id}
+                          SetStatus={SetStatus}
+                          UpdateDraftValue={UpdateDraftValue}
+                        />
+                      );
+                    }
 
                     return (
-                      <AnimatedVisibility
-                        ClassName="scroll-mt-28"
-                        Id={`plugin-section-${Section.Id}`}
-                        IsVisible={SectionVisible}
-                        key={Section.Id}
-                      >
-                        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 lg:rounded-[2rem] lg:bg-slate-950/40 lg:p-5">
-                          <div className="mb-4">
-                            <p className="hidden text-xs font-bold uppercase tracking-[0.3em] text-blue-300 lg:block">Configuration</p>
-                            <h3 className="text-lg font-black text-white lg:mt-2 lg:text-2xl">{Section.Label}</h3>
-                          </div>
-                          <div className="grid gap-4">
-                            {Section.Fields.map((Field) => (
-                              <AnimatedVisibility IsVisible={IsFieldVisible(Field, SelectedPluginDraftValues)} key={Field.Key}>
-                                {RenderField(Properties.BotId, Properties.GuildId, SelectedPlugin.Metadata.Id, Field, DraftValues, UpdateDraftValue, SetStatus, CreateRole, CreateChannel, BotIdentity)}
-                              </AnimatedVisibility>
-                            ))}
-                          </div>
-                        </section>
-                      </AnimatedVisibility>
+                      <ConfigSection
+                        BotId={Properties.BotId}
+                        BotIdentity={BotIdentity}
+                        CreateChannel={CreateChannel}
+                        CreateRole={CreateRole}
+                        DraftValues={DraftValues}
+                        GuildId={Properties.GuildId}
+                        key={Entry.Id}
+                        PluginId={SelectedPlugin.Metadata.Id}
+                        Section={Entry}
+                        SetStatus={SetStatus}
+                        UpdateDraftValue={UpdateDraftValue}
+                      />
                     );
                   })}
                     </>
@@ -594,6 +607,105 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
         />
       ) : null}
     </main>
+  );
+}
+
+function ConfigGroup(Properties: {
+  BotId: string;
+  BotIdentity: BotPreviewIdentity | null;
+  CreateChannel: (Name: string) => Promise<string | null>;
+  CreateRole: (Name: string, Color: string) => Promise<string | null>;
+  DraftValues: Record<string, Record<string, unknown>>;
+  Group: PluginConfigGroup;
+  GuildId: string;
+  PluginId: string;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const [IsCollapsed, SetCollapsed] = UseState(Properties.Group.DefaultCollapsed);
+
+  return (
+    <section className="rounded-2xl border border-indigo-500/30 bg-slate-900/90 p-4 lg:rounded-[2rem] lg:p-6">
+      <button
+        className="flex w-full items-center justify-between text-left"
+        onClick={() => SetCollapsed(!IsCollapsed)}
+        type="button"
+      >
+        <h3 className="flex items-center gap-2 text-lg font-black text-indigo-300 lg:text-xl">
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M12 6v12M6 12h12" />
+          </svg>
+          {Properties.Group.Label}
+        </h3>
+        <svg
+          className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${IsCollapsed ? "" : "rotate-180"}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path d="M6 15l6-6 6 6" />
+        </svg>
+      </button>
+      {!IsCollapsed ? (
+        <div className="mt-4 grid gap-3 border-t border-indigo-500/20 pt-4">
+          {Properties.Group.Sections.map((Section) => (
+            <ConfigSection
+              BotId={Properties.BotId}
+              BotIdentity={Properties.BotIdentity}
+              CreateChannel={Properties.CreateChannel}
+              CreateRole={Properties.CreateRole}
+              DraftValues={Properties.DraftValues}
+              GuildId={Properties.GuildId}
+              key={Section.Id}
+              PluginId={Properties.PluginId}
+              Section={Section}
+              SetStatus={Properties.SetStatus}
+              UpdateDraftValue={Properties.UpdateDraftValue}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ConfigSection(Properties: {
+  BotId: string;
+  BotIdentity: BotPreviewIdentity | null;
+  CreateChannel: (Name: string) => Promise<string | null>;
+  CreateRole: (Name: string, Color: string) => Promise<string | null>;
+  DraftValues: Record<string, Record<string, unknown>>;
+  GuildId: string;
+  PluginId: string;
+  Section: PluginConfigSection;
+  SetStatus: (Status: string) => void;
+  UpdateDraftValue: (PluginId: string, Key: string, Value: unknown) => void;
+}) {
+  const Section = Properties.Section;
+  const PluginValues = Properties.DraftValues[Properties.PluginId] ?? {};
+  const SectionVisible = Section.Fields.some((Field) => IsFieldVisible(Field, PluginValues));
+
+  return (
+    <AnimatedVisibility
+      ClassName="scroll-mt-28"
+      Id={`plugin-section-${Section.Id}`}
+      IsVisible={SectionVisible}
+    >
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 lg:rounded-[2rem] lg:p-5">
+        <div className="mb-4">
+          <p className="hidden text-xs font-bold uppercase tracking-[0.3em] text-blue-300 lg:block">Configuration</p>
+          <h3 className="text-base font-black text-white lg:mt-2 lg:text-lg">{Section.Label}</h3>
+        </div>
+        <div className="grid gap-4">
+          {Section.Fields.map((Field) => (
+            <AnimatedVisibility IsVisible={IsFieldVisible(Field, PluginValues)} key={Field.Key}>
+              {RenderField(Properties.BotId, Properties.GuildId, Properties.PluginId, Field, Properties.DraftValues, Properties.UpdateDraftValue, Properties.SetStatus, Properties.CreateRole, Properties.CreateChannel, Properties.BotIdentity)}
+            </AnimatedVisibility>
+          ))}
+        </div>
+      </section>
+    </AnimatedVisibility>
   );
 }
 

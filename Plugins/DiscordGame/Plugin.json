@@ -99,6 +99,7 @@
       "Key": "MinesweeperTitle",
       "Type": "String",
       "Label": "Minesweeper title",
+      "Group": "Minesweeper",
       "Default": "Minesweeper - %difficulty%",
       "Section": "Minesweeper"
     },
@@ -148,6 +149,7 @@
       "Key": "MinesweeperColor",
       "Type": "String",
       "Label": "Active embed color",
+      "Group": "Minesweeper",
       "Default": "#5865f2",
       "Section": "Minesweeper design"
     },
@@ -176,6 +178,7 @@
       "Key": "HiddenTileEmoji",
       "Type": "String",
       "Label": "Hidden tile label",
+      "Group": "Minesweeper",
       "Default": "​",
       "Section": "Minesweeper emojis"
     },
@@ -214,6 +217,7 @@
       "Key": "TicTacToeTitle",
       "Type": "String",
       "Label": "Tic-Tac-Toe title",
+      "Group": "Tic-Tac-Toe",
       "Default": "Tic-Tac-Toe - %difficulty%",
       "Section": "Tic-Tac-Toe"
     },
@@ -263,6 +267,7 @@
       "Key": "TicTacToeColor",
       "Type": "String",
       "Label": "Active embed color",
+      "Group": "Tic-Tac-Toe",
       "Default": "#5865f2",
       "Section": "Tic-Tac-Toe design"
     },
@@ -298,6 +303,7 @@
       "Key": "TicTacToePlayerEmoji",
       "Type": "String",
       "Label": "Player emoji",
+      "Group": "Tic-Tac-Toe",
       "Default": "❌",
       "Section": "Tic-Tac-Toe emojis"
     },
@@ -319,6 +325,7 @@
       "Key": "LoveTitle",
       "Type": "String",
       "Label": "Love embed title",
+      "Group": "Love",
       "Default": "%name1% + %name2%",
       "Section": "Love"
     },
@@ -333,6 +340,7 @@
       "Key": "LoveImageTitle",
       "Type": "String",
       "Label": "Love image title",
+      "Group": "Love",
       "Default": "Love meter",
       "Section": "Love image"
     },
@@ -347,6 +355,7 @@
       "Key": "LoveLowMessages",
       "Type": "List",
       "Label": "Low compatibility messages",
+      "Group": "Love",
       "Default": [
         "%user1% and %user2% are better as chaotic friends.",
         "%user1% and %user2% need a little more magic."
@@ -391,6 +400,7 @@
       "Key": "LoveLowColor",
       "Type": "String",
       "Label": "Low compatibility color",
+      "Group": "Love",
       "Default": "#64748b",
       "Section": "Love design"
     },
@@ -419,6 +429,7 @@
       "Key": "AskYesTitle",
       "Type": "String",
       "Label": "AskYes embed title",
+      "Group": "AskYes",
       "Default": "Ask Yes",
       "Section": "AskYes"
     },
@@ -433,6 +444,7 @@
       "Key": "AskYesImageTitle",
       "Type": "String",
       "Label": "AskYes image title",
+      "Group": "AskYes",
       "Default": "The answer is...",
       "Section": "AskYes image"
     },
@@ -454,6 +466,7 @@
       "Key": "AskYesYesColor",
       "Type": "String",
       "Label": "Yes color",
+      "Group": "AskYes",
       "Default": "#22c55e",
       "Section": "AskYes design"
     },

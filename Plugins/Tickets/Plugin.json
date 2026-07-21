@@ -16,6 +16,7 @@
       "Key": "PanelChannelId",
       "Type": "ChannelPicker",
       "Label": "Ticket panel channel",
+      "Group": "Tickets",
       "Default": "",
       "Section": "Panel",
       "SupportedChannelTypes": [
@@ -58,6 +59,7 @@
       "Key": "TicketCategoryId",
       "Type": "ChannelPicker",
       "Label": "Ticket category",
+      "Group": "Tickets",
       "Default": "",
       "Section": "Tickets",
       "SupportedChannelTypes": [
@@ -145,6 +147,7 @@
       "Key": "SaveTranscriptOnClose",
       "Type": "Boolean",
       "Label": "Send transcript when closing",
+      "Group": "Logs",
       "Default": true,
       "Section": "Transcripts"
     },
@@ -159,6 +162,7 @@
       "Key": "LogChannelId",
       "Type": "ChannelPicker",
       "Label": "Ticket log channel",
+      "Group": "Logs",
       "Default": "",
       "Section": "Logging",
       "SupportedChannelTypes": [

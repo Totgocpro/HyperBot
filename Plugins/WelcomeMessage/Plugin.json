@@ -16,6 +16,7 @@
       "Key": "WelcomeEnabled",
       "Type": "Boolean",
       "Label": "Enable welcome messages",
+      "Group": "Welcome",
       "Default": true,
       "Section": "Welcome"
     },
@@ -53,6 +54,7 @@
       "Key": "WelcomeTitle",
       "Type": "String",
       "Label": "Welcome title",
+      "Group": "Welcome",
       "Default": "Welcome %user%",
       "Section": "Welcome image",
       "VisibleWhen": {
@@ -75,6 +77,7 @@
       "Key": "WelcomeEmbed",
       "Type": "EmbedEditor",
       "Label": "Welcome embed",
+      "Group": "Welcome",
       "Description": "Available tags: %user%, %mention%, %server%, %memberCount%.",
       "Default": {
         "Name": "Welcome embed",
@@ -111,6 +114,7 @@
       "Key": "LeaveEnabled",
       "Type": "Boolean",
       "Label": "Enable leave messages",
+      "Group": "Leave",
       "Default": true,
       "Section": "Leave"
     },
@@ -148,6 +152,7 @@
       "Key": "LeaveTitle",
       "Type": "String",
       "Label": "Leave title",
+      "Group": "Leave",
       "Default": "%user% left the server",
       "Section": "Leave image",
       "VisibleWhen": {
@@ -170,6 +175,7 @@
       "Key": "LeaveEmbed",
       "Type": "EmbedEditor",
       "Label": "Leave embed",
+      "Group": "Leave",
       "Description": "Available tags: %user%, %mention%, %server%, %memberCount%.",
       "Default": {
         "Name": "Leave embed",
@@ -198,6 +204,7 @@
       "Key": "ImageBackground",
       "Type": "String",
       "Label": "Fallback image background color",
+      "Group": "Image",
       "Default": "#020617",
       "Section": "Image background",
       "VisibleWhenAny": [
@@ -319,6 +326,7 @@
       "Key": "ImageAccent",
       "Type": "String",
       "Label": "Image accent",
+      "Group": "Image",
       "Default": "#38bdf8",
       "Section": "Image design",
       "VisibleWhenAny": [
@@ -404,6 +412,7 @@
       "Key": "ImageFooter",
       "Type": "String",
       "Label": "Image footer",
+      "Group": "Image",
       "Default": "%server% • %memberCount% members",
       "Section": "Image text",
       "VisibleWhenAny": [
@@ -506,6 +515,7 @@
       "Key": "ImageAvatarStyle",
       "Type": "Select",
       "Label": "Avatar shape",
+      "Group": "Image",
       "Default": "Circle",
       "Section": "Image avatar",
       "Options": [
@@ -578,6 +588,7 @@
       "Key": "CaptchaEnabled",
       "Type": "Boolean",
       "Label": "Enable captcha verification",
+      "Group": "Captcha",
       "Default": false,
       "Section": "Captcha"
     },
@@ -614,6 +625,7 @@
       "Key": "CaptchaEmbed",
       "Type": "EmbedEditor",
       "Label": "Captcha embed",
+      "Group": "Captcha",
       "Description": "Public verification embed. Available tags: %user%, %mention%, %server%, %memberCount%, %id%, %avatar%.",
       "Default": {
         "Name": "Captcha embed",
@@ -664,6 +676,7 @@
       "Key": "CaptchaDmMessage",
       "Type": "String",
       "Label": "Captcha DM message",
+      "Group": "Captcha",
       "Default": "Verification level %level%/%levels%. Enter the code shown in the image.",
       "Section": "Captcha messages",
       "VisibleWhen": {

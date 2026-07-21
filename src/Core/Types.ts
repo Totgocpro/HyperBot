@@ -72,6 +72,9 @@ export type SettingsField = {
   Default: string | number | boolean | unknown[] | Record<string, unknown> | null;
   Description?: string;
   Section?: string;
+  Group?: string;
+  Collapsible?: boolean;
+  DefaultCollapsed?: boolean;
   Required?: boolean;
   ButtonLabel?: string;
   ActionKey?: string;

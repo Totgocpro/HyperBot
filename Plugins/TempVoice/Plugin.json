@@ -97,6 +97,7 @@
       "Key": "MusicButtonPlayLabel",
       "Type": "String",
       "Label": "Play button label",
+      "Group": "Music",
       "Default": "Play music",
       "Section": "Music"
     },
@@ -160,6 +161,7 @@
       "Key": "MusicAskSubmittedMessage",
       "Type": "String",
       "Label": "Ask music submitted message",
+      "Group": "Music",
       "Default": "Music request sent to the room owner.",
       "Section": "Music messages"
     },
@@ -167,6 +169,7 @@
       "Key": "MusicPanelEnabled",
       "Type": "Boolean",
       "Label": "Enable now playing image panel",
+      "Group": "Music",
       "Default": true,
       "Section": "Music panel",
       "Description": "When music is playing, Temp Voice posts a private room message with a generated player image and edits it every 3.5 seconds."
@@ -188,6 +191,7 @@
       "Key": "MusicYoutubeAccountMode",
       "Type": "Select",
       "Label": "YouTube account linking",
+      "Group": "Music",
       "Default": "Environment",
       "Section": "Music account",
       "Description": "Choose how Temp Voice authenticates YouTube extraction. Nothing from this setting is shown in Discord.",
@@ -303,6 +307,7 @@
       "Key": "TTSEnabled",
       "Type": "Boolean",
       "Label": "Enable public TTS button",
+      "Group": "TTS",
       "Default": true,
       "Section": "TTS"
     },
@@ -375,6 +380,7 @@
       "Key": "TTSStartedMessage",
       "Type": "String",
       "Label": "TTS started message",
+      "Group": "TTS",
       "Default": "TTS started.",
       "Section": "TTS messages",
       "VisibleWhenAny": [
