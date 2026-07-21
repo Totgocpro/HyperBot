@@ -122,6 +122,7 @@ export type PluginManifest = {
   Help?: PluginHelpInfo;
   Category?: string;
   Dependencies?: string[];
+  NpmDependencies?: string[];
   Commands: CommandDefinition[];
   WebInterface: SettingsField[];
   DashboardElements?: DashboardElement[];

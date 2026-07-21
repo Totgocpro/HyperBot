@@ -4,6 +4,7 @@ import AdmZip from "adm-zip";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { ScanPluginManifests, PluginManifestValidator } from "@/src/Core/PluginScanner";
+import { InstallDependencies, GetOrphanedDependencies, UninstallDependencies } from "@/src/Core/NpmManager";
 import { RequireSuperAdmin } from "@/src/Web/Auth";
 
 const CustomPluginDirectory = Path.resolve(process.env.CUSTOM_PLUGIN_DIRECTORY ?? "CustomPlugins");
@@ -112,17 +113,29 @@ async function Post(Request: Request): Promise<Response> {
     await FileSystem.writeFile(OutputPath, Entry.getData());
   }
 
+  const NpmDeps = ValidManifest.NpmDependencies ?? [];
+
+  if (NpmDeps.length > 0) {
+    try {
+      await InstallDependencies(NpmDeps, PluginId);
+    } catch (Error) {
+      await FileSystem.rm(PluginDirectory, { recursive: true, force: true });
+      return new Response((Error as Error).message, { status: 500 });
+    }
+  }
+
   await PrismaAuditLog({
     ActorId,
     Action: "CustomPluginImported",
     Target: PluginId,
     Metadata: {
       DisplayName: ValidManifest.Metadata.DisplayName,
-      Version: ValidManifest.Metadata.Version
+      Version: ValidManifest.Metadata.Version,
+      NpmDependencies: NpmDeps
     }
   }).catch(() => undefined);
 
-  return NextResponse.json({ PluginId, Imported: true });
+  return NextResponse.json({ PluginId, Imported: true, NpmDependenciesInstalled: NpmDeps });
 }
 
 async function Del(Request: Request): Promise<Response> {
@@ -149,15 +162,26 @@ async function Del(Request: Request): Promise<Response> {
     return new Response("Plugin not found.", { status: 404 });
   }
 
+  const OrphanedDeps = await GetOrphanedDependencies(PluginId);
+
   await FileSystem.rm(PluginDirectory, { recursive: true, force: true });
+
+  if (OrphanedDeps.length > 0) {
+    try {
+      await UninstallDependencies(OrphanedDeps, PluginId);
+    } catch {
+      // Best-effort: plugin is already removed, non-critical
+    }
+  }
 
   await PrismaAuditLog({
     ActorId,
     Action: "CustomPluginDeleted",
-    Target: PluginId
+    Target: PluginId,
+    Metadata: OrphanedDeps.length > 0 ? { NpmDependenciesUninstalled: OrphanedDeps } : undefined
   }).catch(() => undefined);
 
-  return NextResponse.json({ PluginId, Deleted: true });
+  return NextResponse.json({ PluginId, Deleted: true, NpmDependenciesUninstalled: OrphanedDeps.length > 0 ? OrphanedDeps : undefined });
 }
 
 async function PrismaAuditLog(Data: { ActorId: string; Action: string; Target: string; Metadata?: Record<string, unknown> }) {

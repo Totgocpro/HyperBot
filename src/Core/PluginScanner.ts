@@ -62,6 +62,7 @@ const PluginManifestSchema = z.object({
   Help: PluginHelpSchema.optional(),
   Category: z.string().min(1).optional(),
   Dependencies: z.array(z.string().min(1)).optional(),
+  NpmDependencies: z.array(z.string().min(1)).optional(),
   Commands: z.array(
     z.object({
       Name: z.string().min(1),
