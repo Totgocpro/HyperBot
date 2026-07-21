@@ -17,7 +17,8 @@ async function Get(): Promise<Response> {
     Version: Entry.Manifest.Metadata.Version,
     Author: Entry.Manifest.Metadata.Author,
     Description: Entry.Manifest.Help?.Description ?? "",
-    Category: Entry.Manifest.Category ?? ""
+    Category: Entry.Manifest.Category ?? "",
+    Icon: Entry.Manifest.Metadata.Icon
   }));
 
   return NextResponse.json({ Plugins });
@@ -83,6 +84,19 @@ async function Post(Request: Request): Promise<Response> {
 
   if (ExistingPlugin) {
     return new Response(`Plugin "${PluginId}" already exists. Delete it first or rename the plugin.`, { status: 409 });
+  }
+
+    const IconValue = ValidManifest.Metadata.Icon;
+
+  if (IconValue.endsWith(".svg") || IconValue.endsWith(".png")) {
+    const IconNormalized = IconValue.replace(/^\.\//u, "");
+    const IconEntry = ZipEntries.find((Entry) =>
+      !Entry.isDirectory && (Entry.entryName.endsWith(IconNormalized) || Entry.entryName.endsWith(`/${IconNormalized}`))
+    );
+
+    if (!IconEntry) {
+      return new Response(`Icon file "${IconValue}" not found in the zip archive.`, { status: 400 });
+    }
   }
 
   const EntryPointNormalized = ValidManifest.EntryPoint.replace(/^\.\//u, "");

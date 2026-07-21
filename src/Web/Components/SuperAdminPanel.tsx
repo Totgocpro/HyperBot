@@ -3,6 +3,7 @@
 import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type Ref } from "react";
 import type { HealthReport, SettingsField } from "../../Core/Types";
 import { CustomSelect } from "./CustomSelect";
+import { PluginIcon } from "./PluginIcon";
 
 type AdminSection = "GeneralStatus" | "ConfigTransfer" | "UserManagement" | "CustomPlugins" | "AuditLogs";
 
@@ -56,6 +57,7 @@ type CustomPluginRow = {
   Author: string;
   Description: string;
   Category: string;
+  Icon: string;
 };
 
 type AuditLogRow = {
@@ -1095,13 +1097,16 @@ function CustomPluginsPanel(Properties: {
               return (
                 <div className="rounded-3xl border border-slate-800 bg-slate-950 p-4 sm:p-5" key={Plugin.Id}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-lg font-black text-white">{Plugin.DisplayName}</p>
-                      <p className="mt-1 text-sm text-slate-400">
-                        {Plugin.Id} &middot; v{Plugin.Version} &middot; by {Plugin.Author}
-                      </p>
-                      {Plugin.Category ? <p className="mt-1 text-xs text-slate-500">Category: {Plugin.Category}</p> : null}
-                      {Plugin.Description ? <p className="mt-2 text-sm text-slate-300">{Plugin.Description}</p> : null}
+                    <div className="flex min-w-0 items-start gap-3">
+                      <PluginIcon ClassName="mt-1 h-8 w-8 shrink-0 rounded-xl bg-white/10 text-sm font-black" Icon={Plugin.Icon} PluginId={Plugin.Id} />
+                      <div>
+                        <p className="text-lg font-black text-white">{Plugin.DisplayName}</p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {Plugin.Id} &middot; v{Plugin.Version} &middot; by {Plugin.Author}
+                        </p>
+                        {Plugin.Category ? <p className="mt-1 text-xs text-slate-500">Category: {Plugin.Category}</p> : null}
+                        {Plugin.Description ? <p className="mt-2 text-sm text-slate-300">{Plugin.Description}</p> : null}
+                      </div>
                     </div>
                     <div className="shrink-0">
                       {IsDeleting ? (

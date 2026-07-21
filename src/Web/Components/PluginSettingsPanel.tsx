@@ -14,6 +14,7 @@ import {
 import { BuildGuildHeaders } from "./PluginSettings/PluginSettingsShared";
 import { BackupsManager, DashboardElementRenderer, SendEmbedEditor, StatisticsEditor } from "./PluginSettings/PluginSettingsDataEditors";
 import { BuildDraftValues, BuildPersistablePluginValues, BuildPluginDraftValues, ComputeDirtyValues, HasPluginUnsavedChanges, MergeServerDraftValues, PluginHamburgerIcon, ScrollToPluginSection, UpdatePluginSavedValues } from "./PluginSettings/PluginSettingsState";
+import { PluginIcon } from "./PluginIcon";
 import { CustomCommandsEditor, NotificationsEditor, RemindersEditor } from "./PluginSettings/PluginSettingsWorkflowEditors";
 import { EmojiAdderEditor } from "./PluginSettingsCustom/EmojiAdderEditor";
 import { AutomationEditor } from "../../../Plugins/Automation/AutomationEditor";
@@ -374,9 +375,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       key={Plugin.Metadata.Id}
                       onClick={() => SelectPlugin(Plugin.Metadata.Id)}
                     >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
-                        {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
-                      </span>
+                      <PluginIcon ClassName="h-8 w-8 shrink-0 rounded-xl bg-white/10 text-sm font-black" Icon={Plugin.Metadata.Icon} />
                       <span>
                         <span className="block font-bold">{Plugin.Metadata.DisplayName}</span>
                         <span className={SelectedPlugin?.Metadata.Id === Plugin.Metadata.Id ? "text-xs text-blue-100" : "text-xs text-slate-500"}>
@@ -610,7 +609,7 @@ function SaveFeedbackToast(Properties: { Feedback: SaveFeedback }) {
       key={Properties.Feedback.Key}
       role="status"
     >
-      <span className={`hyperbot-save-toast-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${IsSuccess ? "bg-emerald-500" : "bg-red-500"}`}>
+      <span className={`hyperbot-save-toast-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${IsSuccess ? "bg-emerald-500" : "bg-red-500"}`}>
         {IsSuccess ? <SaveCheckIcon /> : <SaveErrorIcon />}
       </span>
       <span>
@@ -766,9 +765,7 @@ function MobileDashboardDrawer(Properties: {
                         onClick={() => Properties.OnSelectPlugin(Plugin.Metadata.Id)}
                         type="button"
                       >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-black">
-                          {Plugin.Metadata.Icon.slice(0, 2).toUpperCase()}
-                        </span>
+                        <PluginIcon ClassName="h-8 w-8 shrink-0 rounded-xl bg-white/10 text-sm font-black" Icon={Plugin.Metadata.Icon} />
                         <span className="min-w-0">
                           <span className="block truncate font-bold">{Plugin.Metadata.DisplayName}</span>
                           <span className={IsSelected ? "text-xs text-blue-100" : "text-xs text-slate-500"}>{Plugin.Commands.length} command(s)</span>

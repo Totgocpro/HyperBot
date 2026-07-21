@@ -4,7 +4,7 @@
     "DisplayName": "Reminders",
     "Version": "1.0.0",
     "Author": "HyperBot",
-    "Icon": "RM"
+    "Icon": "FiClock"
   },
   "Scope": "Guild",
   "Help": {

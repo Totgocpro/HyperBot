@@ -4,7 +4,7 @@
     "DisplayName": "Statistics",
     "Version": "1.0.0",
     "Author": "HyperBot",
-    "Icon": "Stats"
+    "Icon": "FiBarChart2"
   },
   "Scope": "Guild",
   "Help": {
