@@ -147,6 +147,20 @@ export class TempVoiceMusicPlayer {
     return this.GetGuildSession(GuildId)?.ChannelId ?? null;
   }
 
+  public async QuickResolveTrack(Url: string, Options: TempVoiceMusicPlayOptions = {}): Promise<TempVoiceMusicTrack | null> {
+    try {
+      const LazyResult = await this.Resolver.resolveTracksLazy(
+        Url,
+        Options.YoutubeCookiesPath,
+        Options.SpotifyClientId,
+        Options.SpotifyClientSecret,
+      );
+      return LazyResult.initialBatch[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   public async Play(Channel: VoiceBasedChannel, Url: string, Options: TempVoiceMusicPlayOptions = {}): Promise<{ Count: number; FirstTitle: string }> {
     const ExistingGuildSession = this.GetGuildSession(Channel.guild.id);
 

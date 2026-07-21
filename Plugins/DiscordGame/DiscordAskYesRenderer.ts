@@ -1,4 +1,9 @@
-import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
+import { createElement, type ReactNode } from "react";
+import {
+  RenderSatoriToPng,
+  HexToRgb,
+  Rgba
+} from "../../src/Core/ImageGenerator.js";
 
 export type AskYesImageOptions = {
   AccentColor: string;
@@ -20,98 +25,225 @@ type InlineTextToken = {
   Text: string;
 };
 
-type RgbColor = {
-  Blue: number;
-  Green: number;
-  Red: number;
-};
+const H = createElement;
+const SatoriFontFamily = "DejaVu Sans";
 
 export class DiscordAskYesRenderer {
-  public BuildAskYesImage(Options: AskYesImageOptions): Buffer {
+  public async BuildAskYesImage(Options: AskYesImageOptions): Promise<Buffer> {
     const Width = 1000;
     const Height = 420;
-    const Canvas = createCanvas(Width, Height);
-    const Context = Canvas.getContext("2d");
-    const Accent = this.SanitizeColor(Options.AccentColor, "#38bdf8");
-    const AccentRgb = this.HexToRgb(Accent);
-    const AnswerLabel = Options.Answer === "YES" ? Options.YesLabel : Options.NoLabel;
-
-    const Background = Context.createLinearGradient(0, 0, Width, Height);
-    Background.addColorStop(0, "#020617");
-    Background.addColorStop(0.55, Options.Answer === "YES" ? "#063a31" : "#3f1720");
-    Background.addColorStop(1, "#111827");
-    Context.fillStyle = Background;
-    Context.fillRect(0, 0, Width, Height);
-
-    this.DrawGlow(Context, 500, 210, AccentRgb, 0.2);
-    this.DrawRoundedRect(Context, 54, 46, 892, 328, 34, "rgba(15, 23, 42, 0.76)");
-    Context.lineWidth = 2;
-    Context.strokeStyle = `rgba(${AccentRgb.Red}, ${AccentRgb.Green}, ${AccentRgb.Blue}, 0.55)`;
-    this.StrokeRoundedRect(Context, 54, 46, 892, 328, 34);
-
-    this.DrawCenteredText(Context, this.TruncateText(Context, Options.Title, 760, 28, 900), 500, 92, 28, 900, "#ffffff");
-    const QuestionLines = this.WrapInlineText(Context, Options.Question, Options.MentionHighlights ?? [], 780, 30, 700, 3);
-    this.DrawInlineTextBlock(Context, QuestionLines, 500, 160, 42, 30, 700, "#e2e8f0");
-
-    const AnswerColor = Options.Answer === "YES" ? "#22c55e" : "#ef4444";
-    this.DrawRoundedRect(Context, 330, 280, 340, 74, 24, AnswerColor);
-    this.DrawCenteredText(Context, AnswerLabel.toUpperCase(), 500, 318, 42, 900, "#ffffff");
-
-    return Canvas.encodeSync("png");
+    return await RenderSatoriToPng(
+      this.BuildAskYesElement(Options),
+      Width,
+      Height
+    );
   }
 
-  private WrapInlineText(Context: SKRSContext2D, Text: string, Mentions: AskYesMentionHighlight[], MaxWidth: number, FontSize: number, FontWeight: number, MaxLines: number): InlineTextToken[][] {
-    Context.font = this.FormatFont(FontSize, FontWeight);
+  private BuildAskYesElement(Options: AskYesImageOptions): ReactNode {
+    const Accent = this.SanitizeColor(Options.AccentColor, "#38bdf8");
+    const AccentRgb = HexToRgb(Accent);
+    const AnswerLabel = Options.Answer === "YES" ? Options.YesLabel : Options.NoLabel;
+    const QuestionLines = this.TokenizeAndWrapQuestion(Options.Question, Options.MentionHighlights ?? []);
+
+    return H("div", {
+      style: {
+        width: 1000,
+        height: 420,
+        display: "flex",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: SatoriFontFamily,
+        color: "#f8fafc"
+      },
+      children: [
+        H("div", {
+          key: "bg",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 1000,
+            height: 420,
+            background: `linear-gradient(135deg, #020617 0%, ${Options.Answer === "YES" ? "#063a31" : "#3f1720"} 55%, #111827 100%)`
+          }
+        }),
+        H("div", {
+          key: "glow",
+          style: {
+            position: "absolute",
+            left: 260,
+            top: -30,
+            width: 480,
+            height: 480,
+            borderRadius: 240,
+            background: `radial-gradient(circle, ${Rgba(AccentRgb, 0.2)} 0%, transparent 100%)`
+          }
+        }),
+        H("div", {
+          key: "card",
+          style: {
+            position: "absolute",
+            left: 54,
+            top: 46,
+            width: 892,
+            height: 328,
+            borderRadius: 34,
+            border: `2px solid ${Rgba(AccentRgb, 0.55)}`,
+            backgroundColor: "rgba(15, 23, 42, 0.76)"
+          }
+        }),
+        H("div", {
+          key: "title",
+          style: {
+            position: "absolute",
+            left: 74,
+            top: 92,
+            width: 852,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            fontSize: 28,
+            fontWeight: 900,
+            color: "#ffffff"
+          },
+          children: this.TruncatePlainText(Options.Title, 40)
+        }),
+        this.BuildQuestionElement(QuestionLines, AccentRgb),
+        H("div", {
+          key: "answer",
+          style: {
+            position: "absolute",
+            left: 330,
+            top: 280,
+            width: 340,
+            height: 74,
+            borderRadius: 24,
+            backgroundColor: Options.Answer === "YES" ? "#22c55e" : "#ef4444",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          },
+          children: H("div", {
+            style: {
+              fontSize: 42,
+              fontWeight: 900,
+              color: "#ffffff",
+              textAlign: "center"
+            },
+            children: AnswerLabel.toUpperCase()
+          })
+        })
+      ]
+    });
+  }
+
+  private BuildQuestionElement(Lines: InlineTextToken[][], AccentRgb: { R: number; G: number; B: number }): ReactNode {
+    return H("div", {
+      key: "question",
+      style: {
+        position: "absolute",
+        left: 110,
+        top: 144,
+        width: 780,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8
+      },
+      children: Lines.map((Line, LineIndex) =>
+        H("div", {
+          key: `ql-${LineIndex}`,
+          style: {
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            alignItems: "center"
+          },
+          children: Line.map((Token, TokenIndex) =>
+            Token.Highlight
+              ? H("div", {
+                key: `qt-${LineIndex}-${TokenIndex}`,
+                style: {
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  borderRadius: 7,
+                  backgroundColor: "rgba(88, 101, 242, 0.34)",
+                  color: "#dbeafe",
+                  fontSize: 30,
+                  fontWeight: 700,
+                  marginRight: 4,
+                  marginBottom: 2
+                },
+                children: Token.Text
+              })
+              : H("span", {
+                key: `qt-${LineIndex}-${TokenIndex}`,
+                style: {
+                  color: "#e2e8f0",
+                  fontSize: 30,
+                  fontWeight: 700,
+                  marginRight: 4
+                },
+                children: Token.Text
+              })
+          )
+        })
+      )
+    });
+  }
+
+  private TokenizeAndWrapQuestion(Text: string, Mentions: AskYesMentionHighlight[]): InlineTextToken[][] {
     const Tokens = this.TokenizeInlineText(Text, Mentions);
     const Lines: InlineTextToken[][] = [];
     let CurrentLine: InlineTextToken[] = [];
-    let CurrentWidth = 0;
-    let Overflow = false;
+    let CurrentCharCount = 0;
+    const MaxCharsPerLine = 35;
+    const MaxLines = 3;
 
-    for (let Index = 0; Index < Tokens.length; Index += 1) {
-      const Token = Tokens[Index];
+    for (const Token of Tokens) {
       const IsWhitespace = Token.Text.trim() === "";
 
       if (IsWhitespace && CurrentLine.length === 0) {
         continue;
       }
 
-      const TokenWidth = this.MeasureInlineToken(Context, Token);
-
-      if (!IsWhitespace && CurrentLine.length > 0 && CurrentWidth + TokenWidth > MaxWidth) {
-        this.TrimTrailingWhitespaceTokens(CurrentLine);
+      if (!IsWhitespace && CurrentLine.length > 0 && CurrentCharCount + Token.Text.length > MaxCharsPerLine) {
         Lines.push(CurrentLine);
-
         if (Lines.length >= MaxLines) {
-          Overflow = true;
-          break;
+          const LastLine = Lines[Lines.length - 1];
+          if (LastLine.length > 0) {
+            const LastToken = LastLine[LastLine.length - 1];
+            LastToken.Text = this.TruncatePlainText(LastToken.Text, Math.max(3, MaxCharsPerLine - 3));
+            if (LastToken.Text.endsWith("...")) {
+              LastToken.Highlight = false;
+            }
+          }
+          return Lines;
         }
-
         CurrentLine = [];
-        CurrentWidth = 0;
+        CurrentCharCount = 0;
       }
 
       CurrentLine.push({ ...Token });
-      CurrentWidth += TokenWidth;
+      CurrentCharCount += Token.Text.length;
     }
 
-    if (!Overflow && CurrentLine.length > 0 && Lines.length < MaxLines) {
-      this.TrimTrailingWhitespaceTokens(CurrentLine);
+    if (CurrentLine.length > 0 && Lines.length < MaxLines) {
       Lines.push(CurrentLine);
-    } else if (CurrentLine.length > 0) {
-      Overflow = true;
     }
 
     if (Lines.length === 0) {
       Lines.push([{ Highlight: false, Text: "" }]);
     }
 
-    for (let Index = 0; Index < Lines.length; Index += 1) {
-      const IsLastVisibleLine = Index === Lines.length - 1;
-      const NeedsEllipsis = IsLastVisibleLine && (Overflow || this.MeasureInlineLine(Context, Lines[Index]) > MaxWidth);
-      Lines[Index] = NeedsEllipsis
-        ? this.TruncateInlineLine(Context, Lines[Index], MaxWidth)
-        : Lines[Index];
+    const LastVisibleLine = Lines[Lines.length - 1];
+    if (LastVisibleLine.length > 0) {
+      const LastToken = LastVisibleLine[LastVisibleLine.length - 1];
+      LastToken.Text = this.TruncatePlainText(LastToken.Text, MaxCharsPerLine);
     }
 
     return Lines;
@@ -148,151 +280,12 @@ export class DiscordAskYesRenderer {
       .map((Token) => ({ Highlight: false, Text: Token }));
   }
 
-  private DrawInlineTextBlock(Context: SKRSContext2D, Lines: InlineTextToken[][], CenterX: number, StartY: number, LineHeight: number, FontSize: number, FontWeight: number, Color: string): void {
-    const TotalHeight = (Lines.length - 1) * LineHeight;
-
-    for (let Index = 0; Index < Lines.length; Index += 1) {
-      this.DrawInlineLine(Context, Lines[Index], CenterX, StartY + Index * LineHeight - TotalHeight / 2, FontSize, FontWeight, Color);
-    }
-  }
-
-  private DrawInlineLine(Context: SKRSContext2D, Line: InlineTextToken[], CenterX: number, Y: number, FontSize: number, FontWeight: number, Color: string): void {
-    Context.font = this.FormatFont(FontSize, FontWeight);
-    Context.textAlign = "start";
-    Context.textBaseline = "middle";
-
-    let X = CenterX - this.MeasureInlineLine(Context, Line) / 2;
-
-    for (const Token of Line) {
-      const TextWidth = Context.measureText(Token.Text).width;
-
-      if (Token.Highlight) {
-        const PaddingX = 10;
-        const TokenHeight = FontSize + 8;
-        this.DrawRoundedRect(Context, X, Y - TokenHeight / 2, TextWidth + PaddingX * 2, TokenHeight, 7, "rgba(88, 101, 242, 0.34)");
-        Context.fillStyle = "#dbeafe";
-        Context.fillText(Token.Text, X + PaddingX, Y);
-        X += TextWidth + PaddingX * 2;
-        continue;
-      }
-
-      Context.fillStyle = Color;
-      Context.fillText(Token.Text, X, Y);
-      X += TextWidth;
+  private TruncatePlainText(Value: string, MaxLength: number): string {
+    if (Value.length <= MaxLength) {
+      return Value;
     }
 
-    Context.textBaseline = "alphabetic";
-  }
-
-  private MeasureInlineLine(Context: SKRSContext2D, Line: InlineTextToken[]): number {
-    return Line.reduce((Width, Token) => Width + this.MeasureInlineToken(Context, Token), 0);
-  }
-
-  private MeasureInlineToken(Context: SKRSContext2D, Token: InlineTextToken): number {
-    const TextWidth = Context.measureText(Token.Text).width;
-    return Token.Highlight ? TextWidth + 20 : TextWidth;
-  }
-
-  private TrimTrailingWhitespaceTokens(Line: InlineTextToken[]): void {
-    while (Line.length > 0 && Line[Line.length - 1].Text.trim() === "") {
-      Line.pop();
-    }
-  }
-
-  private TruncateInlineLine(Context: SKRSContext2D, Line: InlineTextToken[], MaxWidth: number): InlineTextToken[] {
-    const TruncatedLine = Line.map((Token) => ({ ...Token }));
-    const Ellipsis: InlineTextToken = { Highlight: false, Text: "..." };
-    this.TrimTrailingWhitespaceTokens(TruncatedLine);
-
-    while (TruncatedLine.length > 0 && this.MeasureInlineLine(Context, TruncatedLine) + this.MeasureInlineToken(Context, Ellipsis) > MaxWidth) {
-      const LastToken = TruncatedLine[TruncatedLine.length - 1];
-
-      if (LastToken.Text.length <= 1) {
-        TruncatedLine.pop();
-        this.TrimTrailingWhitespaceTokens(TruncatedLine);
-        continue;
-      }
-
-      LastToken.Text = LastToken.Text.slice(0, -1).trimEnd();
-    }
-
-    this.TrimTrailingWhitespaceTokens(TruncatedLine);
-    TruncatedLine.push(Ellipsis);
-    return TruncatedLine;
-  }
-
-  private DrawCenteredText(Context: SKRSContext2D, Text: string, X: number, Y: number, FontSize: number, FontWeight: number, Color: string): void {
-    Context.font = this.FormatFont(FontSize, FontWeight);
-    Context.fillStyle = Color;
-    Context.textAlign = "center";
-    Context.textBaseline = "middle";
-    Context.fillText(Text, X, Y);
-    Context.textAlign = "start";
-    Context.textBaseline = "alphabetic";
-  }
-
-  private TruncateText(Context: SKRSContext2D, Text: string, MaxWidth: number, FontSize: number, FontWeight: number): string {
-    Context.font = this.FormatFont(FontSize, FontWeight);
-
-    if (Context.measureText(Text).width <= MaxWidth) {
-      return Text;
-    }
-
-    let TruncatedText = Text;
-
-    while (TruncatedText.length > 1 && Context.measureText(`${TruncatedText}...`).width > MaxWidth) {
-      TruncatedText = TruncatedText.slice(0, -1);
-    }
-
-    return `${TruncatedText.trimEnd()}...`;
-  }
-
-  private DrawGlow(Context: SKRSContext2D, CenterX: number, CenterY: number, Color: RgbColor, Opacity: number): void {
-    const Gradient = Context.createRadialGradient(CenterX, CenterY, 0, CenterX, CenterY, 240);
-    Gradient.addColorStop(0, `rgba(${Color.Red}, ${Color.Green}, ${Color.Blue}, ${Opacity})`);
-    Gradient.addColorStop(1, `rgba(${Color.Red}, ${Color.Green}, ${Color.Blue}, 0)`);
-    Context.fillStyle = Gradient;
-    Context.fillRect(CenterX - 240, CenterY - 240, 480, 480);
-  }
-
-  private DrawRoundedRect(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Radius: number, FillStyle: SKRSContext2D["fillStyle"]): void {
-    this.BuildRoundedRectPath(Context, X, Y, Width, Height, Radius);
-    Context.fillStyle = FillStyle;
-    Context.fill();
-  }
-
-  private StrokeRoundedRect(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Radius: number): void {
-    this.BuildRoundedRectPath(Context, X, Y, Width, Height, Radius);
-    Context.stroke();
-  }
-
-  private BuildRoundedRectPath(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Radius: number): void {
-    const SafeRadius = Math.min(Radius, Width / 2, Height / 2);
-    Context.beginPath();
-    Context.moveTo(X + SafeRadius, Y);
-    Context.lineTo(X + Width - SafeRadius, Y);
-    Context.quadraticCurveTo(X + Width, Y, X + Width, Y + SafeRadius);
-    Context.lineTo(X + Width, Y + Height - SafeRadius);
-    Context.quadraticCurveTo(X + Width, Y + Height, X + Width - SafeRadius, Y + Height);
-    Context.lineTo(X + SafeRadius, Y + Height);
-    Context.quadraticCurveTo(X, Y + Height, X, Y + Height - SafeRadius);
-    Context.lineTo(X, Y + SafeRadius);
-    Context.quadraticCurveTo(X, Y, X + SafeRadius, Y);
-    Context.closePath();
-  }
-
-  private FormatFont(FontSize: number, FontWeight: number): string {
-    const SafeWeight = FontWeight >= 800 ? "900" : FontWeight >= 700 ? "bold" : FontWeight >= 600 ? "600" : "normal";
-    return `${SafeWeight} ${FontSize}px "DejaVu Sans", "Noto Sans", "Liberation Sans", sans-serif`;
-  }
-
-  private HexToRgb(ColorValue: string): RgbColor {
-    const SafeColor = this.SanitizeColor(ColorValue, "#38bdf8").replace("#", "");
-    return {
-      Red: Number.parseInt(SafeColor.slice(0, 2), 16),
-      Green: Number.parseInt(SafeColor.slice(2, 4), 16),
-      Blue: Number.parseInt(SafeColor.slice(4, 6), 16)
-    };
+    return `${Value.slice(0, Math.max(1, MaxLength - 3)).trimEnd()}...`;
   }
 
   private SanitizeColor(ColorValue: string, Fallback: string): string {

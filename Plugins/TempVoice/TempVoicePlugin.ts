@@ -151,6 +151,7 @@ const DefaultConfig: TempVoiceConfig = {
 
 const SessionsStorageKey = "TempVoiceSessions";
 const MusicPanelAttachmentName = "tempvoice-music-panel.png";
+const AskMusicAttachmentName = "tempvoice-ask-music.png";
 const MusicPanelGlobalWriteSpacingMs = 900;
 const MusicPanelRefreshIntervalMs = 3500;
 const MusicPanelSimpleMinWriteIntervalMs = 5000;
@@ -946,12 +947,38 @@ export default class TempVoicePlugin extends BasePlugin {
     };
     this.MusicRequests.set(Request.Id, Request);
 
+    let AskImageAttachment: AttachmentBuilder | null = null;
+    try {
+      const spotifyCreds = this.ResolveSpotifyCredentials(Config);
+      const ResolvedTrack = await this.MusicPlayer.QuickResolveTrack(Url, {
+        YoutubeCookiesPath: this.ResolveYoutubeCookiesPath(Config),
+        ...spotifyCreds,
+      });
+      if (ResolvedTrack) {
+        const Member = await InteractionValue.guild.members.fetch(InteractionValue.user.id).catch(() => null);
+        const RequesterName = Member?.displayName ?? InteractionValue.user.username;
+        const ImageBuffer = await this.MusicPanelRenderer.BuildAskMusicRequestImage(
+          ResolvedTrack.ThumbnailUrl ?? null,
+          ResolvedTrack.Source ?? ResolvedTrack.Url,
+          ResolvedTrack.Title,
+          ResolvedTrack.Author ?? null,
+          RequesterName
+        );
+        AskImageAttachment = new AttachmentBuilder(ImageBuffer, { name: AskMusicAttachmentName });
+      }
+    } catch {
+      // Image generation is optional; fall through to text-only embed
+    }
+
     const Embed = new EmbedBuilder()
       .setTitle("Music request")
       .setDescription(`<@${Request.RequesterId}> wants to play this music.`)
       .setColor(this.ParseColor(Config.ControlPanelColor))
       .addFields({ name: "URL", value: this.ClampDiscordFieldValue(Url), inline: false })
       .setTimestamp(new Date());
+    if (AskImageAttachment) {
+      Embed.setImage(`attachment://${AskMusicAttachmentName}`);
+    }
     const Row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`TempVoice:MusicRequestReject:${Session.ChannelId}:${Request.Id}`)
@@ -974,7 +1001,8 @@ export default class TempVoicePlugin extends BasePlugin {
       allowedMentions: { users: [Session.OwnerId] },
       components: [Row],
       content: `<@${Session.OwnerId}>`,
-      embeds: [Embed]
+      embeds: [Embed],
+      ...(AskImageAttachment ? { files: [AskImageAttachment] } : {})
     }).catch((ErrorValue: unknown) => {
       this.MusicRequests.delete(Request.Id);
       this.Logger.Warn("Could not send temporary voice music request panel.", ErrorValue);

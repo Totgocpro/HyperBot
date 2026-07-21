@@ -1,13 +1,16 @@
 import { AttachmentBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits, type ChatInputCommandInteraction, type Guild, type GuildMember, type Message, type MessageReaction, type PartialGuildMember, type PartialMessage, type PartialUser, type User, type VoiceChannel, type VoiceState } from "discord.js";
 import { createElement, type ReactNode } from "react";
-import sharp from "sharp";
-import satori, { type Font } from "satori";
 import { BasePlugin } from "../../src/Core/BasePlugin.js";
 import { Prisma } from "../../src/Core/Clients.js";
-import { LoadSatoriFonts } from "../../src/Core/SatoriFonts.js";
+import {
+  RenderSatoriToPng, FetchImageAsDataUri, FetchImageBuffer, GetDominantColor,
+  HexToRgb, RgbToHex, MixRgb, Rgba, BoostColor,
+  BuildActivityChartDataUri, BuildScoreGaugeDataUri, BuildBackgroundDataUri,
+  SvgToDataUri, EscapeSvgText, DescribeArcPath, PolarToCartesian,
+  type RgbColor, type ImageResizeOptions, type ServerActivityPoint
+} from "../../src/Core/ImageGenerator.js";
 
 const H = createElement;
-const SatoriFontFamily = "DejaVu Sans";
 
 type DailyCounters = Record<string, number>;
 type HourlyCounters = Record<string, number>;
@@ -108,14 +111,6 @@ type ActivityOverview = {
   };
 };
 
-type ServerActivityPoint = {
-  Label: string;
-  Messages: number;
-  VoiceMinutes: number;
-  Reactions: number;
-  Score: number;
-};
-
 type ServerTopMember = {
   UserId: string;
   DisplayName: string;
@@ -150,17 +145,6 @@ type ServerStatisticsImageAssets = {
   GuildIconDataUri: string | null;
   GuildBannerDataUri: string | null;
   TopMemberDataUris: Array<string | null>;
-};
-
-type ImageResizeOptions = {
-  Width: number;
-  Height: number;
-};
-
-type RgbColor = {
-  R: number;
-  G: number;
-  B: number;
 };
 
 const MessagesDailyKey = "MessagesDaily";
@@ -234,8 +218,6 @@ export default class StatisticsPlugin extends BasePlugin {
   private readonly VoiceSessions = new Map<string, VoiceSession>();
   private LastActivityOverviewAt = 0;
   private LastActivityRoleSyncAt = 0;
-  private SatoriFontsPromise: Promise<Font[]> | null = null;
-
   public async OnEnable(): Promise<void> {
     this.Logger.Info("Statistics plugin enabled.");
   }
@@ -492,27 +474,20 @@ export default class StatisticsPlugin extends BasePlugin {
     const Width = 1200;
     const Height = 675;
     const Assets = await this.BuildServerStatisticsImageAssets(Data);
-    const Svg = await satori(this.BuildServerStatisticsElement(Data, Assets), {
-      width: Width,
-      height: Height,
-      fonts: await this.GetSatoriFonts(),
-      embedFont: true
-    });
-
-    return await sharp(Buffer.from(Svg)).png().toBuffer();
+    return await RenderSatoriToPng(this.BuildServerStatisticsElement(Data, Assets), Width, Height);
   }
 
   private async BuildServerStatisticsImageAssets(Data: ServerStatisticsImageData): Promise<ServerStatisticsImageAssets> {
     return {
-      GuildIconDataUri: Data.GuildIconUrl ? await this.FetchImageDataUri(Data.GuildIconUrl, { Width: 138, Height: 138 }) : null,
-      GuildBannerDataUri: Data.GuildBannerUrl ? await this.FetchImageDataUri(Data.GuildBannerUrl, { Width: 1200, Height: 675 }) : null,
-      TopMemberDataUris: await Promise.all(Data.TopMembers.map((Member) => Member.AvatarUrl ? this.FetchImageDataUri(Member.AvatarUrl, { Width: 76, Height: 76 }) : Promise.resolve(null)))
+      GuildIconDataUri: Data.GuildIconUrl ? await FetchImageAsDataUri(Data.GuildIconUrl, { Width: 138, Height: 138 }) : null,
+      GuildBannerDataUri: Data.GuildBannerUrl ? await FetchImageAsDataUri(Data.GuildBannerUrl, { Width: 1200, Height: 675 }) : null,
+      TopMemberDataUris: await Promise.all(Data.TopMembers.map((Member) => Member.AvatarUrl ? FetchImageAsDataUri(Member.AvatarUrl, { Width: 76, Height: 76 }) : Promise.resolve(null)))
     };
   }
 
   private BuildServerStatisticsElement(Data: ServerStatisticsImageData, Assets: ServerStatisticsImageAssets): ReactNode {
-    const Accent = this.HexToRgb(Data.AccentColor);
-    const AccentSoft = this.Rgba(Accent, 0.18);
+    const Accent = HexToRgb(Data.AccentColor);
+    const AccentSoft = Rgba(Accent, 0.18);
     const MutedText = "rgba(203, 213, 225, 0.72)";
     const CardStyle = {
       display: "flex",
@@ -535,13 +510,13 @@ export default class StatisticsPlugin extends BasePlugin {
         position: "relative",
         overflow: "hidden",
         color: "#f8fafc",
-        fontFamily: SatoriFontFamily,
+        fontFamily: "DejaVu Sans",
         backgroundColor: "#050816"
       },
       children: [
         H("img", {
           key: "background-art",
-          src: this.BuildStatisticsBackgroundDataUri(Data.AccentColor),
+          src: BuildBackgroundDataUri(1200, 675, Data.AccentColor),
           style: { position: "absolute", left: 0, top: 0, width: 1200, height: 675 }
         }),
         Assets.GuildBannerDataUri ? H("img", {
@@ -597,7 +572,7 @@ export default class StatisticsPlugin extends BasePlugin {
                 key: Metric.Label,
                 style: { ...CardStyle, width: 249, height: 104, padding: "22px 22px 14px 22px", flexDirection: "column", position: "relative", overflow: "hidden" },
                 children: [
-                  H("div", { key: "bar", style: { position: "absolute", left: 0, top: 0, width: 6, height: 104, backgroundColor: this.Rgba(Accent, Index === 0 ? 0.95 : 0.72) } }),
+                  H("div", { key: "bar", style: { position: "absolute", left: 0, top: 0, width: 6, height: 104, backgroundColor: Rgba(Accent, Index === 0 ? 0.95 : 0.72) } }),
                   H("div", { key: "label", style: { fontSize: 15, fontWeight: 800, color: "rgba(226, 232, 240, 0.64)" }, children: Metric.Label.toUpperCase() }),
                   H("div", { key: "value", style: { marginTop: 8, fontSize: 30, fontWeight: 800, lineHeight: 1 }, children: Metric.Value }),
                   H("div", { key: "detail", style: { marginTop: 7, fontSize: 15, fontWeight: 600, color: MutedText }, children: Metric.Detail })
@@ -614,7 +589,7 @@ export default class StatisticsPlugin extends BasePlugin {
                   children: [
                     H("div", { key: "chart-title", style: { fontSize: 25, fontWeight: 800 }, children: "General activity" }),
                     H("div", { key: "chart-subtitle", style: { marginTop: 6, fontSize: 15, fontWeight: 600, color: MutedText }, children: "Messages + reactions + voice minutes" }),
-                    H("img", { key: "chart-image", src: this.BuildActivityChartDataUri(Data.ActivityPoints, Data.AccentColor), style: { marginTop: 14, width: 653, height: 95 } })
+                    H("img", { key: "chart-image", src: BuildActivityChartDataUri(Data.ActivityPoints, Data.AccentColor), style: { marginTop: 14, width: 653, height: 95 } })
                   ]
                 }),
                 H("div", {
@@ -622,7 +597,7 @@ export default class StatisticsPlugin extends BasePlugin {
                   style: { ...CardStyle, width: 354, height: 206, padding: 26, flexDirection: "column", alignItems: "center", position: "relative" },
                   children: [
                     H("div", { key: "score-title", style: { width: "100%", fontSize: 25, fontWeight: 800 }, children: "Activity score" }),
-                    H("img", { key: "score-gauge", src: this.BuildScoreGaugeDataUri(Data.ActivityScore, Data.AccentColor), style: { marginTop: 8, width: 146, height: 108 } }),
+                    H("img", { key: "score-gauge", src: BuildScoreGaugeDataUri(Data.ActivityScore, Data.AccentColor), style: { marginTop: 8, width: 146, height: 108 } }),
                     H("div", { key: "score-value", style: { position: "absolute", top: 82, fontSize: 42, fontWeight: 800 }, children: String(Data.ActivityScore) }),
                     H("div", { key: "score-total", style: { position: "absolute", top: 128, fontSize: 15, fontWeight: 700, color: MutedText }, children: "/ 100" }),
                     H("div", { key: "score-desc", style: { marginTop: 12, fontSize: 14, fontWeight: 600, color: "rgba(226, 232, 240, 0.66)" }, children: "Active members and recent activity" })
@@ -646,7 +621,7 @@ export default class StatisticsPlugin extends BasePlugin {
                     key: Member.UserId,
                     style: { ...CardStyle, width: 356, height: 44, padding: "5px 14px", flexDirection: "row", alignItems: "center", overflow: "hidden", position: "relative" },
                     children: [
-                      H("div", { key: "rank-bar", style: { position: "absolute", left: 0, top: 0, width: 5, height: 44, backgroundColor: this.Rgba(Accent, 0.9) } }),
+                      H("div", { key: "rank-bar", style: { position: "absolute", left: 0, top: 0, width: 5, height: 44, backgroundColor: Rgba(Accent, 0.9) } }),
                       H("div", { key: "rank", style: { width: 34, fontSize: 20, fontWeight: 800 }, children: `#${Index + 1}` }),
                       Assets.TopMemberDataUris[Index] ? H("img", {
                         key: "avatar",
@@ -698,186 +673,13 @@ export default class StatisticsPlugin extends BasePlugin {
     });
   }
 
-  private BuildActivityChartDataUri(Points: ServerActivityPoint[], AccentColor: string): string {
-    const Width = 653;
-    const Height = 95;
-    const ChartHeight = 62;
-    const MaxScore = Math.max(10, ...Points.map((Point) => Point.Score));
-    const Coordinates = Points.map((Point, Index) => ({
-      X: 8 + ((Width - 16) / Math.max(1, Points.length - 1)) * Index,
-      Y: 8 + ChartHeight - (Point.Score / MaxScore) * ChartHeight
-    }));
-    const LinePath = Coordinates.map((Coordinate, Index) => `${Index === 0 ? "M" : "L"} ${Coordinate.X.toFixed(1)} ${Coordinate.Y.toFixed(1)}`).join(" ");
-    const AreaPath = `${LinePath} L ${Coordinates[Coordinates.length - 1]?.X.toFixed(1) ?? 0} 78 L ${Coordinates[0]?.X.toFixed(1) ?? 0} 78 Z`;
-    const Labels = [0, Math.floor(Points.length / 2), Points.length - 1]
-      .map((Index, LabelIndex) => {
-        const Coordinate = Coordinates[Index];
-        const Anchor = LabelIndex === 0 ? "start" : LabelIndex === 2 ? "end" : "middle";
-        const X = LabelIndex === 0 ? 8 : LabelIndex === 2 ? Width - 8 : Coordinate?.X ?? 0;
-        return Coordinate ? `<text x="${X.toFixed(1)}" y="91" fill="rgba(226,232,240,0.62)" font-size="13" font-weight="600" text-anchor="${Anchor}">${this.EscapeSvgText(Points[Index].Label)}</text>` : "";
-      })
-      .join("");
-    const Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Width}" height="${Height}" viewBox="0 0 ${Width} ${Height}">
-      <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${AccentColor}" stop-opacity="0.42"/><stop offset="1" stop-color="${AccentColor}" stop-opacity="0.02"/></linearGradient></defs>
-      <path d="M 0 8 H ${Width}" stroke="rgba(148,163,184,0.15)" stroke-width="1"/>
-      <path d="M 0 29 H ${Width}" stroke="rgba(148,163,184,0.15)" stroke-width="1"/>
-      <path d="M 0 50 H ${Width}" stroke="rgba(148,163,184,0.15)" stroke-width="1"/>
-      <path d="M 0 71 H ${Width}" stroke="rgba(148,163,184,0.15)" stroke-width="1"/>
-      <path d="${AreaPath}" fill="url(#fill)"/>
-      <path d="${LinePath}" fill="none" stroke="${AccentColor}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      ${Labels}
-    </svg>`;
-    return this.SvgToDataUri(Svg);
-  }
-
-  private BuildScoreGaugeDataUri(Score: number, AccentColor: string): string {
-    const SafeScore = Math.max(0, Math.min(100, Score));
-    const TrackPath = this.DescribeArcPath(73, 62, 46, 220, 500);
-    const ProgressPath = this.DescribeArcPath(73, 62, 46, 220, 220 + 280 * (SafeScore / 100));
-    const Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="146" height="108" viewBox="0 0 146 108">
-      <path d="${TrackPath}" fill="none" stroke="rgba(148,163,184,0.18)" stroke-width="18" stroke-linecap="round"/>
-      <path d="${ProgressPath}" fill="none" stroke="${AccentColor}" stroke-opacity="0.95" stroke-width="18" stroke-linecap="round"/>
-    </svg>`;
-    return this.SvgToDataUri(Svg);
-  }
-
-  private DescribeArcPath(CenterX: number, CenterY: number, Radius: number, StartAngle: number, EndAngle: number): string {
-    const Start = this.PolarToCartesian(CenterX, CenterY, Radius, EndAngle);
-    const End = this.PolarToCartesian(CenterX, CenterY, Radius, StartAngle);
-    const LargeArcFlag = EndAngle - StartAngle <= 180 ? "0" : "1";
-
-    return `M ${Start.X.toFixed(2)} ${Start.Y.toFixed(2)} A ${Radius} ${Radius} 0 ${LargeArcFlag} 0 ${End.X.toFixed(2)} ${End.Y.toFixed(2)}`;
-  }
-
-  private PolarToCartesian(CenterX: number, CenterY: number, Radius: number, AngleInDegrees: number): { X: number; Y: number } {
-    const AngleInRadians = (AngleInDegrees - 90) * Math.PI / 180;
-    return {
-      X: CenterX + Radius * Math.cos(AngleInRadians),
-      Y: CenterY + Radius * Math.sin(AngleInRadians)
-    };
-  }
-
-  private BuildStatisticsBackgroundDataUri(AccentColor: string): string {
-    const Accent = this.HexToRgb(AccentColor);
-    const AccentDark = this.RgbToHex(this.MixRgb(Accent, { R: 8, G: 14, B: 28 }, 0.72));
-    const AccentSoft = this.RgbToHex(this.MixRgb(Accent, { R: 59, G: 130, B: 246 }, 0.36));
-    const AccentWarm = this.RgbToHex(this.MixRgb(Accent, { R: 244, G: 114, B: 182 }, 0.48));
-    const Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
-      <defs>
-        <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="${AccentDark}"/>
-          <stop offset="0.42" stop-color="#101827"/>
-          <stop offset="1" stop-color="#050816"/>
-        </linearGradient>
-        <radialGradient id="leftGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(190 135) rotate(35) scale(390 290)">
-          <stop offset="0" stop-color="${AccentColor}" stop-opacity="0.42"/>
-          <stop offset="0.5" stop-color="${AccentSoft}" stop-opacity="0.18"/>
-          <stop offset="1" stop-color="${AccentColor}" stop-opacity="0"/>
-        </radialGradient>
-        <radialGradient id="rightGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1020 100) rotate(20) scale(300 230)">
-          <stop offset="0" stop-color="${AccentWarm}" stop-opacity="0.24"/>
-          <stop offset="1" stop-color="${AccentWarm}" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
-          <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.07"/>
-          <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-        </linearGradient>
-        <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
-          <path d="M 44 0 L 0 0 0 44" fill="none" stroke="#e2e8f0" stroke-opacity="0.035" stroke-width="1"/>
-        </pattern>
-      </defs>
-      <rect width="1200" height="675" fill="url(#base)"/>
-      <rect width="1200" height="675" fill="url(#grid)"/>
-      <rect width="1200" height="675" fill="url(#leftGlow)"/>
-      <rect width="1200" height="675" fill="url(#rightGlow)"/>
-      <path d="M-80 520 C220 390 360 470 610 346 C835 235 1010 248 1280 150 L1280 675 L-80 675 Z" fill="${AccentColor}" opacity="0.09"/>
-      <path d="M-60 90 C180 20 338 80 515 34 C735 -22 930 34 1260 -50" fill="none" stroke="url(#sheen)" stroke-width="90" opacity="0.65"/>
-      <rect width="1200" height="675" fill="rgba(2,6,23,0.38)"/>
-    </svg>`;
-    return this.SvgToDataUri(Svg);
-  }
-
   private async ResolveGuildAccentColor(IconUrl: string | null, BannerUrl: string | null): Promise<string> {
-    const ImageBuffer = await this.FetchImageBuffer(IconUrl ?? BannerUrl);
+    const ImageBuffer = await FetchImageBuffer(IconUrl ?? BannerUrl);
     if (!ImageBuffer) {
       return DefaultStatsTextConfig.StatsEmbedColor;
     }
 
-    return this.RgbToHex(await this.GetDominantColor(ImageBuffer.Buffer));
-  }
-
-  private async FetchImageDataUri(UrlValue: string, ResizeOptions?: ImageResizeOptions): Promise<string | null> {
-    const ImageBuffer = await this.FetchImageBuffer(UrlValue);
-    if (!ImageBuffer) {
-      return null;
-    }
-
-    if (!ResizeOptions) {
-      return `data:${ImageBuffer.ContentType};base64,${ImageBuffer.Buffer.toString("base64")}`;
-    }
-
-    const ResizedBuffer = await sharp(ImageBuffer.Buffer)
-      .resize(ResizeOptions.Width, ResizeOptions.Height, { fit: "cover", position: "center" })
-      .png()
-      .toBuffer();
-
-    return `data:image/png;base64,${ResizedBuffer.toString("base64")}`;
-  }
-
-  private async FetchImageBuffer(UrlValue: string | null): Promise<{ Buffer: Buffer; ContentType: string } | null> {
-    if (!UrlValue) {
-      return null;
-    }
-
-    return await fetch(UrlValue).then(async (Response) => {
-      if (!Response.ok) {
-        throw new Error(`HTTP ${Response.status}`);
-      }
-
-      const ContentType = Response.headers.get("content-type")?.split(";")[0] ?? "image/png";
-      return {
-        Buffer: Buffer.from(await Response.arrayBuffer()),
-        ContentType
-      };
-    }).catch((ErrorValue: unknown) => {
-      this.Logger.Warn("Statistics image asset could not be loaded.", {
-        Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
-        Url: UrlValue
-      });
-      return null;
-    });
-  }
-
-  private async GetDominantColor(ImageBuffer: Buffer): Promise<RgbColor> {
-    const Pixels = await sharp(ImageBuffer)
-      .resize(32, 32, { fit: "cover" })
-      .removeAlpha()
-      .raw()
-      .toBuffer();
-    let R = 0;
-    let G = 0;
-    let B = 0;
-    let Weight = 0;
-
-    for (let Index = 0; Index < Pixels.length; Index += 3) {
-      const PixelR = Pixels[Index];
-      const PixelG = Pixels[Index + 1];
-      const PixelB = Pixels[Index + 2];
-      const Luma = 0.2126 * PixelR + 0.7152 * PixelG + 0.0722 * PixelB;
-      const SaturationWeight = (Math.max(PixelR, PixelG, PixelB) - Math.min(PixelR, PixelG, PixelB)) / 255;
-      const PixelWeight = Math.max(0.25, SaturationWeight) * (Luma > 28 && Luma < 238 ? 1 : 0.35);
-      R += PixelR * PixelWeight;
-      G += PixelG * PixelWeight;
-      B += PixelB * PixelWeight;
-      Weight += PixelWeight;
-    }
-
-    if (Weight <= 0) {
-      return this.HexToRgb(DefaultStatsTextConfig.StatsEmbedColor);
-    }
-
-    return this.BoostColor({ R: Math.round(R / Weight), G: Math.round(G / Weight), B: Math.round(B / Weight) });
+    return RgbToHex(await GetDominantColor(ImageBuffer.Buffer, DefaultStatsTextConfig.StatsEmbedColor));
   }
 
   private CalculateActivityPoints(Messages: number, VoiceMinutes: number, Reactions: number): number {
@@ -901,71 +703,12 @@ export default class StatisticsPlugin extends BasePlugin {
     return Object.fromEntries(Object.entries(Value).filter((Entry): Entry is [string, number] => typeof Entry[1] === "number" && Number.isFinite(Entry[1])));
   }
 
-  private async GetSatoriFonts(): Promise<Font[]> {
-    if (!this.SatoriFontsPromise) {
-      this.SatoriFontsPromise = LoadSatoriFonts(SatoriFontFamily);
-    }
-
-    return await this.SatoriFontsPromise;
-  }
-
   private TruncatePlainText(Value: string, MaxLength: number): string {
     if (Value.length <= MaxLength) {
       return Value;
     }
 
     return `${Value.slice(0, Math.max(1, MaxLength - 3))}...`;
-  }
-
-  private SvgToDataUri(Svg: string): string {
-    return `data:image/svg+xml;base64,${Buffer.from(Svg).toString("base64")}`;
-  }
-
-  private EscapeSvgText(Value: string): string {
-    return Value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll("\"", "&quot;");
-  }
-
-  private HexToRgb(HexValue: string): RgbColor {
-    const SafeHex = /^#[0-9a-f]{6}$/iu.test(HexValue) ? HexValue : DefaultStatsTextConfig.StatsEmbedColor;
-    return {
-      R: Number.parseInt(SafeHex.slice(1, 3), 16),
-      G: Number.parseInt(SafeHex.slice(3, 5), 16),
-      B: Number.parseInt(SafeHex.slice(5, 7), 16)
-    };
-  }
-
-  private RgbToHex(Color: RgbColor): string {
-    return `#${[Color.R, Color.G, Color.B].map((Part) => Math.max(0, Math.min(255, Math.round(Part))).toString(16).padStart(2, "0")).join("")}`;
-  }
-
-  private RgbToCss(Color: RgbColor): string {
-    return `rgb(${Math.round(Color.R)}, ${Math.round(Color.G)}, ${Math.round(Color.B)})`;
-  }
-
-  private Rgba(Color: RgbColor, Alpha: number): string {
-    return `rgba(${Math.round(Color.R)}, ${Math.round(Color.G)}, ${Math.round(Color.B)}, ${Alpha})`;
-  }
-
-  private MixRgb(FirstColor: RgbColor, SecondColor: RgbColor, SecondWeight: number): RgbColor {
-    const FirstWeight = 1 - SecondWeight;
-    return {
-      R: FirstColor.R * FirstWeight + SecondColor.R * SecondWeight,
-      G: FirstColor.G * FirstWeight + SecondColor.G * SecondWeight,
-      B: FirstColor.B * FirstWeight + SecondColor.B * SecondWeight
-    };
-  }
-
-  private BoostColor(Color: RgbColor): RgbColor {
-    const Average = (Color.R + Color.G + Color.B) / 3;
-    return {
-      R: Math.max(40, Math.min(238, Average + (Color.R - Average) * 1.35)),
-      G: Math.max(40, Math.min(238, Average + (Color.G - Average) * 1.35)),
-      B: Math.max(40, Math.min(238, Average + (Color.B - Average) * 1.35))
-    };
   }
 
   private async FlushAllVoiceSessions(): Promise<void> {

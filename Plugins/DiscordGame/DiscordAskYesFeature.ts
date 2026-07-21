@@ -47,7 +47,7 @@ export class DiscordAskYesFeature {
     const AttachmentName = `askyes-${InteractionValue.id}.png`;
     const MentionHighlights = await this.ResolveQuestionMentionHighlights(InteractionValue, Question);
     const Attachment = new AttachmentBuilder(
-      this.Renderer.BuildAskYesImage({
+      await this.Renderer.BuildAskYesImage({
         AccentColor: Color,
         Answer,
         MentionHighlights,

@@ -41,13 +41,13 @@ export const Source = {
 } as const;
 
 export const SourceInfo: Record<string, { label: string; logoUrl: string; color: string; name: string }> = {
-  [Source.YOUTUBE]: { label: "YT", logoUrl: "https://www.youtube.com/favicon.ico", color: "#FF0000", name: "YouTube" },
-  [Source.SPOTIFY]: { label: "SP", logoUrl: "https://open.spotifycdn.com/cdn/images/favicon32.b64ecc03.png", color: "#1DB954", name: "Spotify" },
-  [Source.SOUNDCLOUD]: { label: "SC", logoUrl: "https://soundcloud.com/favicon.ico", color: "#FF7700", name: "SoundCloud" },
-  [Source.BANDCAMP]: { label: "BC", logoUrl: "https://bandcamp.com/favicon.ico", color: "#629AA9", name: "Bandcamp" },
-  [Source.APPLE_MUSIC]: { label: "AM", logoUrl: "https://music.apple.com/favicon.ico", color: "#FA243C", name: "Apple Music" },
-  [Source.DEEZER]: { label: "DZ", logoUrl: "https://www.deezer.com/favicon.ico", color: "#A238FF", name: "Deezer" },
-  [Source.TIDAL]: { label: "TD", logoUrl: "https://www.tidal.com/favicon.ico", color: "#000000", name: "Tidal" },
+  [Source.YOUTUBE]: { label: "YT", logoUrl: "https://cdn.simpleicons.org/youtube", color: "#FF0000", name: "YouTube" },
+  [Source.SPOTIFY]: { label: "SP", logoUrl: "https://cdn.simpleicons.org/spotify", color: "#1DB954", name: "Spotify" },
+  [Source.SOUNDCLOUD]: { label: "SC", logoUrl: "https://cdn.simpleicons.org/soundcloud", color: "#FF7700", name: "SoundCloud" },
+  [Source.BANDCAMP]: { label: "BC", logoUrl: "https://cdn.simpleicons.org/bandcamp", color: "#629AA9", name: "Bandcamp" },
+  [Source.APPLE_MUSIC]: { label: "AM", logoUrl: "https://cdn.simpleicons.org/apple", color: "#FA243C", name: "Apple Music" },
+  [Source.DEEZER]: { label: "DZ", logoUrl: "https://cdn.simpleicons.org/deezer", color: "#A238FF", name: "Deezer" },
+  [Source.TIDAL]: { label: "TD", logoUrl: "https://cdn.simpleicons.org/tidal", color: "#000000", name: "Tidal" },
   [Source.DIRECT]: { label: "URL", logoUrl: "", color: "#64748B", name: "Direct Link" },
 };
 

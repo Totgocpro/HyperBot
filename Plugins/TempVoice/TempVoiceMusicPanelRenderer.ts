@@ -1,4 +1,9 @@
-import { createCanvas, loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
+import { createElement, type ReactNode } from "react";
+import {
+  RenderSatoriToPng,
+  BuildBackgroundDataUri,
+  FetchImageAsDataUri
+} from "../../src/Core/ImageGenerator.js";
 import type { TempVoiceMusicState } from "./TempVoiceMusicPlayer.js";
 import { SourceInfo } from "./TempVoiceMusicResolver.js";
 
@@ -10,46 +15,61 @@ type TempVoiceMusicPanelRenderOptions = {
   HideTiming?: boolean;
 };
 
-const LogoCache = new Map<string, Promise<Image | null>>();
+type PanelSourceAssets = {
+  LogoDataUri: string | null;
+  Name: string;
+  Label: string;
+  Color: string;
+};
+
+type PanelAssets = {
+  Current: PanelSourceAssets;
+  All: Map<string, PanelSourceAssets>;
+};
+
+const LogoDataUriCache = new Map<string, Promise<string | null>>();
+const H = createElement;
+const SatoriFontFamily = "DejaVu Sans";
 
 export class TempVoiceMusicPanelRenderer {
-  private readonly ThumbnailCache = new Map<string, Promise<Image | null>>();
+  private readonly ThumbnailCache = new Map<string, Promise<string | null>>();
 
   public constructor(private readonly Logger: TempVoiceMusicPanelLogger) {}
 
   public async BuildPanelImage(State: TempVoiceMusicState, Options: TempVoiceMusicPanelRenderOptions = {}): Promise<Buffer> {
     const Width = 1200;
     const Height = 560;
-    const Canvas = createCanvas(Width, Height);
-    const Context = Canvas.getContext("2d");
-    const Thumbnail = await this.LoadThumbnail(State.TrackThumbnailUrl);
+    const QueueSources = State.Queue.map((T) => T.Source);
+    const [ThumbnailUri, Assets] = await Promise.all([
+      this.LoadThumbnail(State.TrackThumbnailUrl),
+      this.LoadAllAssets(State.Source, QueueSources)
+    ]);
     const Progress = !Options.HideTiming && State.DurationSeconds && State.DurationSeconds > 0
       ? Math.min(State.PositionSeconds / State.DurationSeconds, 1)
       : 0;
 
-    const Background = Context.createLinearGradient(0, 0, Width, Height);
-    Background.addColorStop(0, "#111827");
-    Background.addColorStop(0.48, "#1f2937");
-    Background.addColorStop(1, "#0f172a");
-    Context.fillStyle = Background;
-    Context.fillRect(0, 0, Width, Height);
-
-    this.DrawGlow(Context, 280, 210, "rgba(239, 68, 68, 0.22)");
-    this.DrawGlow(Context, 790, 95, "rgba(56, 189, 248, 0.16)");
-    await this.DrawSourceBadge(Context, 54, 42, State.Source);
-
-    this.DrawThumbnail(Context, 54, 104, 520, 292, Thumbnail, State);
-    this.DrawTrackInfo(Context, State, Options, 610, 104, 526);
-    this.DrawQueue(Context, State, 610, 258, 526, 190);
-
-    if (!Options.HideTiming) {
-      this.DrawProgress(Context, State, Progress, 54, 462, 1082);
-    }
-
-    return Canvas.encodeSync("png");
+    return await RenderSatoriToPng(
+      this.BuildPanelElement(State, Options, ThumbnailUri, Assets, Progress),
+      Width,
+      Height
+    );
   }
 
-  private async LoadThumbnail(ThumbnailUrl: string): Promise<Image | null> {
+  private async LoadAllAssets(Source: string, QueueSources: string[]): Promise<PanelAssets> {
+    const UniqueSources = [Source, ...QueueSources].filter((S, I, A) => A.indexOf(S) === I);
+    const Entries = await Promise.all(UniqueSources.map(async (Src) => {
+      const Info = SourceInfo[Src] ?? { label: "MU", logoUrl: "", color: "#64748B", name: "Music" };
+      const LogoDataUri = Info.logoUrl ? await this.LoadLogo(Info.logoUrl) : null;
+      return [Src, { LogoDataUri, Name: Info.name, Label: Info.label, Color: Info.color } as PanelSourceAssets];
+    }));
+    const All = new Map(Entries as [string, PanelSourceAssets][]);
+    return {
+      Current: All.get(Source)!,
+      All
+    };
+  }
+
+  private async LoadThumbnail(ThumbnailUrl: string): Promise<string | null> {
     const SafeUrl = ThumbnailUrl.trim();
 
     if (!SafeUrl) {
@@ -62,7 +82,7 @@ export class TempVoiceMusicPanelRenderer {
       return await Existing;
     }
 
-    const Pending = loadImage(SafeUrl).catch((ErrorValue: unknown) => {
+    const Pending = FetchImageAsDataUri(SafeUrl, { Width: 520, Height: 292 }).catch((ErrorValue: unknown) => {
       this.Logger.Warn("TempVoice music panel thumbnail could not be loaded.", {
         Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
         ThumbnailUrl: SafeUrl,
@@ -74,205 +94,595 @@ export class TempVoiceMusicPanelRenderer {
     return await Pending;
   }
 
-  private async LoadLogo(LogoUrl: string): Promise<Image | null> {
-    if (!LogoUrl) return null;
-
-    const Existing = LogoCache.get(LogoUrl);
+  private async LoadLogo(LogoUrl: string): Promise<string | null> {
+    const Existing = LogoDataUriCache.get(LogoUrl);
     if (Existing) return await Existing;
 
-    const Pending = loadImage(LogoUrl).catch(() => null);
-    LogoCache.set(LogoUrl, Pending);
+    const Pending = FetchImageAsDataUri(LogoUrl, { Width: 24, Height: 24 }).catch(() => null);
+    LogoDataUriCache.set(LogoUrl, Pending);
     return await Pending;
   }
 
-  private async DrawSourceBadge(Context: SKRSContext2D, X: number, Y: number, Source: string): Promise<void> {
-    const info = SourceInfo[Source] ?? { label: "MU", logoUrl: "", color: "#64748B", name: "Music" };
-    const badgeWidth = 36 + Context.measureText(info.name).width + 24;
-    this.DrawRoundedRect(Context, X, Y, badgeWidth, 42, 14, "rgba(15, 23, 42, 0.76)");
+  private BuildPanelElement(
+    State: TempVoiceMusicState,
+    Options: TempVoiceMusicPanelRenderOptions,
+    ThumbnailUri: string | null,
+    Assets: PanelAssets,
+    Progress: number
+  ): ReactNode {
+    const AccentColor = "#ef4444";
+    const BackgroundUri = BuildBackgroundDataUri(1200, 560, AccentColor);
 
-    const Logo = info.logoUrl ? await this.LoadLogo(info.logoUrl) : null;
-    const IconX = X + 12;
-    const IconY = Y + 9;
-    const IconSize = 24;
-
-    if (Logo) {
-      Context.save();
-      this.RoundedPath(Context, IconX, IconY, IconSize, IconSize, 6);
-      Context.clip();
-      const Scale = Math.max(IconSize / Logo.width, IconSize / Logo.height);
-      const DrawWidth = Logo.width * Scale;
-      const DrawHeight = Logo.height * Scale;
-      Context.drawImage(Logo, IconX + (IconSize - DrawWidth) / 2, IconY + (IconSize - DrawHeight) / 2, DrawWidth, DrawHeight);
-      Context.restore();
-    } else {
-      this.DrawRoundedRect(Context, IconX, IconY, IconSize, IconSize, 6, info.color);
-      Context.font = "700 14px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-      Context.fillStyle = "#ffffff";
-      Context.textAlign = "center";
-      Context.textBaseline = "middle";
-      Context.fillText(info.label, IconX + IconSize / 2, IconY + IconSize / 2);
-    }
-
-    Context.font = "700 20px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-    Context.fillStyle = "#f8fafc";
-    Context.textAlign = "left";
-    Context.textBaseline = "middle";
-    Context.fillText(info.name, X + 48, Y + 22);
+    return H("div", {
+      style: {
+        width: 1200,
+        height: 560,
+        position: "relative",
+        overflow: "hidden",
+        display: "flex",
+        fontFamily: SatoriFontFamily,
+        color: "#f8fafc",
+        backgroundColor: "#0f172a"
+      },
+      children: [
+        H("img", {
+          key: "bg",
+          src: BackgroundUri,
+          style: { position: "absolute", left: 0, top: 0, width: 1200, height: 560 }
+        }),
+        this.BuildSourceBadge(Assets),
+        this.BuildThumbnailNode(ThumbnailUri, Assets),
+        this.BuildTrackInfoNode(State, Options, Assets),
+        this.BuildQueueNode(State, Assets),
+        this.BuildProgressNode(State, Progress)
+      ]
+    });
   }
 
-  private DrawThumbnail(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Thumbnail: Image | null, State: TempVoiceMusicState): void {
-    this.DrawRoundedRect(Context, X - 4, Y - 4, Width + 8, Height + 8, 22, "rgba(255, 255, 255, 0.08)");
-    this.DrawRoundedRect(Context, X, Y, Width, Height, 18, "#020617");
-    Context.save();
-    this.RoundedPath(Context, X, Y, Width, Height, 18);
-    Context.clip();
-
-    if (Thumbnail) {
-      const Scale = Math.max(Width / Thumbnail.width, Height / Thumbnail.height);
-      const DrawWidth = Thumbnail.width * Scale;
-      const DrawHeight = Thumbnail.height * Scale;
-      Context.imageSmoothingEnabled = true;
-      Context.imageSmoothingQuality = "high";
-      Context.drawImage(Thumbnail, X + (Width - DrawWidth) / 2, Y + (Height - DrawHeight) / 2, DrawWidth, DrawHeight);
-    } else {
-      const info = SourceInfo[State.Source] ?? { label: "MU", logoUrl: "", color: "#1e293b", name: "Music" };
-      const Gradient = Context.createLinearGradient(X, Y, X + Width, Y + Height);
-      Gradient.addColorStop(0, "#1e293b");
-      Gradient.addColorStop(1, info.color ? `${info.color}55` : "#0f172a");
-      Context.fillStyle = Gradient;
-      Context.fillRect(X, Y, Width, Height);
-      Context.font = "800 28px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-      Context.fillStyle = "rgba(248, 250, 252, 0.24)";
-      Context.textAlign = "center";
-      Context.textBaseline = "middle";
-      Context.fillText(info.name, X + Width / 2, Y + Height / 2);
-    }
-
-    Context.restore();
+  private BuildSourceBadge(Assets: PanelAssets): ReactNode {
+    const Src = Assets.Current;
+    return H("div", {
+      key: "badge",
+      style: {
+        position: "absolute",
+        left: 54,
+        top: 42,
+        display: "flex",
+        alignItems: "center",
+        height: 42,
+        paddingLeft: 12,
+        paddingRight: 24,
+        borderRadius: 14,
+        backgroundColor: "rgba(15, 23, 42, 0.76)"
+      },
+      children: [
+        Src.LogoDataUri
+          ? H("img", {
+            key: "logo",
+            src: Src.LogoDataUri,
+            style: { width: 24, height: 24, borderRadius: 6 }
+          })
+          : H("div", {
+            key: "logo-fallback",
+            style: {
+              width: 24,
+              height: 24,
+              borderRadius: 6,
+              backgroundColor: Src.Color,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#ffffff"
+            },
+            children: Src.Label
+          }),
+        H("div", {
+          key: "name",
+          style: {
+            marginLeft: 12,
+            fontSize: 20,
+            fontWeight: 700,
+            color: "#f8fafc"
+          },
+          children: Src.Name
+        })
+      ]
+    });
   }
 
-  private DrawTrackInfo(Context: SKRSContext2D, State: TempVoiceMusicState, Options: TempVoiceMusicPanelRenderOptions, X: number, Y: number, Width: number): void {
-    Context.font = "800 36px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-    Context.fillStyle = "#f8fafc";
-    Context.textAlign = "left";
-    Context.textBaseline = "top";
-    this.DrawWrappedText(Context, State.TrackTitle || "No track", X, Y, Width, 44, 2);
+  private BuildThumbnailNode(ThumbnailUri: string | null, Assets: PanelAssets): ReactNode {
+    const Src = Assets.Current;
+    const X = 54;
+    const Y = 104;
+    const ThumbWidth = 520;
+    const ThumbHeight = 292;
+
+    return H("div", {
+      key: "thumbnail",
+      style: {
+        position: "absolute",
+        left: X - 4,
+        top: Y - 4,
+        width: ThumbWidth + 8,
+        height: ThumbHeight + 8,
+        borderRadius: 22,
+        backgroundColor: "rgba(255, 255, 255, 0.08)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      },
+      children: H("div", {
+        style: {
+          width: ThumbWidth,
+          height: ThumbHeight,
+          borderRadius: 18,
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#020617"
+        },
+        children: ThumbnailUri
+          ? H("img", {
+            src: ThumbnailUri,
+            style: { width: ThumbWidth, height: ThumbHeight, borderRadius: 18 }
+          })
+          : H("div", {
+            style: {
+              width: ThumbWidth,
+              height: ThumbHeight,
+              borderRadius: 18,
+              background: `linear-gradient(135deg, #1e293b, ${Src.Color}55)`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 28,
+              fontWeight: 800,
+              color: "rgba(248, 250, 252, 0.24)"
+            },
+            children: Src.Name
+          })
+      })
+    });
+  }
+
+  private BuildTrackInfoNode(State: TempVoiceMusicState, Options: TempVoiceMusicPanelRenderOptions, Assets: PanelAssets): ReactNode {
+    const Src = Assets.Current;
+    const X = 610;
+    const Y = 104;
+    const MaxWidth = 526;
+
+    const TrackInfoChildren: ReactNode[] = [
+      H("div", {
+        key: "title",
+        style: {
+          fontSize: 36,
+          fontWeight: 800,
+          lineHeight: 1.2,
+          color: "#f8fafc",
+          overflow: "hidden",
+          maxHeight: 86
+        },
+        children: this.TruncatePlainText(State.TrackTitle || "No track", 55)
+      })
+    ];
 
     if (State.TrackAuthor) {
-      Context.font = "700 20px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-      Context.fillStyle = "#cbd5e1";
-      Context.fillText(this.TruncateText(Context, `by ${State.TrackAuthor}`, Width), X, Y + 92);
+      TrackInfoChildren.push(H("div", {
+        key: "author",
+        style: {
+          fontSize: 20,
+          fontWeight: 700,
+          color: "#cbd5e1",
+          marginTop: 12
+        },
+        children: `by ${this.TruncatePlainText(State.TrackAuthor, 40)}`
+      }));
     }
 
-    Context.font = "700 18px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-    Context.fillStyle = State.Paused ? "#fbbf24" : "#22c55e";
-    Context.fillText(State.Paused ? "Paused" : "Playing now", X, Y + 124);
+    const SrcIconSize = 18;
+    const StatusChildren: ReactNode[] = [
+      Src.LogoDataUri
+        ? H("img", {
+          key: "src-icon",
+          src: Src.LogoDataUri,
+          style: { width: SrcIconSize, height: SrcIconSize, borderRadius: 4, marginRight: 8 }
+        })
+        : H("div", {
+          key: "src-fallback",
+          style: {
+            width: SrcIconSize,
+            height: SrcIconSize,
+            borderRadius: 4,
+            backgroundColor: Src.Color,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 9,
+            fontWeight: 700,
+            color: "#ffffff",
+            marginRight: 8
+          },
+          children: Src.Label
+        }),
+      H("span", {
+        key: "status-text",
+        children: State.Paused ? "Paused" : "Playing now"
+      })
+    ];
 
-    if (Options.HideTiming) {
-      return;
+    if (!Options.HideTiming) {
+      StatusChildren.push(H("span", {
+        key: "timing",
+        style: { color: "#94a3b8", marginLeft: 12, fontWeight: 700 },
+        children: `${this.FormatDuration(State.PositionSeconds)} / ${this.FormatDuration(State.DurationSeconds)}`
+      }));
     }
 
-    Context.fillStyle = "#94a3b8";
-    Context.fillText(`${this.FormatDuration(State.PositionSeconds)} / ${this.FormatDuration(State.DurationSeconds)}`, X + 132, Y + 124);
+    TrackInfoChildren.push(H("div", {
+      key: "status",
+      style: {
+        fontSize: 18,
+        fontWeight: 700,
+        color: State.Paused ? "#fbbf24" : "#22c55e",
+        marginTop: 8,
+        display: "flex"
+      },
+      children: StatusChildren
+    }));
+
+    return H("div", {
+      key: "track-info",
+      style: {
+        position: "absolute",
+        left: X,
+        top: Y,
+        width: MaxWidth,
+        display: "flex",
+        flexDirection: "column"
+      },
+      children: TrackInfoChildren
+    });
   }
 
-  private DrawQueue(Context: SKRSContext2D, State: TempVoiceMusicState, X: number, Y: number, Width: number, Height: number): void {
-    this.DrawRoundedRect(Context, X, Y, Width, Height, 18, "rgba(15, 23, 42, 0.68)");
-    Context.font = "800 20px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-    Context.fillStyle = "#e2e8f0";
-    Context.textAlign = "left";
-    Context.textBaseline = "top";
-    Context.fillText("Next tracks", X + 22, Y + 18);
-
+  private BuildQueueNode(State: TempVoiceMusicState, Assets: PanelAssets): ReactNode {
+    const X = 610;
+    const Y = 258;
+    const Width = 526;
+    const Height = 190;
     const VisibleQueue = State.Queue.slice(0, 4);
 
+    const QueueChildren: ReactNode[] = [
+      H("div", {
+        key: "queue-header",
+        style: {
+          fontSize: 20,
+          fontWeight: 800,
+          color: "#e2e8f0"
+        },
+        children: "Next tracks"
+      })
+    ];
+
     if (VisibleQueue.length === 0) {
-      Context.font = "600 18px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-      Context.fillStyle = "#64748b";
-      Context.fillText("Waitlist is empty", X + 22, Y + 66);
-      return;
+      QueueChildren.push(H("div", {
+        key: "empty",
+        style: {
+          fontSize: 18,
+          fontWeight: 600,
+          color: "#64748b",
+          marginTop: 28
+        },
+        children: "Waitlist is empty"
+      }));
+    } else {
+      for (let Index = 0; Index < VisibleQueue.length; Index += 1) {
+        const Track = VisibleQueue[Index];
+        const TrackSrc = Assets.All.get(Track.Source) ?? Assets.Current;
+        const IconSize = 20;
+        QueueChildren.push(H("div", {
+          key: `q-${Index}`,
+          style: {
+            display: "flex",
+            alignItems: "center",
+            marginTop: Index === 0 ? 22 : 8,
+            fontSize: 18,
+            fontWeight: 700
+          },
+          children: [
+            H("span", {
+              key: "num",
+              style: { color: "#94a3b8", marginRight: 8, minWidth: 28 },
+              children: `${Index + 1}.`
+            }),
+            TrackSrc.LogoDataUri
+              ? H("img", {
+                key: "src-icon",
+                src: TrackSrc.LogoDataUri,
+                style: { width: IconSize, height: IconSize, borderRadius: 4, marginRight: 8 }
+              })
+              : H("div", {
+                key: "src-fallback",
+                style: {
+                  width: IconSize,
+                  height: IconSize,
+                  borderRadius: 4,
+                  backgroundColor: TrackSrc.Color,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#ffffff",
+                  marginRight: 8
+                },
+                children: TrackSrc.Label
+              }),
+            H("span", {
+              key: "title",
+              style: { color: "#f8fafc", flex: 1, overflow: "hidden" },
+              children: this.TruncatePlainText(Track.Title, 24)
+            })
+          ]
+        }));
+      }
+      if (State.Queue.length > VisibleQueue.length) {
+        QueueChildren.push(H("div", {
+          key: "more",
+          style: {
+            fontSize: 15,
+            fontWeight: 700,
+            color: "#64748b",
+            position: "absolute",
+            bottom: 15,
+            left: 22
+          },
+          children: `+${State.Queue.length - VisibleQueue.length} more`
+        }));
+      }
     }
 
-    Context.font = "700 18px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-    for (let Index = 0; Index < VisibleQueue.length; Index += 1) {
-      const Track = VisibleQueue[Index];
-      const RowY = Y + 58 + Index * 30;
-      Context.fillStyle = "#94a3b8";
-      Context.fillText(`${Index + 1}.`, X + 22, RowY);
-      Context.fillStyle = "#f8fafc";
-      Context.fillText(this.TruncateText(Context, Track.Title, Width - 92), X + 54, RowY);
-    }
-
-    if (State.Queue.length > VisibleQueue.length) {
-      Context.font = "700 15px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-      Context.fillStyle = "#64748b";
-      Context.fillText(`+${State.Queue.length - VisibleQueue.length} more`, X + 22, Y + Height - 15);
-    }
+    return H("div", {
+      key: "queue",
+      style: {
+        position: "absolute",
+        left: X,
+        top: Y,
+        width: Width,
+        height: Height,
+        borderRadius: 18,
+        backgroundColor: "rgba(15, 23, 42, 0.68)",
+        display: "flex",
+        flexDirection: "column",
+        padding: "18px 22px"
+      },
+      children: QueueChildren
+    });
   }
 
-  private DrawProgress(Context: SKRSContext2D, State: TempVoiceMusicState, Progress: number, X: number, Y: number, Width: number): void {
+  private BuildProgressNode(State: TempVoiceMusicState, Progress: number): ReactNode {
+    const X = 54;
+    const Y = 462;
+    const Width = 1082;
     const BarHeight = 22;
-    this.DrawRoundedRect(Context, X, Y, Width, BarHeight, 11, "rgba(15, 23, 42, 0.88)");
-    this.DrawRoundedRect(Context, X, Y, Math.max(BarHeight, Width * Progress), BarHeight, 11, State.Paused ? "#f59e0b" : "#ef4444");
-    Context.lineWidth = 2;
-    Context.strokeStyle = "rgba(255, 255, 255, 0.16)";
-    this.StrokeRoundedRect(Context, X, Y, Width, BarHeight, 11);
+    const FillColor = State.Paused ? "#f59e0b" : "#ef4444";
+    const FillWidth = Math.max(BarHeight, Width * Progress);
 
-    Context.font = "700 18px \"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", sans-serif";
-    Context.fillStyle = "#cbd5e1";
-    Context.textAlign = "left";
-    Context.textBaseline = "top";
-    Context.fillText(this.FormatDuration(State.PositionSeconds), X, Y + 36);
-    Context.textAlign = "right";
-    Context.fillText(this.FormatDuration(State.DurationSeconds), X + Width, Y + 36);
+    return H("div", {
+      key: "progress",
+      style: {
+        position: "absolute",
+        left: X,
+        top: Y,
+        width: Width,
+        display: "flex",
+        flexDirection: "column"
+      },
+      children: [
+        H("div", {
+          key: "bar-container",
+          style: {
+            width: Width,
+            height: BarHeight,
+            borderRadius: 11,
+            backgroundColor: "rgba(15, 23, 42, 0.88)",
+            position: "relative",
+            overflow: "hidden",
+            border: "2px solid rgba(255, 255, 255, 0.16)",
+            display: "flex"
+          },
+          children: H("div", {
+            key: "bar-fill",
+            style: {
+              width: FillWidth,
+              height: BarHeight,
+              borderRadius: 11,
+              backgroundColor: FillColor
+            }
+          })
+        }),
+        H("div", {
+          key: "timing",
+          style: {
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: 8,
+            fontSize: 18,
+            fontWeight: 700,
+            color: "#cbd5e1"
+          },
+          children: [
+            H("span", { key: "pos", children: this.FormatDuration(State.PositionSeconds) }),
+            H("span", { key: "dur", children: this.FormatDuration(State.DurationSeconds) })
+          ]
+        })
+      ]
+    });
   }
 
-  private DrawWrappedText(Context: SKRSContext2D, Text: string, X: number, Y: number, MaxWidth: number, LineHeight: number, MaxLines: number): void {
-    const Words = Text.split(/\s+/u).filter(Boolean);
-    const Lines: string[] = [];
-    let CurrentLine = "";
+  public async BuildAskMusicRequestImage(
+    ThumbnailUrl: string | null,
+    Source: string,
+    Title: string,
+    Author: string | null,
+    RequesterName: string
+  ): Promise<Buffer> {
+    const Width = 800;
+    const Height = 400;
+    const AccentColor = "#ef4444";
+    const Info = SourceInfo[Source] ?? { label: "MU", logoUrl: "", color: "#64748B", name: "Music" };
+    const LogoDataUri = Info.logoUrl ? await this.LoadLogo(Info.logoUrl) : null;
+    const ThumbnailDataUri = ThumbnailUrl ? await this.LoadAskThumbnail(ThumbnailUrl) : null;
 
-    for (const Word of Words) {
-      const Candidate = CurrentLine ? `${CurrentLine} ${Word}` : Word;
+    const CoverSize = 320;
+    const InfoX = 360;
+    const InfoWidth = Width - InfoX - 40;
+    const BadgeColor = Info.color;
 
-      if (Context.measureText(Candidate).width <= MaxWidth) {
-        CurrentLine = Candidate;
-        continue;
-      }
-
-      if (CurrentLine) {
-        Lines.push(CurrentLine);
-      }
-
-      CurrentLine = Word;
-
-      if (Lines.length === MaxLines - 1) {
-        break;
-      }
-    }
-
-    if (CurrentLine && Lines.length < MaxLines) {
-      Lines.push(CurrentLine);
-    }
-
-    for (let Index = 0; Index < Lines.length; Index += 1) {
-      const IsLastLine = Index === MaxLines - 1;
-      Context.fillText(IsLastLine ? this.TruncateText(Context, Lines[Index], MaxWidth) : Lines[Index], X, Y + Index * LineHeight);
-    }
+    return await RenderSatoriToPng(
+      H("div", {
+        style: {
+          width: Width,
+          height: Height,
+          display: "flex",
+          fontFamily: SatoriFontFamily,
+          color: "#f8fafc",
+          backgroundColor: "#0f172a",
+          position: "relative",
+          overflow: "hidden"
+        },
+        children: [
+          H("div", {
+            key: "cover",
+            style: {
+              width: CoverSize,
+              height: Height,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              backgroundColor: "#020617",
+              flexShrink: 0
+            },
+            children: ThumbnailDataUri
+              ? H("img", {
+                src: ThumbnailDataUri,
+                style: { width: CoverSize, height: Height, objectFit: "cover" }
+              })
+              : H("div", {
+                style: {
+                  width: CoverSize,
+                  height: Height,
+                  background: `linear-gradient(135deg, #1e293b, ${BadgeColor}44)`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 48,
+                  fontWeight: 800,
+                  color: "rgba(248, 250, 252, 0.15)"
+                },
+                children: Info.name
+              })
+          }),
+          H("div", {
+            key: "info",
+            style: {
+              position: "absolute",
+              left: InfoX,
+              top: 0,
+              width: InfoWidth,
+              height: Height,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              paddingLeft: 0
+            },
+            children: [
+              H("div", {
+                key: "badge",
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  marginBottom: 16
+                },
+                children: [
+                  LogoDataUri
+                    ? H("img", {
+                      key: "logo",
+                      src: LogoDataUri,
+                      style: { width: 22, height: 22, borderRadius: 5, marginRight: 10 }
+                    })
+                    : H("div", {
+                      key: "logo-fallback",
+                      style: {
+                        width: 22,
+                        height: 22,
+                        borderRadius: 5,
+                        backgroundColor: BadgeColor,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#ffffff",
+                        marginRight: 10
+                      },
+                      children: Info.label
+                    }),
+                  H("span", {
+                    key: "name",
+                    style: { fontSize: 16, fontWeight: 700, color: "#94a3b8" },
+                    children: Info.name
+                  })
+                ]
+              }),
+              H("div", {
+                key: "title",
+                style: {
+                  fontSize: 30,
+                  fontWeight: 800,
+                  lineHeight: 1.25,
+                  color: "#f8fafc",
+                  overflow: "hidden",
+                  maxHeight: 76
+                },
+                children: this.TruncatePlainText(Title || "Music request", 42)
+              }),
+              Author
+                ? H("div", {
+                  key: "author",
+                  style: {
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: "#cbd5e1",
+                    marginTop: 10
+                  },
+                  children: `by ${this.TruncatePlainText(Author, 36)}`
+                })
+                : null,
+              H("div", {
+                key: "requester",
+                style: {
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: "#64748b",
+                  marginTop: 24
+                },
+                children: `Requested by ${RequesterName}`
+              })
+            ]
+          })
+        ]
+      }),
+      Width,
+      Height
+    );
   }
 
-  private TruncateText(Context: SKRSContext2D, Text: string, MaxWidth: number): string {
-    if (Context.measureText(Text).width <= MaxWidth) {
-      return Text;
-    }
-
-    let Result = Text;
-
-    while (Result.length > 1 && Context.measureText(`${Result}...`).width > MaxWidth) {
-      Result = Result.slice(0, -1);
-    }
-
-    return `${Result.trimEnd()}...`;
+  private async LoadAskThumbnail(Url: string): Promise<string | null> {
+    return await FetchImageAsDataUri(Url, { Width: 320, Height: 400 }).catch(() => null);
   }
 
   private FormatDuration(Value: number | null): string {
@@ -292,37 +702,11 @@ export class TempVoiceMusicPanelRenderer {
     return `${Minutes}:${String(Seconds).padStart(2, "0")}`;
   }
 
-  private DrawGlow(Context: SKRSContext2D, X: number, Y: number, Color: string): void {
-    const Gradient = Context.createRadialGradient(X, Y, 0, X, Y, 260);
-    Gradient.addColorStop(0, Color);
-    Gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-    Context.fillStyle = Gradient;
-    Context.fillRect(X - 260, Y - 260, 520, 520);
-  }
+  private TruncatePlainText(Value: string, MaxLength: number): string {
+    if (Value.length <= MaxLength) {
+      return Value;
+    }
 
-  private DrawRoundedRect(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Radius: number, FillStyle: string): void {
-    this.RoundedPath(Context, X, Y, Width, Height, Radius);
-    Context.fillStyle = FillStyle;
-    Context.fill();
-  }
-
-  private StrokeRoundedRect(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Radius: number): void {
-    this.RoundedPath(Context, X, Y, Width, Height, Radius);
-    Context.stroke();
-  }
-
-  private RoundedPath(Context: SKRSContext2D, X: number, Y: number, Width: number, Height: number, Radius: number): void {
-    const SafeRadius = Math.min(Radius, Width / 2, Height / 2);
-    Context.beginPath();
-    Context.moveTo(X + SafeRadius, Y);
-    Context.lineTo(X + Width - SafeRadius, Y);
-    Context.quadraticCurveTo(X + Width, Y, X + Width, Y + SafeRadius);
-    Context.lineTo(X + Width, Y + Height - SafeRadius);
-    Context.quadraticCurveTo(X + Width, Y + Height, X + Width - SafeRadius, Y + Height);
-    Context.lineTo(X + SafeRadius, Y + Height);
-    Context.quadraticCurveTo(X, Y + Height, X, Y + Height - SafeRadius);
-    Context.lineTo(X, Y + SafeRadius);
-    Context.quadraticCurveTo(X, Y, X + SafeRadius, Y);
-    Context.closePath();
+    return `${Value.slice(0, Math.max(1, MaxLength - 3)).trimEnd()}...`;
   }
 }

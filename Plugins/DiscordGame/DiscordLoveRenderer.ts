@@ -1,8 +1,15 @@
 import { createElement, type ReactNode } from "react";
-import sharp from "sharp";
-import satori, { type Font } from "satori";
 import type { User } from "discord.js";
-import { LoadSatoriFonts } from "../../src/Core/SatoriFonts.js";
+import {
+  RenderSatoriToPng,
+  HexToRgb,
+  RgbToHex,
+  MixRgb,
+  Rgba,
+  SvgToDataUri,
+  FetchImageAsDataUri,
+  type RgbColor
+} from "../../src/Core/ImageGenerator.js";
 
 type LoveRendererLogger = {
   Warn(Message: string, Metadata?: unknown): void;
@@ -22,18 +29,10 @@ type LoveImageAssets = {
   SecondAvatarDataUri: string | null;
 };
 
-type RgbColor = {
-  Blue: number;
-  Green: number;
-  Red: number;
-};
-
 const H = createElement;
 const SatoriFontFamily = "DejaVu Sans";
 
 export class DiscordLoveRenderer {
-  private SatoriFontsPromise: Promise<Font[]> | null = null;
-
   public constructor(private readonly Logger: LoveRendererLogger) {}
 
   public async BuildLoveImage(Options: LoveImageOptions): Promise<Buffer> {
@@ -42,14 +41,11 @@ export class DiscordLoveRenderer {
     const Accent = this.SanitizeColor(Options.AccentColor, "#ec4899");
     const Percent = this.ClampPercent(Options.Percent);
     const Assets = await this.BuildLoveAssets(Options);
-    const Svg = await satori(this.BuildLoveElement(Options, Assets, Accent, Percent), {
-      width: Width,
-      height: Height,
-      fonts: await this.GetSatoriFonts(),
-      embedFont: true
-    });
-
-    return await sharp(Buffer.from(Svg)).png().toBuffer();
+    return await RenderSatoriToPng(
+      this.BuildLoveElement(Options, Assets, Accent, Percent),
+      Width,
+      Height
+    );
   }
 
   private async BuildLoveAssets(Options: LoveImageOptions): Promise<LoveImageAssets> {
@@ -60,8 +56,8 @@ export class DiscordLoveRenderer {
   }
 
   private BuildLoveElement(Options: LoveImageOptions, Assets: LoveImageAssets, Accent: string, Percent: number): ReactNode {
-    const AccentRgb = this.HexToRgb(Accent);
-    const AccentSoft = this.Rgba(AccentRgb, 0.16);
+    const AccentRgb = HexToRgb(Accent);
+    const AccentSoft = Rgba(AccentRgb, 0.16);
     const ProgressWidth = Math.max(34, Math.round(644 * (Percent / 100)));
     const CardStyle = {
       display: "flex",
@@ -71,7 +67,7 @@ export class DiscordLoveRenderer {
       width: 904,
       height: 336,
       borderRadius: 34,
-      border: `2px solid ${this.Rgba(AccentRgb, 0.58)}`,
+      border: `2px solid ${Rgba(AccentRgb, 0.58)}`,
       backgroundColor: "rgba(15, 23, 42, 0.72)"
     };
 
@@ -247,20 +243,7 @@ export class DiscordLoveRenderer {
 
   private async FetchAvatarDataUri(UserValue: User): Promise<string | null> {
     const AvatarUrl = UserValue.displayAvatarURL({ extension: "png", size: 256, forceStatic: true });
-
-    return await fetch(AvatarUrl).then(async (Response) => {
-      if (!Response.ok) {
-        throw new Error(`HTTP ${Response.status}`);
-      }
-
-      const AvatarBuffer = Buffer.from(await Response.arrayBuffer());
-      const CenteredAvatar = await sharp(AvatarBuffer)
-        .resize(150, 150, { fit: "cover", position: "center" })
-        .png()
-        .toBuffer();
-
-      return `data:image/png;base64,${CenteredAvatar.toString("base64")}`;
-    }).catch((ErrorValue: unknown) => {
+    return await FetchImageAsDataUri(AvatarUrl, { Width: 150, Height: 150 }).catch((ErrorValue: unknown) => {
       this.Logger.Warn("Love image avatar could not be loaded.", {
         Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
         UserId: UserValue.id
@@ -270,9 +253,9 @@ export class DiscordLoveRenderer {
   }
 
   private BuildLoveBackgroundDataUri(Accent: string): string {
-    const AccentRgb = this.HexToRgb(Accent);
-    const AccentDark = this.RgbToHex(this.MixRgb(AccentRgb, { Red: 17, Green: 24, Blue: 39 }, 0.64));
-    const AccentWarm = this.RgbToHex(this.MixRgb(AccentRgb, { Red: 244, Green: 63, Blue: 94 }, 0.42));
+    const AccentRgb = HexToRgb(Accent);
+    const AccentDark = RgbToHex(MixRgb(AccentRgb, { R: 17, G: 24, B: 39 }, 0.64));
+    const AccentWarm = RgbToHex(MixRgb(AccentRgb, { R: 244, G: 63, B: 94 }, 0.42));
     const Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
       <defs>
         <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
@@ -301,7 +284,7 @@ export class DiscordLoveRenderer {
       <path d="M-20 62 C130 20 258 66 378 36 C548 -8 735 38 1020 -34" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="72"/>
       <rect width="1000" height="420" fill="rgba(2,6,23,0.2)"/>
     </svg>`;
-    return this.SvgToDataUri(Svg);
+    return SvgToDataUri(Svg);
   }
 
   private BuildHeartDataUri(Accent: string): string {
@@ -309,15 +292,7 @@ export class DiscordLoveRenderer {
       <defs><filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="9" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
       <path d="M58 90 C-6 36 20 -20 58 22 C96 -20 122 36 58 90 Z" fill="${Accent}" filter="url(#glow)"/>
     </svg>`;
-    return this.SvgToDataUri(Svg);
-  }
-
-  private async GetSatoriFonts(): Promise<Font[]> {
-    if (!this.SatoriFontsPromise) {
-      this.SatoriFontsPromise = LoadSatoriFonts(SatoriFontFamily);
-    }
-
-    return await this.SatoriFontsPromise;
+    return SvgToDataUri(Svg);
   }
 
   private TruncatePlainText(Value: string, MaxLength: number): string {
@@ -328,38 +303,8 @@ export class DiscordLoveRenderer {
     return `${Value.slice(0, Math.max(1, MaxLength - 3)).trimEnd()}...`;
   }
 
-  private SvgToDataUri(Svg: string): string {
-    return `data:image/svg+xml;base64,${Buffer.from(Svg).toString("base64")}`;
-  }
-
   private ClampPercent(Value: number): number {
     return Math.min(100, Math.max(0, Math.round(Number.isFinite(Value) ? Value : 0)));
-  }
-
-  private HexToRgb(ColorValue: string): RgbColor {
-    const SafeColor = this.SanitizeColor(ColorValue, "#ec4899").replace("#", "");
-    return {
-      Red: Number.parseInt(SafeColor.slice(0, 2), 16),
-      Green: Number.parseInt(SafeColor.slice(2, 4), 16),
-      Blue: Number.parseInt(SafeColor.slice(4, 6), 16)
-    };
-  }
-
-  private RgbToHex(Color: RgbColor): string {
-    return `#${[Color.Red, Color.Green, Color.Blue].map((Part) => Math.max(0, Math.min(255, Math.round(Part))).toString(16).padStart(2, "0")).join("")}`;
-  }
-
-  private Rgba(Color: RgbColor, Alpha: number): string {
-    return `rgba(${Math.round(Color.Red)}, ${Math.round(Color.Green)}, ${Math.round(Color.Blue)}, ${Alpha})`;
-  }
-
-  private MixRgb(FirstColor: RgbColor, SecondColor: RgbColor, SecondWeight: number): RgbColor {
-    const FirstWeight = 1 - SecondWeight;
-    return {
-      Red: FirstColor.Red * FirstWeight + SecondColor.Red * SecondWeight,
-      Green: FirstColor.Green * FirstWeight + SecondColor.Green * SecondWeight,
-      Blue: FirstColor.Blue * FirstWeight + SecondColor.Blue * SecondWeight
-    };
   }
 
   private SanitizeColor(ColorValue: string, Fallback: string): string {
