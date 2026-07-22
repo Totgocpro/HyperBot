@@ -134,10 +134,9 @@ The legacy `Release.sh` and `Release.bat` files are still available for compatib
 
 ## Included Plugins
 
-These entries are based on the current `Plugin.json` manifests in `Plugins/`.
-
 | Plugin | Scope | Category | Commands | Dashboard and behavior |
 | --- | --- | --- | --- | --- |
+| `Achievement` | Guild | Engagement | `/achievements`, `/progress` | Create and track achievements for members. Supports message counts, image sending, daily streaks, voice activity, and more. Custom dashboard achievement editor with configurable announcement channel and DM on completion. |
 | `Automation` | Guild | Automation | Dashboard only | Defines If-Then automation rules with triggers (message, join, leave, voice, schedule), AND/OR condition gates, and actions (send message, add/remove role, add reaction, delete message, DM). Custom dashboard rule builder. |
 | `Backups` | Guild | Administration | Dashboard only | Creates and restores Discord server backups from the dashboard. Covers backup naming, restore safety, and backup action buttons. |
 | `CommandAliases` | Global | General | Dashboard only | Registers global command aliases from dashboard-managed alias entries. |
