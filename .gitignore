@@ -9,3 +9,4 @@ Backups/
 .hyperbot-cli-venv/
 Exports/
 package-lock.json
+CustomPlugins/
