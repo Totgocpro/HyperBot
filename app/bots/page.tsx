@@ -7,10 +7,11 @@ import Link from "next/link";
 type Bot = {
   Id: string;
   ClientId: string;
-  Token: string;
   Name: string;
   AvatarUrl: string | null;
   IsEnabled: boolean;
+  AllowInvite: boolean;
+  HasToken: boolean;
   IsOnline: boolean;
   GuildCount: number;
   Guilds: Array<{ Id: string; Name: string; Icon: string | null }>;
@@ -161,14 +162,20 @@ export default function BotsPage() {
                       Manage
                     </Link>
                   ) : null}
-                  <a
-                    href={`https://discord.com/oauth2/authorize?client_id=${Bot.ClientId}&scope=bot%20applications.commands&permissions=8`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`flex items-center justify-center rounded-xl bg-blue-600/20 py-2 text-sm font-bold text-blue-400 hover:bg-blue-600/30 transition-colors ${IsSuperAdmin ? "" : "col-span-2"}`}
-                  >
-                    Invite
-                  </a>
+                  {Bot.AllowInvite ? (
+                    <a
+                      href={`https://discord.com/oauth2/authorize?client_id=${Bot.ClientId}&scope=bot%20applications.commands&permissions=8`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`flex items-center justify-center rounded-xl bg-blue-600/20 py-2 text-sm font-bold text-blue-400 hover:bg-blue-600/30 transition-colors ${IsSuperAdmin ? "" : "col-span-2"}`}
+                    >
+                      Invite
+                    </a>
+                  ) : (
+                    <div className={`flex items-center justify-center rounded-xl bg-slate-800/50 py-2 text-sm font-bold text-slate-600 cursor-not-allowed ${IsSuperAdmin ? "" : "col-span-2"}`}>
+                      Invite
+                    </div>
+                  )}
                   {IsSuperAdmin && (
                     <button
                         onClick={() => DeleteBot(Bot.Id)}

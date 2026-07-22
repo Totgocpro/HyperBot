@@ -39,6 +39,7 @@ model DiscordBot {
   Name          String
   AvatarUrl     String?
   IsEnabled     Boolean  @default(true)
+  AllowInvite   Boolean  @default(true)
   CreatedAt     DateTime @default(now())
   UpdatedAt     DateTime @updatedAt
 

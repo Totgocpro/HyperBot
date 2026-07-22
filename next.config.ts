@@ -16,6 +16,10 @@ const NextConfiguration: NextConfig = {
       ".mjs": [".mts", ".mjs"]
     };
 
+    WebpackConfiguration.ignoreWarnings = [
+      { module: /PluginSettingsPanel/ } // This is intentional, for allowing custom plugin to have custom configs
+    ];
+
     return WebpackConfiguration;
   }
 };

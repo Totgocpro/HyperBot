@@ -120,6 +120,7 @@ class BotInstance {
 
         setInterval(() => {
           void RunSafely(`bot tick:${this.BotId}`, async () => {
+            await this.ProcessGuildCommands();
             await this.EnforceGuildAccess();
             await RedisClient.set(`Bot:${this.BotId}:Heartbeat`, new Date().toISOString(), "EX", 30);
             await this.CacheBotGuilds();
@@ -193,6 +194,12 @@ class BotInstance {
 
     this.DiscordClient.on("guildCreate", (Guild) => {
       void RunSafely(`guildCreate:${this.BotId}`, async () => {
+        if (!(await this.IsInviteAllowed())) {
+          console.warn(`Bot ${this.BotId} leaving guild ${Guild.id} (invites not allowed).`);
+          await Guild.leave();
+          return;
+        }
+
         const GuildAccess = await Prisma.guildAccess.findUnique({
           where: { BotId_GuildId: { BotId: this.BotId, GuildId: Guild.id } }
         });
@@ -328,6 +335,40 @@ class BotInstance {
       console.warn(`Bot ${this.BotId} leaving banned guild ${Guild.id}.`);
       await Guild.leave();
     }
+  }
+
+  public async ProcessGuildCommands(): Promise<void> {
+    while (true) {
+      const Raw = await RedisClient.lpop(`Bot:${this.BotId}:Commands`);
+      if (!Raw) break;
+
+      try {
+        const Command = JSON.parse(Raw) as { type: string; guildId: string };
+        if (Command.type === "LeaveGuild") {
+          const Guild = this.DiscordClient.guilds.cache.get(Command.guildId);
+          if (Guild) {
+            console.warn(`Bot ${this.BotId} leaving guild ${Command.guildId} (dashboard command).`);
+            await Guild.leave();
+          }
+        }
+      } catch (ErrorValue) {
+        console.error(`Bot ${this.BotId} failed to process command:`, ErrorValue);
+      }
+    }
+  }
+
+  private async IsInviteAllowed(): Promise<boolean> {
+    const Cached = await RedisClient.get(`Bot:${this.BotId}:AllowInvite`);
+    if (Cached !== null) {
+      return Cached === "1";
+    }
+    const Bot = await Prisma.discordBot.findUnique({
+      where: { Id: this.BotId },
+      select: { AllowInvite: true }
+    });
+    const Allowed = Bot?.AllowInvite ?? true;
+    await RedisClient.set(`Bot:${this.BotId}:AllowInvite`, Allowed ? "1" : "0");
+    return Allowed;
   }
 
   public QueueSlashCommandRegistration(): void {

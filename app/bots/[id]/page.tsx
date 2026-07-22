@@ -11,8 +11,18 @@ type Bot = {
   Id: string;
   Name: string;
   ClientId: string;
-  Token: string;
   IsEnabled: boolean;
+  AllowInvite: boolean;
+  HasToken: boolean;
+};
+
+const TokenPlaceholder = "∙".repeat(72);
+
+type BotGuild = {
+  Id: string;
+  Name: string;
+  Icon: string | null;
+  MemberCount: number | null;
 };
 
 type User = {
@@ -46,6 +56,9 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
   const [Status, SetStatus] = useState("");
   const [BotConfig, SetBotConfig] = useState({ ClientId: "", Token: "" });
   const [SavingPluginId, SetSavingPluginId] = useState("");
+  const [AllowInvite, SetAllowInvite] = useState(true);
+  const [Guilds, SetGuilds] = useState<BotGuild[]>([]);
+  const [LeavingGuildId, SetLeavingGuildId] = useState("");
 
   useEffect(() => {
     void LoadData();
@@ -69,10 +82,11 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
       return;
     }
 
-    const [BotsRes, PluginsRes, AdminPluginsRes] = await Promise.all([
+    const [BotsRes, PluginsRes, AdminPluginsRes, GuildsRes] = await Promise.all([
         fetch("/api/bots"),
         fetch(`/api/plugins/${id}/Global`),
-        fetch(`/api/admin/plugins?botId=${id}`)
+        fetch(`/api/admin/plugins?botId=${id}`),
+        fetch(`/api/guilds?botId=${id}`)
     ]);
 
     if (BotsRes.ok && PluginsRes.ok && AdminPluginsRes.ok) {
@@ -86,7 +100,13 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
       }
 
       SetBot(CurrentBot);
-      SetBotConfig({ ClientId: CurrentBot.ClientId, Token: CurrentBot.Token });
+      SetBotConfig({ ClientId: CurrentBot.ClientId, Token: CurrentBot.HasToken ? TokenPlaceholder : "" });
+      SetAllowInvite(CurrentBot.AllowInvite);
+
+      if (GuildsRes.ok) {
+        const GuildsData = await GuildsRes.json();
+        SetGuilds(GuildsData.Guilds || []);
+      }
 
       const AdminPluginsData = await AdminPluginsRes.json();
       SetManageablePlugins(AdminPluginsData.ManageablePlugins || []);
@@ -178,14 +198,20 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
   }
 
   async function UpdateBotConfig() {
+      const Body: Record<string, unknown> = { ClientId: BotConfig.ClientId };
+      if (BotConfig.Token && BotConfig.Token !== TokenPlaceholder) {
+          Body.Token = BotConfig.Token;
+      }
       const Response = await fetch(`/api/bots/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(BotConfig)
+          body: JSON.stringify(Body)
       });
       if (Response.ok) {
           SetStatus("Bot configuration updated.");
           void LoadData();
+      } else {
+          SetStatus(await Response.text());
       }
   }
 
@@ -355,9 +381,18 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
                         <input
                             type="password"
                             value={BotConfig.Token}
+                            onFocus={() => {
+                                if (BotConfig.Token === TokenPlaceholder) {
+                                    SetBotConfig({ ...BotConfig, Token: "" });
+                                }
+                            }}
                             onChange={e => SetBotConfig({ ...BotConfig, Token: e.target.value })}
+                            placeholder={BotConfig.Token === TokenPlaceholder ? "Token saved (click to change)" : ""}
                             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white outline-none focus:border-blue-500 font-mono text-sm"
                         />
+                        {BotConfig.Token === TokenPlaceholder && (
+                            <p className="mt-1 text-xs text-slate-500 italic">The token is stored securely and never sent to the browser.</p>
+                        )}
                     </div>
                     <button
                         onClick={UpdateBotConfig}
@@ -366,6 +401,84 @@ export default function BotSettingsPage({ params }: { params: Promise<{ id: stri
                         Update Credentials
                     </button>
                     <p className="text-xs text-slate-500 italic">Changing the token will re-fetch the bot's name and avatar from Discord.</p>
+                </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+                <h2 className="mb-6 text-xl font-bold text-white">Manage Servers</h2>
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                        <div>
+                            <p className="font-bold text-white">Allow Invite</p>
+                            <p className="text-xs text-slate-500">Block the invite button and auto-leave all servers when disabled.</p>
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                            <input
+                                type="checkbox"
+                                checked={AllowInvite}
+                                onChange={async (e) => {
+                                    const NewValue = e.target.checked;
+                                    SetAllowInvite(NewValue);
+                                    const Response = await fetch(`/api/bots/${id}`, {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ AllowInvite: NewValue })
+                                    });
+                                    if (Response.ok) {
+                                        SetStatus("Allow Invite updated.");
+                                    } else {
+                                        SetAllowInvite(!NewValue);
+                                        SetStatus("Failed to update Allow Invite.");
+                                    }
+                                }}
+                                className="peer sr-only"
+                            />
+                            <div className="h-7 w-12 rounded-full bg-slate-700 after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-blue-600 peer-checked:after:translate-x-5"></div>
+                        </label>
+                    </div>
+                    <div className="space-y-2">
+                        {Guilds.length === 0 ? (
+                            <p className="text-sm text-slate-500 py-4 text-center">No servers found.</p>
+                        ) : (
+                            Guilds.map((Guild) => (
+                                <div key={Guild.Id} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        {Guild.Icon ? (
+                                            <img src={Guild.Icon} alt="" className="h-10 w-10 shrink-0 rounded-xl" />
+                                        ) : (
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-lg font-bold text-slate-500">
+                                                {Guild.Name[0]}
+                                            </div>
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="truncate font-bold text-white">{Guild.Name}</p>
+                                            {Guild.MemberCount !== null && (
+                                                <p className="text-xs text-slate-500">{Guild.MemberCount} members</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button
+                                        disabled={LeavingGuildId === Guild.Id}
+                                        onClick={async () => {
+                                            if (!confirm(`Make the bot leave "${Guild.Name}"? This action cannot be undone.`)) return;
+                                            SetLeavingGuildId(Guild.Id);
+                                            const Response = await fetch(`/api/bots/${id}/guilds/${Guild.Id}/leave`, { method: "POST" });
+                                            if (Response.ok) {
+                                                SetGuilds((prev) => prev.filter((g) => g.Id !== Guild.Id));
+                                                SetStatus(`Left "${Guild.Name}".`);
+                                            } else {
+                                                SetStatus("Failed to leave server.");
+                                            }
+                                            SetLeavingGuildId("");
+                                        }}
+                                        className="shrink-0 rounded-xl bg-red-600/10 px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-600/20 transition-colors disabled:opacity-50"
+                                    >
+                                        {LeavingGuildId === Guild.Id ? "Leaving..." : "Leave"}
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
             </section>
 

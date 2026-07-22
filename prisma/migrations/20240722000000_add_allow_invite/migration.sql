@@ -1,0 +1,1 @@
+ALTER TABLE "DiscordBot" ADD COLUMN "AllowInvite" BOOLEAN NOT NULL DEFAULT true;

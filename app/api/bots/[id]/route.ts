@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@/src/Core/Clients";
+import { Prisma, RedisClient } from "@/src/Core/Clients";
 import { RequireDashboardUser, RequireSuperAdmin } from "@/src/Web/Auth";
 
 type RouteParams = {
@@ -59,6 +59,7 @@ async function Patch(Request: Request, { params }: RouteParams): Promise<Respons
   if (Body.Token !== undefined) UpdateData.Token = Body.Token;
   if (Body.ClientId !== undefined) UpdateData.ClientId = Body.ClientId;
   if (Body.IsEnabled !== undefined) UpdateData.IsEnabled = Body.IsEnabled;
+  if (Body.AllowInvite !== undefined) UpdateData.AllowInvite = Body.AllowInvite;
 
   if (Body.Token) {
       // Re-fetch bot info if token changed
@@ -78,6 +79,10 @@ async function Patch(Request: Request, { params }: RouteParams): Promise<Respons
     where: { Id: id },
     data: UpdateData
   });
+
+  if (Body.AllowInvite !== undefined) {
+    await RedisClient.set(`Bot:${id}:AllowInvite`, Body.AllowInvite ? "1" : "0");
+  }
 
   return NextResponse.json(Bot);
 }
