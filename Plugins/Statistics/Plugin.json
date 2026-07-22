@@ -219,6 +219,7 @@
       "Unit": "seconds"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettings/PluginSettingsDataEditors#StatisticsEditor",
   "EntryPoint": "./StatisticsPlugin.ts",
   "Category": "Analytics"
 }

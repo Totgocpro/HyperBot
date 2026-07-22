@@ -123,6 +123,7 @@
       "Section": "Reminders"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettings/PluginSettingsWorkflowEditors#RemindersEditor",
   "EntryPoint": "./RemindersPlugin.ts",
   "Category": "Automation"
 }

@@ -80,6 +80,7 @@ async function Get(Request: Request, Context: RouteContext): Promise<Response> {
         DependencyErrors: BuildDependencyErrors(ManifestEntry.Manifest.Dependencies ?? [], AvailablePluginIds),
         Commands: ManifestEntry.Manifest.Commands,
         WebInterface: Fields,
+        DashboardEditor: ManifestEntry.Manifest.DashboardEditor,
         DashboardElements: await Promise.all(
           (ManifestEntry.Manifest.DashboardElements ?? []).map(async (Element) => ({
             ...Element,

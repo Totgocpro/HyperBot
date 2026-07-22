@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect as UseEffect, useRef as UseRef, useState as UseState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect as UseEffect, useRef as UseRef, useState as UseState, type ComponentType } from "react";
 import type { BotGuildSummary } from "../../Core/Types";
 import {
   BuildConfigSections,
@@ -15,13 +16,64 @@ import {
   type PluginConfigGroup
 } from "./PluginInterfaceRenderer";
 import { BuildGuildHeaders } from "./PluginSettings/PluginSettingsShared";
-import { BackupsManager, DashboardElementRenderer, SendEmbedEditor, StatisticsEditor } from "./PluginSettings/PluginSettingsDataEditors";
+import { DashboardElementRenderer } from "./PluginSettings/PluginSettingsDataEditors";
 import { BuildDraftValues, BuildPersistablePluginValues, BuildPluginDraftValues, ComputeDirtyValues, HasPluginUnsavedChanges, MergeServerDraftValues, PluginHamburgerIcon, ScrollToPluginSection, UpdatePluginSavedValues } from "./PluginSettings/PluginSettingsState";
 import { PluginIcon } from "./PluginIcon";
-import { CustomCommandsEditor, NotificationsEditor, RemindersEditor } from "./PluginSettings/PluginSettingsWorkflowEditors";
-import { EmojiAdderEditor } from "./PluginSettingsCustom/EmojiAdderEditor";
-import { AutomationEditor } from "../../../Plugins/Automation/AutomationEditor";
 import type { SaveFeedback } from "./PluginSettings/PluginSettingsTypes";
+
+type SafeLoader = () => Promise<{ default: ComponentType<any> }>;
+
+function SafeImport(Loader: SafeLoader): SafeLoader {
+  return () => Loader().catch(() => ({ default: () => null }));
+}
+
+const PluginEditorRegistry: Record<string, ComponentType<any>> = {
+  Automation: dynamic(SafeImport(() => import("../../../Plugins/Automation/AutomationEditor").then((Mod) => ({ default: Mod.AutomationEditor }))), { loading: () => null }),
+  Achievement: dynamic(SafeImport(() => import("../../../Plugins/Achievement/AchievementEditor").then((Mod) => ({ default: Mod.AchievementEditor }))), { loading: () => null }),
+  SendEmbed: dynamic(SafeImport(() => import("./PluginSettings/PluginSettingsDataEditors").then((Mod) => ({ default: Mod.SendEmbedEditor }))), { loading: () => null }),
+  EmojiAdder: dynamic(SafeImport(() => import("./PluginSettingsCustom/EmojiAdderEditor").then((Mod) => ({ default: Mod.EmojiAdderEditor }))), { loading: () => null }),
+  Backups: dynamic(SafeImport(() => import("./PluginSettings/PluginSettingsDataEditors").then((Mod) => ({ default: Mod.BackupsManager }))), { loading: () => null }),
+  Statistics: dynamic(SafeImport(() => import("./PluginSettings/PluginSettingsDataEditors").then((Mod) => ({ default: Mod.StatisticsEditor }))), { loading: () => null }),
+  CustomCommands: dynamic(SafeImport(() => import("./PluginSettings/PluginSettingsWorkflowEditors").then((Mod) => ({ default: Mod.CustomCommandsEditor }))), { loading: () => null }),
+  Reminders: dynamic(SafeImport(() => import("./PluginSettings/PluginSettingsWorkflowEditors").then((Mod) => ({ default: Mod.RemindersEditor }))), { loading: () => null }),
+  Notifications: dynamic(SafeImport(() => import("./PluginSettings/PluginSettingsWorkflowEditors").then((Mod) => ({ default: Mod.NotificationsEditor }))), { loading: () => null }),
+};
+
+function LazyEditor({ editorPath, ...properties }: { editorPath?: string } & Record<string, unknown>) {
+  const [EditorComponent, SetEditorComponent] = UseState<ComponentType<Record<string, unknown>> | null>(null);
+  const [LoadFailed, SetLoadFailed] = UseState(false);
+
+  UseEffect(() => {
+    if (!editorPath) {
+      SetLoadFailed(true);
+      return;
+    }
+
+    SetEditorComponent(null);
+    SetLoadFailed(false);
+
+    const [FilePath, ExportName] = editorPath.split("#");
+    const ResolvedPath = FilePath.startsWith("Plugins/")
+      ? `../../../${FilePath}`
+      : `./${FilePath.replace("src/Web/Components/", "")}`;
+
+    import(ResolvedPath)
+      .then((Module) => {
+        const Component = ExportName ? Module[ExportName] : Module.default;
+        if (Component) {
+          SetEditorComponent(() => Component);
+        } else {
+          SetLoadFailed(true);
+        }
+      })
+      .catch(() => {
+        SetLoadFailed(true);
+      });
+  }, [editorPath]);
+
+  if (LoadFailed || !EditorComponent) return null;
+  return <EditorComponent {...properties} />;
+}
 
 type PluginSettingsPanelProperties = {
   BotId: string;
@@ -453,141 +505,92 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                       {SelectedPlugin.DependencyErrors.join(" ")}
                     </div>
                   ) : null}
-                  {SelectedPlugin.Metadata.Id === "Automation" ? (
-                    <AutomationEditor
-                      BotIdentity={BotIdentity}
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "SendEmbed" ? (
-                    <SendEmbedEditor
-                      BotIdentity={BotIdentity}
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      OnCreateChannel={CreateChannel}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "EmojiAdder" ? (
-                    <EmojiAdderEditor
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "Backups" ? (
-                    <BackupsManager
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "CustomCommands" ? (
-                    <CustomCommandsEditor
-                      BotIdentity={BotIdentity}
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      OnCreateChannel={CreateChannel}
-                      OnCreateRole={CreateRole}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "Reminders" ? (
-                    <RemindersEditor
-                      BotIdentity={BotIdentity}
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      OnCreateChannel={CreateChannel}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "Notifications" ? (
-                    <NotificationsEditor
-                      BotIdentity={BotIdentity}
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      OnCreateChannel={CreateChannel}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : SelectedPlugin.Metadata.Id === "Statistics" ? (
-                    <StatisticsEditor
-                      BotIdentity={BotIdentity}
-                      BotId={Properties.BotId}
-                      DraftValues={DraftValues}
-                      GuildId={Properties.GuildId}
-                      OnCreateChannel={CreateChannel}
-                      Plugin={SelectedPlugin}
-                      SetStatus={SetStatus}
-                      UpdateDraftValue={UpdateDraftValue}
-                    />
-                  ) : (
-                    <>
-                  {SelectedPlugin.DashboardElements?.length ? (
-                    <section className="scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 lg:rounded-[2rem] lg:bg-slate-950/40 lg:p-5" id="plugin-section-overview">
-                      <div className="mb-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Overview</p>
-                        <h3 className="mt-2 text-xl font-black text-white lg:text-2xl">Plugin dashboard</h3>
-                      </div>
-                      <div className="grid gap-4">
-                        {SelectedPlugin.DashboardElements.map((Element) => (
-                          <DashboardElementRenderer Element={Element} key={Element.Key} />
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-                  {ConfigGroups.map((Entry) => {
-                    if ("Sections" in Entry) {
+                  {(() => {
+                    const RegisteredEditor = PluginEditorRegistry[SelectedPlugin.Metadata.Id];
+                    if (RegisteredEditor) {
                       return (
-                        <ConfigGroup
-                          BotId={Properties.BotId}
+                        <RegisteredEditor
                           BotIdentity={BotIdentity}
-                          CreateChannel={CreateChannel}
-                          CreateRole={CreateRole}
+                          BotId={Properties.BotId}
                           DraftValues={DraftValues}
-                          Group={Entry}
                           GuildId={Properties.GuildId}
-                          key={`group-${Entry.Label}`}
-                          PluginId={SelectedPlugin.Metadata.Id}
+                          OnCreateChannel={CreateChannel}
+                          OnCreateRole={CreateRole}
+                          Plugin={SelectedPlugin}
                           SetStatus={SetStatus}
                           UpdateDraftValue={UpdateDraftValue}
                         />
                       );
                     }
-
+                    if (SelectedPlugin.DashboardEditor) {
+                      return (
+                        <LazyEditor
+                          BotIdentity={BotIdentity}
+                          BotId={Properties.BotId}
+                          DraftValues={DraftValues}
+                          GuildId={Properties.GuildId}
+                          OnCreateChannel={CreateChannel}
+                          OnCreateRole={CreateRole}
+                          Plugin={SelectedPlugin}
+                          SetStatus={SetStatus}
+                          UpdateDraftValue={UpdateDraftValue}
+                          editorPath={SelectedPlugin.DashboardEditor}
+                        />
+                      );
+                    }
                     return (
-                      <ConfigSection
-                        BotId={Properties.BotId}
-                        BotIdentity={BotIdentity}
-                        CreateChannel={CreateChannel}
-                        CreateRole={CreateRole}
-                        DraftValues={DraftValues}
-                        GuildId={Properties.GuildId}
-                        key={Entry.Id}
-                        PluginId={SelectedPlugin.Metadata.Id}
-                        Section={Entry}
-                        SetStatus={SetStatus}
-                        UpdateDraftValue={UpdateDraftValue}
-                      />
+                      <>
+                        {SelectedPlugin.DashboardElements?.length ? (
+                          <section className="scroll-mt-28 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 lg:rounded-[2rem] lg:bg-slate-950/40 lg:p-5" id="plugin-section-overview">
+                            <div className="mb-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.3em] text-blue-300">Overview</p>
+                              <h3 className="mt-2 text-xl font-black text-white lg:text-2xl">Plugin dashboard</h3>
+                            </div>
+                            <div className="grid gap-4">
+                              {SelectedPlugin.DashboardElements.map((Element) => (
+                                <DashboardElementRenderer Element={Element} key={Element.Key} />
+                              ))}
+                            </div>
+                          </section>
+                        ) : null}
+                        {ConfigGroups.map((Entry) => {
+                          if ("Sections" in Entry) {
+                            return (
+                              <ConfigGroup
+                                BotId={Properties.BotId}
+                                BotIdentity={BotIdentity}
+                                CreateChannel={CreateChannel}
+                                CreateRole={CreateRole}
+                                DraftValues={DraftValues}
+                                Group={Entry}
+                                GuildId={Properties.GuildId}
+                                key={`group-${Entry.Label}`}
+                                PluginId={SelectedPlugin.Metadata.Id}
+                                SetStatus={SetStatus}
+                                UpdateDraftValue={UpdateDraftValue}
+                              />
+                            );
+                          }
+
+                          return (
+                            <ConfigSection
+                              BotId={Properties.BotId}
+                              BotIdentity={BotIdentity}
+                              CreateChannel={CreateChannel}
+                              CreateRole={CreateRole}
+                              DraftValues={DraftValues}
+                              GuildId={Properties.GuildId}
+                              key={Entry.Id}
+                              PluginId={SelectedPlugin.Metadata.Id}
+                              Section={Entry}
+                              SetStatus={SetStatus}
+                              UpdateDraftValue={UpdateDraftValue}
+                            />
+                          );
+                        })}
+                      </>
                     );
-                  })}
-                    </>
-                  )}
+                  })()}
                 </div>
               </>
             ) : (

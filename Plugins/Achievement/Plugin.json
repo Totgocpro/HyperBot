@@ -1,0 +1,60 @@
+{
+  "Metadata": {
+    "Id": "Achievement",
+    "DisplayName": "Achievement",
+    "Version": "1.0.0",
+    "Author": "HyperBot",
+    "Icon": "FiAward"
+  },
+  "Scope": "Guild",
+  "Help": {
+    "Description": "Create and track achievements for your members. Supports message counts, image sending, daily streaks, voice activity, and more."
+  },
+  "Commands": [
+    {
+      "Name": "achievements",
+      "Description": "List all available achievements in this server."
+    },
+    {
+      "Name": "progress",
+      "Description": "View your current achievement progress."
+    }
+  ],
+  "WebInterface": [
+    {
+      "Key": "AnnouncementChannel",
+      "Type": "ChannelPicker",
+      "Label": "Announcement channel",
+      "Description": "Channel where achievement completions are announced publicly.",
+      "Default": "",
+      "Section": "General",
+      "SupportedChannelTypes": ["GuildText"],
+      "RequireWritable": true
+    },
+    {
+      "Key": "DmOnCompletion",
+      "Type": "Boolean",
+      "Label": "DM on completion",
+      "Description": "Send a direct message to users when they complete an achievement.",
+      "Default": true,
+      "Section": "General"
+    },
+    {
+      "Key": "Achievements",
+      "Type": "List",
+      "ItemType": "String",
+      "Label": "Achievement definitions",
+      "Description": "Achievements are managed through the custom editor below.",
+      "Default": [
+        "{\"id\":\"send-a-message\",\"name\":\"Send a message\",\"type\":\"send_messages\",\"target\":1}",
+        "{\"id\":\"send-4-images\",\"name\":\"Send 4 images\",\"type\":\"send_images\",\"target\":4}",
+        "{\"id\":\"speak-4-days\",\"name\":\"Speak 4 days in a row\",\"type\":\"daily_streak_messages\",\"target\":4}",
+        "{\"id\":\"voice-3-days\",\"name\":\"Voice 3 days\",\"type\":\"daily_streak_voice\",\"target\":3}"
+      ],
+      "Section": "Custom editor"
+    }
+  ],
+  "DashboardEditor": "Plugins/Achievement/AchievementEditor#AchievementEditor",
+  "EntryPoint": "./AchievementPlugin.ts",
+  "Category": "Engagement"
+}

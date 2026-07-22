@@ -64,6 +64,7 @@
       "Section": "Commands"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettings/PluginSettingsWorkflowEditors#CustomCommandsEditor",
   "EntryPoint": "./CustomCommandsPlugin.ts",
   "Category": "Automation"
 }

@@ -54,6 +54,7 @@
       "ActionKey": "RestoreBackup"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettings/PluginSettingsDataEditors#BackupsManager",
   "EntryPoint": "./BackupsPlugin.ts",
   "Category": "Administration"
 }

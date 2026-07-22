@@ -22,6 +22,7 @@ export type DashboardPlugin = {
   DependencyErrors?: string[];
   WebInterface: Array<SettingsField & { Value: unknown }>;
   DashboardElements?: Array<DashboardElement & { Value: unknown }>;
+  DashboardEditor?: string;
 };
 
 export type PluginConfigSection = {

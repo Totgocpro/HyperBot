@@ -67,6 +67,7 @@
       "ActionKey": "SendEmbed"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettings/PluginSettingsDataEditors#SendEmbedEditor",
   "EntryPoint": "./SendEmbedPlugin.ts",
   "Category": "Messages"
 }

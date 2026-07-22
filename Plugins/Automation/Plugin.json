@@ -41,5 +41,6 @@
       "CustomRenderer": "AutomationEditor"
     }
   ],
+  "DashboardEditor": "Plugins/Automation/AutomationEditor#AutomationEditor",
   "EntryPoint": "./AutomationPlugin.ts"
 }

@@ -44,6 +44,7 @@
       "CustomRenderer": "EmojiAdder"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettingsCustom/EmojiAdderEditor#EmojiAdderEditor",
   "EntryPoint": "./EmojiAdderPlugin.ts",
   "Category": "Utility"
 }

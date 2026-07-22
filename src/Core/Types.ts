@@ -129,6 +129,7 @@ export type PluginManifest = {
   Commands: CommandDefinition[];
   WebInterface: SettingsField[];
   DashboardElements?: DashboardElement[];
+  DashboardEditor?: string;
   EntryPoint: string;
 };
 

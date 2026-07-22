@@ -103,6 +103,7 @@ const PluginManifestSchema = z.object({
       })
     )
     .optional(),
+  DashboardEditor: z.string().min(1).optional(),
   EntryPoint: z.string().min(1)
 });
 

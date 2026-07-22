@@ -41,6 +41,7 @@
       "Section": "Sources"
     }
   ],
+  "DashboardEditor": "src/Web/Components/PluginSettings/PluginSettingsWorkflowEditors#NotificationsEditor",
   "EntryPoint": "./NotificationsPlugin.ts",
   "Category": "Automation"
 }
