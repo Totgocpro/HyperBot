@@ -263,7 +263,7 @@ def ensure_env(
         "FOLLOW_LOGS": "true",
         "TEMPVOICE_YOUTUBE_COOKIES_PATH": "",
         "YOUTUBE_COOKIES_PATH": "",
-        "TENOR_API_KEY": "",
+        "KLIPY_API_KEY": "",
         "APP_HOST_BIND": "127.0.0.1",
         "DATABASE_HOST_BIND": "127.0.0.1",
     }
@@ -510,8 +510,8 @@ def command_configure(args: argparse.Namespace) -> None:
         values["SUPER_ADMIN_IDS"] = args.super_admins
     if args.registration is not None:
         values["PUBLIC_REGISTRATION_ENABLED"] = "true" if args.registration else "false"
-    if args.tenor_key is not None:
-        values["TENOR_API_KEY"] = args.tenor_key
+    if args.klipy_key is not None:
+        values["KLIPY_API_KEY"] = args.klipy_key
 
     if args.interactive:
         current_port = values.get("APP_HOST_PORT") or str(DEFAULT_PORT)
@@ -752,7 +752,7 @@ def command_menu(_: argparse.Namespace) -> None:
                     host_bind=None,
                     super_admins=None,
                     registration=None,
-                    tenor_key=None,
+                    klipy_key=None,
                     interactive=True,
                 )
             )
@@ -806,7 +806,7 @@ def build_parser() -> argparse.ArgumentParser:
     configure.add_argument("--host-bind", help="Web bind address, for example 127.0.0.1 or 0.0.0.0.")
     configure.add_argument("--super-admins", help="Comma-separated Discord super-admin IDs.")
     configure.add_argument("--registration", action=argparse.BooleanOptionalAction, help="Enables/disables public registration.")
-    configure.add_argument("--tenor-key", help="Tenor API key for EmojiAdder.")
+    configure.add_argument("--klipy-key", help="Klipy API key for EmojiAdder (replaces discontinued Tenor).")
     configure.add_argument("-i", "--interactive", action="store_true", help="Interactive configuration assistant.")
     configure.set_defaults(func=command_configure)
 

@@ -10,18 +10,44 @@ type RouteContext = {
   params: Promise<{ botId: string; guildId: string }>;
 };
 
-type TenorMedia = {
-  dims?: number[];
-  size?: number;
-  url?: string;
+type KlipyRendition = {
+  url: string;
+  width: number;
+  height: number;
+  size: number;
 };
 
-type TenorResult = {
-  content_description?: string;
-  id?: string;
-  media?: Array<Record<string, TenorMedia>>;
-  media_formats?: Record<string, TenorMedia>;
-  title?: string;
+type KlipyFileFormats = {
+  gif?: KlipyRendition;
+  webp?: KlipyRendition;
+  jpg?: KlipyRendition;
+  mp4?: KlipyRendition;
+  webm?: KlipyRendition;
+  png?: KlipyRendition;
+};
+
+type KlipyFile = {
+  hd: KlipyFileFormats;
+  md: KlipyFileFormats;
+  sm: KlipyFileFormats;
+  xs: KlipyFileFormats;
+};
+
+type KlipyItem = {
+  id: number;
+  slug: string;
+  title: string;
+  file: KlipyFile;
+  tags?: string[];
+  type?: string;
+  blur_preview?: string;
+};
+
+type KlipyPageData = {
+  data: KlipyItem[];
+  current_page: number;
+  per_page: number;
+  has_next: boolean;
 };
 
 async function Post(Request: Request, Context: RouteContext): Promise<Response> {
@@ -41,48 +67,59 @@ async function Post(Request: Request, Context: RouteContext): Promise<Response> 
   const Body = await Request.json().catch(() => ({})) as { ApiKey?: string; ContentFilter?: string; Pos?: string; Query?: string };
   const Storage = new PluginStorage(Prisma, RedisClient, botId, "EmojiAdder");
   const StoredKey = await Storage.GetGlobalConfig<string>(guildId, "TenorApiKey").catch(() => "");
-  const ApiKey = Body.ApiKey?.trim() || StoredKey || process.env.TENOR_API_KEY || "LIVDSRZULELA";
-  const ContentFilter = ["off", "low", "medium", "high"].includes(String(Body.ContentFilter)) ? String(Body.ContentFilter) : "medium";
-  const Query = Body.Query?.trim() || "trending";
-  const Endpoint = Body.Query?.trim() ? "search" : "trending";
-  const UrlValue = new URL(`https://g.tenor.com/v1/${Endpoint}`);
-  UrlValue.searchParams.set("key", ApiKey);
-  UrlValue.searchParams.set("limit", "24");
-  UrlValue.searchParams.set("media_filter", "basic");
-  UrlValue.searchParams.set("contentfilter", ContentFilter);
-  UrlValue.searchParams.set("ar_range", "standard");
+  const ApiKey = Body.ApiKey?.trim() || StoredKey || process.env.KLIPY_API_KEY;
 
-  if (Endpoint === "search") {
+  if (!ApiKey) {
+    return new Response("No Klipy API key configured. Set KLIPY_API_KEY in .env or configure TenorApiKey in plugin settings. Get a key at https://klipy.com/developers", { status: 400 });
+  }
+
+  const ContentFilter = ["off", "low", "medium", "high"].includes(String(Body.ContentFilter)) ? String(Body.ContentFilter) : "medium";
+  const Query = Body.Query?.trim() || "";
+  const Page = Body.Pos ? Number(Body.Pos) : 1;
+  const UrlValue = new URL(`https://api.klipy.com/api/v1/${ApiKey}/gifs/${Query ? "search" : "trending"}`);
+  UrlValue.searchParams.set("per_page", "24");
+  UrlValue.searchParams.set("page", String(Page));
+  UrlValue.searchParams.set("locale", "en_US");
+
+  if (ContentFilter !== "off") {
+    UrlValue.searchParams.set("content_filter", ContentFilter);
+  }
+
+  if (Query) {
     UrlValue.searchParams.set("q", Query);
   }
 
-  if (Body.Pos) {
-    UrlValue.searchParams.set("pos", Body.Pos);
-  }
-
   const ResponseValue = await fetch(UrlValue, { headers: { Accept: "application/json" } });
+  const ResponseBody = await ResponseValue.text().catch(() => "");
 
   if (!ResponseValue.ok) {
-    return new Response(`Tenor search failed: ${ResponseValue.status}`, { status: ResponseValue.status });
+    return new Response(ResponseBody || `Klipy search failed: ${ResponseValue.status}`, { status: ResponseValue.status });
   }
 
-  const Payload = await ResponseValue.json() as { next?: string | number; results?: TenorResult[] };
-  const Results = (Payload.results ?? []).map((Result) => {
-    const Media = Result.media_formats ?? Result.media?.[0] ?? {};
-    const Preview = Media.tinygif ?? Media.nanogif ?? Media.tinymp4 ?? Media.gif ?? Media.mp4;
-    const Source = Media.gif ?? Media.tinygif ?? Media.mp4 ?? Preview;
+  type KlipyApiResponse = { result?: boolean; data?: KlipyPageData; errors?: unknown };
+
+  const Json = JSON.parse(ResponseBody) as KlipyApiResponse;
+
+  if (Json.result === false || !Json.data) {
+    return new Response("Klipy search failed: invalid API key or request.", { status: 400 });
+  }
+
+  const Items = Json.data.data ?? [];
+  const Results = Items.map((Item) => {
+    const Preview = Item.file?.sm?.gif ?? Item.file?.xs?.gif ?? Item.file?.sm?.webp ?? Item.file?.sm?.mp4;
+    const Source = Item.file?.md?.gif ?? Item.file?.hd?.gif ?? Item.file?.sm?.gif ?? Preview;
 
     return {
-      Description: Result.content_description || Result.title || "Tenor GIF",
-      Id: Result.id ?? "",
+      Description: Item.title || "Klipy GIF",
+      Id: String(Item.id),
       PreviewUrl: Preview?.url ?? "",
       SourceUrl: Source?.url ?? "",
-      SuggestedName: NormalizeEmojiName(Result.content_description || Result.title || "emoji")
+      SuggestedName: NormalizeEmojiName(Item.title || "emoji")
     };
   }).filter((Result) => Result.Id && Result.PreviewUrl && Result.SourceUrl);
 
   return NextResponse.json({
-    Next: Payload.next && String(Payload.next) !== "0" ? String(Payload.next) : "",
+    Next: Json.data.has_next ? String(Page + 1) : "",
     Results
   });
 }
@@ -110,4 +147,25 @@ async function ResolveDashboardUser(Request: Request) {
   }
 }
 
-export { Post as POST };
+async function Get(Request: Request, Context: RouteContext): Promise<Response> {
+  const { botId, guildId } = await Context.params;
+  const User = await ResolveDashboardUser(Request);
+
+  if (User instanceof Response) {
+    return User;
+  }
+
+  const AccessControl = CreateAccessControl(botId);
+
+  if (!(await AccessControl.CanManagePlugin(User.DiscordId, BuildServerTrustedGuildSummary(guildId), "EmojiAdder"))) {
+    return new Response("Insufficient guild plugin permissions.", { status: 403 });
+  }
+
+  const Storage = new PluginStorage(Prisma, RedisClient, botId, "EmojiAdder");
+  const StoredKey = await Storage.GetGlobalConfig<string>(guildId, "TenorApiKey").catch(() => "");
+  const HasKey = !!(StoredKey || process.env.KLIPY_API_KEY);
+
+  return NextResponse.json({ configured: HasKey });
+}
+
+export { Post as POST, Get as GET };

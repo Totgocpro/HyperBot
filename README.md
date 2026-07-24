@@ -143,7 +143,7 @@ The legacy `Release.sh` and `Release.bat` files are still available for compatib
 | `CustomCommands` | Guild | Automation | Dashboard only | Builds prefix commands with a configurable prefix, default channel checks, default role checks, denied messages, and command definitions. |
 | `CustomStatus` | Global | General | Dashboard only | Configures bot presence, activity type, rotating status text, emoji placement, rotation mode, and rotation interval. |
 | `DiscordGame` | Guild | Fun | `/minesweeper`, `/tictactoe`, `/love`, `/askyes` | Provides Discord games and generated image interactions. Dashboard settings cover game text, colors, emojis, love image rendering, and yes/no answer images. |
-| `EmojiAdder` | Guild | Utility | Dashboard only | Searches and adds Tenor GIFs as Discord emojis, can delete emojis, and supports a per-guild Tenor key or the `TENOR_API_KEY` environment variable. Requires the bot to manage guild expressions. |
+| `EmojiAdder` | Guild | Utility | Dashboard only | Searches and adds GIFs as Discord emojis (via Klipy API), can delete emojis, and supports a per-guild Klipy key or the `KLIPY_API_KEY` environment variable. Get a key at https://klipy.com/developers. Requires the bot to manage guild expressions. |
 | `Giveaway` | Guild | Engagement | `/giveaway-start`, `/giveaway-end`, `/giveaway-reroll`, `/giveaway-list` | Runs button-based giveaways with default channel, default duration, winner limits, required roles, blocked roles, bonus entry rules, messages, and button labels. |
 | `InviteTracker` | Guild | Engagement | `/invites`, `/invite-leaderboard` | Tracks invite usage, fake joins, leaves, unknown joins, invite logs, and leaderboard data. Includes dashboard charts and a cache refresh action. Requires the bot to read server invites. |
 | `Leveling` | Guild | Engagement | `/leaderboard` | Awards XP from counted messages and counted voice minutes, then displays a public leaderboard. Depends on `Statistics`. |
@@ -213,7 +213,7 @@ The CLI writes common settings to `.env`.
 | `APP_HOST_BIND` | Dashboard bind address. Keep `127.0.0.1` for local-only access. |
 | `SUPER_ADMIN_IDS` | Comma-separated Discord user IDs with super-admin access. |
 | `PUBLIC_REGISTRATION_ENABLED` | Enables or disables public registration. |
-| `TENOR_API_KEY` | Optional API key used by Emoji Adder. |
+| `KLIPY_API_KEY` | API key for Emoji Adder (Klipy API, replaces discontinued Tenor). Get one at https://klipy.com/developers. |
 | `TEMPVOICE_YOUTUBE_COOKIES_PATH` | Optional path to a YouTube cookies file for Temp Voice music. |
 | `YOUTUBE_COOKIES_PATH` | Fallback YouTube cookies path. |
 | `DATABASE_HOST_BIND` | PostgreSQL and Redis bind address. Keep `127.0.0.1` unless you intentionally expose them. |

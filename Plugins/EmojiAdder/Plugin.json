@@ -8,7 +8,7 @@
   },
   "Scope": "Guild",
   "Help": {
-    "Description": "Searches and adds Tenor GIFs as Discord emojis, and can delete existing emojis from the dashboard."
+    "Description": "Searches and adds GIFs as Discord emojis (via Klipy API), and can delete existing emojis from the dashboard."
   },
   "Commands": [],
   "WebInterface": [
@@ -18,7 +18,7 @@
       "Label": "Tenor API key",
       "Default": "",
       "Section": "Tenor",
-      "Description": "Optional. Falls back to TENOR_API_KEY from the server environment, then Tenor's public demo key."
+      "Description": "Optional. Falls back to KLIPY_API_KEY from the server environment. Get a key at https://klipy.com/developers"
     },
     {
       "Key": "TenorContentFilter",

@@ -77,6 +77,7 @@ export function EmojiAdderEditor(Properties: EmojiAdderEditorProperties) {
   const [OptimizingCurrent, SetOptimizingCurrent] = UseState(0);
   const [OptimizingTotal, SetOptimizingTotal] = UseState(0);
   const [Busy, SetBusy] = UseState(false);
+  const [ApiKeyWarning, SetApiKeyWarning] = UseState(false);
   const SentinelReference = UseRef<HTMLDivElement | null>(null);
   const DecodedGifCache = UseRef<Map<string, Promise<DecodedGif>>>(new Map());
   const ClientFramePreviewCache = UseRef<Map<string, string>>(new Map());
@@ -97,6 +98,7 @@ export function EmojiAdderEditor(Properties: EmojiAdderEditorProperties) {
 
   UseEffect(() => {
     void LoadExistingEmojis();
+    void CheckApiKeyConfigured();
   }, [Properties.BotId, Properties.GuildId]);
 
   UseEffect(() => {
@@ -165,6 +167,18 @@ export function EmojiAdderEditor(Properties: EmojiAdderEditorProperties) {
     };
   }, [SelectedEmojis, Properties.BotId, Properties.GuildId]);
 
+  async function CheckApiKeyConfigured(): Promise<void> {
+    try {
+      const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/emoji-adder/tenor`, {
+        headers: BuildGuildHeaders()
+      });
+      const Payload = await Response.json() as { configured?: boolean };
+      SetApiKeyWarning(!Payload.configured);
+    } catch {
+      SetApiKeyWarning(true);
+    }
+  }
+
   async function LoadExistingEmojis(): Promise<void> {
     const Response = await fetch(`/api/plugins/${Properties.BotId}/${Properties.GuildId}/mentions`, {
       headers: BuildGuildHeaders()
@@ -198,9 +212,14 @@ export function EmojiAdderEditor(Properties: EmojiAdderEditorProperties) {
       });
 
       if (!Response.ok) {
+        if (Response.status === 400) {
+          SetApiKeyWarning(true);
+        }
         Properties.SetStatus(await Response.text());
         return;
       }
+
+      SetApiKeyWarning(false);
 
       const Payload = await Response.json() as { Next: string; Results: TenorResult[] };
       SetResults((PreviousResults) => Reset ? MergeUniqueTenorResults([], Payload.Results) : MergeUniqueTenorResults(PreviousResults, Payload.Results));
@@ -564,6 +583,14 @@ export function EmojiAdderEditor(Properties: EmojiAdderEditorProperties) {
           {RemainingAnimatedEmojiSlots <= 0 && RemainingStaticEmojiSlots <= 0 ? "Limits reached" : "Add emoji"}
         </button>
       </div>
+
+      {ApiKeyWarning ? (
+        <div className="mt-5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <p className="text-sm font-bold text-amber-200">
+            Klipy API key not configured. Set <code className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-100">KLIPY_API_KEY</code> in <code className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-100">.env</code>. Get a free key at <a className="underline hover:text-amber-100" href="https://klipy.com/developers" rel="noreferrer" target="_blank">klipy.com/developers</a>.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
         {ExistingEmojis.length === 0 ? <p className="col-span-full rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">No cached server emoji yet.</p> : null}
