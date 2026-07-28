@@ -1,0 +1,32 @@
+name: TypeCheck
+
+on:
+  push:
+    branches: [main, master, dev, develop]
+  pull_request:
+    branches: [main, master, dev, develop]
+
+jobs:
+  typecheck:
+    name: TypeScript Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://localhost:5432/hyperbot
+
+      - name: TypeCheck (Bot - tsconfig.bot.json)
+        run: npx tsc -p tsconfig.bot.json --noEmit
+
+      - name: TypeCheck (Web - tsconfig.json)
+        run: npx tsc --noEmit
