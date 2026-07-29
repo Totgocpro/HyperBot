@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FiStar } from "react-icons/fi";
 import { GuildSelector } from "@/src/Web/Components/GuildSelector";
 import { RequireAuthenticatedPage } from "@/src/Web/PageAuth";
 
@@ -16,13 +17,21 @@ export default async function HomePage() {
               Manage servers, enable plugins, and edit settings from one interface.
             </p>
           </div>
-          {User.Role === "SuperAdmin" ? (
-            <div className="flex gap-3">
+          <div className="flex gap-3">
+            <a
+              className="rounded-2xl bg-white px-5 py-3 text-sm font-bold text-blue-700"
+              href="https://github.com/Totgocpro/HyperBot"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <FiStar className="inline-block size-5" /> Star on GitHub
+            </a>
+            {User.Role === "SuperAdmin" ? (
               <Link className="rounded-2xl bg-white px-5 py-3 text-sm font-bold text-blue-700" href="/admin">
                 Global admin
               </Link>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </header>
         <GuildSelector />
       </div>
