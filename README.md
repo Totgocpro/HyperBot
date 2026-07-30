@@ -10,6 +10,7 @@
 ![PostgreSQL](https://img.shields.io/badge/postgresql-16-4169E1?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/redis-7-DC382D?logo=redis&logoColor=white)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+[![CodeFactor](https://www.codefactor.io/repository/github/totgocpro/hyperbot/badge)](https://www.codefactor.io/repository/github/totgocpro/hyperbot)
 
 HyperBot is a Discord bot with a web dashboard and a plugin-based architecture. The core project handles bot instances, plugin loading, storage, the admin interface, permissions, Discord command synchronization, PostgreSQL, and Redis. Features live in `Plugins/`, so they can be added or changed without rewriting the core.
 
