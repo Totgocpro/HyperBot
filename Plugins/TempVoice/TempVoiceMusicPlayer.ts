@@ -341,6 +341,9 @@ export class TempVoiceMusicPlayer {
       guildId: Channel.guild.id,
       adapterCreator: (Channel.guild as Guild).voiceAdapterCreator,
     });
+    Connection.on("error", (ErrorValue) => {
+      this.Logger.Warn("TempVoice music voice connection error.", ErrorValue);
+    });
     const Session: TempVoiceMusicSession = {
       AccumulatedPausedMs: 0,
       ChannelId: Channel.id,

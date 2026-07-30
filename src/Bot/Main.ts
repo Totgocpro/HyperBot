@@ -6,6 +6,7 @@ import {
   PermissionsBitField,
   type GuildBasedChannel
 } from "discord.js";
+import { execSync } from "node:child_process";
 import Path from "node:path";
 import { Prisma, RedisClient } from "../Core/Clients.js";
 import { GetGuildEmojiLimits } from "../Core/DiscordLimits.js";
@@ -425,7 +426,16 @@ async function SyncBots(): Promise<void> {
   }
 }
 
+function SyncDatabaseSchema(): void {
+  try {
+    execSync("npx prisma db push", { stdio: "inherit", timeout: 60_000 });
+  } catch (ErrorValue) {
+    console.error("Failed to synchronize database schema:", ErrorValue);
+  }
+}
+
 async function Main(): Promise<void> {
+  SyncDatabaseSchema();
   await SyncBots();
 
   setInterval(() => {

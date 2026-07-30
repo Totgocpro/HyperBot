@@ -128,6 +128,9 @@ export class TempVoiceTtsPlayer {
       guildId: Channel.guild.id,
       adapterCreator: (Channel.guild as Guild).voiceAdapterCreator
     });
+    Connection.on("error", (ErrorValue) => {
+      this.Logger.Warn("TempVoice TTS voice connection error.", ErrorValue);
+    });
     const Session: TempVoiceTtsSession = {
       ChannelId: Channel.id,
       Connection,
