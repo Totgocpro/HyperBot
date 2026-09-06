@@ -425,6 +425,13 @@ export class TempVoiceMusicPlayer {
       });
 
       Session.FfmpegProcess = Ffmpeg;
+      let FfmpegStderr = "";
+      Ffmpeg.stderr?.on("data", (Chunk: Buffer) => {
+        FfmpegStderr += Chunk.toString().slice(0, 4000);
+        if (FfmpegStderr.length > 8000) {
+          FfmpegStderr = FfmpegStderr.slice(-8000);
+        }
+      });
       Ffmpeg.once("error", (ErrorValue) => {
         if (Session.FfmpegProcess === Ffmpeg) {
           Session.FfmpegProcess = null;
@@ -433,14 +440,36 @@ export class TempVoiceMusicPlayer {
         this.Logger.Warn("TempVoice music ffmpeg process failed.", {
           ChannelId,
           Error: ErrorValue instanceof Error ? ErrorValue.message : String(ErrorValue),
+          Stderr: FfmpegStderr.slice(0, 2000),
           TrackTitle: Track.Title,
           TrackUrl: Track.Url,
         });
         this.DestroySession(ChannelId, Session);
       });
-      Ffmpeg.once("close", () => {
+      Ffmpeg.once("close", (Code, Signal) => {
         if (Session.FfmpegProcess === Ffmpeg) {
           Session.FfmpegProcess = null;
+        }
+
+        if (Code !== null && Code !== 0) {
+          const Is403 = FfmpegStderr.includes("403") || FfmpegStderr.includes("Forbidden");
+          this.Logger.Warn("TempVoice music ffmpeg closed with error.", {
+            ChannelId,
+            Code,
+            Signal,
+            Stderr: FfmpegStderr.slice(0, 3000),
+            TrackTitle: Track.Title,
+            TrackUrl: Track.Url,
+            Hint: Is403 ? "YouTube stream returned 403 - yt-dlp may be outdated. Run: ./node_modules/youtube-dl-exec/bin/yt-dlp -U or npm run update:yt-dlp" : undefined,
+          });
+          // If ffmpeg failed early (before producing audio), the audio player will go idle with empty resource.
+          // Ensure session is cleaned up if still pointing to this failed track and no retry is pending.
+          // The AudioPlayerStatus.Idle handler will call PlayNext, but we pre-emptively ensure a clean state.
+          if (Session.CurrentTrack?.Url === Track.Url && Session.FfmpegProcess === null) {
+            // Don't destroy immediately if player is still buffering - let idle handler decide queue progression.
+            // However if stderr indicates 403 and queue is empty, the idle handler will destroy silently.
+            // We keep the warn log so the cause is visible.
+          }
         }
       });
 

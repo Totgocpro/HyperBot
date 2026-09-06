@@ -6,7 +6,8 @@ import {
   PermissionsBitField,
   type GuildBasedChannel
 } from "discord.js";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import Path from "node:path";
 import { Prisma, RedisClient } from "../Core/Clients.js";
 import { GetGuildEmojiLimits } from "../Core/DiscordLimits.js";
@@ -434,8 +435,53 @@ function SyncDatabaseSchema(): void {
   }
 }
 
+function SyncYtDlp(): void {
+  // Auto-update yt-dlp bundled binary to avoid YouTube 403 errors (e.g., music.youtube.com)
+  // This handles cases where node_modules was installed months ago and the extractor is outdated.
+  const Candidates = [
+    Path.join(process.cwd(), "node_modules", "youtube-dl-exec", "bin", "yt-dlp"),
+    "/usr/bin/yt-dlp",
+    "/usr/local/bin/yt-dlp",
+  ];
+
+  for (const Binary of Candidates) {
+    if (!existsSync(Binary)) continue;
+
+    try {
+      const VersionResult = spawnSync(Binary, ["--version"], { timeout: 5000, encoding: "utf8" });
+      const Version = (VersionResult.stdout ?? "").trim() || (VersionResult.stderr ?? "").trim();
+      if (!Version) continue;
+
+      const Match = Version.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+      if (Match) {
+        const [, Y, M, D] = Match;
+        const ReleaseDate = new Date(Number(Y), Number(M) - 1, Number(D));
+        const AgeDays = (Date.now() - ReleaseDate.getTime()) / (24 * 3600 * 1000);
+        if (AgeDays > 90) {
+          console.warn(`[yt-dlp] Version ${Version} at ${Binary} is ${Math.floor(AgeDays)} days old (>90). Attempting update...`);
+          const UpdateResult = spawnSync(Binary, ["-U"], { timeout: 60_000, encoding: "utf8" });
+          if (UpdateResult.status === 0) {
+            console.info(`[yt-dlp] Update succeeded: ${(UpdateResult.stdout ?? "").trim().slice(0, 500)}`);
+          } else {
+            console.warn(`[yt-dlp] Update failed for ${Binary}: ${(UpdateResult.stderr ?? UpdateResult.stdout ?? "").slice(0, 500)}`);
+          }
+        } else {
+          console.info(`[yt-dlp] Version ${Version} at ${Binary} is up-to-date (${Math.floor(AgeDays)} days old).`);
+        }
+      } else {
+        console.info(`[yt-dlp] Found version ${Version} at ${Binary}`);
+      }
+    } catch (ErrorValue) {
+      console.warn(`[yt-dlp] Could not check/update ${Binary}:`, ErrorValue);
+    }
+    // Only attempt update for the bundled binary; system binaries are managed by OS
+    break;
+  }
+}
+
 async function Main(): Promise<void> {
   SyncDatabaseSchema();
+  SyncYtDlp();
   await SyncBots();
 
   setInterval(() => {

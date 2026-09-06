@@ -5,6 +5,8 @@ WORKDIR /Application
 RUN apk add --no-cache openssl python3
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci --include=dev; else npm install --include=dev; fi
+# Ensure yt-dlp is up-to-date (fixes YouTube 403 errors caused by outdated bundled binary)
+RUN ./node_modules/youtube-dl-exec/bin/yt-dlp -U || echo "yt-dlp update failed, continuing"
 
 FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /Application
@@ -20,7 +22,7 @@ FROM node:${NODE_VERSION}-alpine AS runner
 WORKDIR /Application
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN apk add --no-cache ffmpeg fontconfig openssl python3 ttf-dejavu ttf-liberation
+RUN apk add --no-cache ffmpeg fontconfig openssl python3 ttf-dejavu ttf-liberation yt-dlp || apk add --no-cache ffmpeg fontconfig openssl python3 ttf-dejavu ttf-liberation
 COPY --from=builder /Application/package.json ./package.json
 COPY --from=builder /Application/node_modules ./node_modules
 COPY --from=builder /Application/.next ./.next

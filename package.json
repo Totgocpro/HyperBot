@@ -12,6 +12,7 @@
     "web:dev": "next dev --webpack",
     "build": "prisma generate && tsc -p tsconfig.bot.json && next build --webpack",
     "start": "concurrently \"tsx dist/src/Bot/Main.js\" \"next start\"",
+    "update:yt-dlp": "node_modules/youtube-dl-exec/bin/yt-dlp -U && yt-dlp -U || node_modules/youtube-dl-exec/bin/yt-dlp -U",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "lint": "next lint"

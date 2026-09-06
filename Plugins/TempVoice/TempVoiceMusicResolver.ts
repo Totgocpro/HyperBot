@@ -1,5 +1,110 @@
-import { youtubeDl as YoutubeDl, type Flags as YoutubeDlFlags, type Payload as YoutubeDlPayload } from "youtube-dl-exec";
+import { create as createYoutubeDl, youtubeDl as YoutubeDl, type Flags as YoutubeDlFlags, type Payload as YoutubeDlPayload } from "youtube-dl-exec";
+import { accessSync, constants as FsConstants } from "node:fs";
+import { spawnSync } from "node:child_process";
+import Path from "node:path";
 import type { PluginLoggerContract } from "../../src/Core/Types.js";
+
+const SYSTEM_YT_DLP_CANDIDATES = ["/usr/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/opt/homebrew/bin/yt-dlp"];
+
+function resolveBundledYtDlpPath(): string {
+  const Candidates: string[] = [];
+
+  // Try ESM-friendly resolution: relative to this file's directory (dist or src)
+  try {
+    // When running via tsx, process.cwd()/node_modules path is reliable
+    Candidates.push(Path.join(process.cwd(), "node_modules", "youtube-dl-exec", "bin", "yt-dlp"));
+  } catch {}
+
+  // Also try relative to import.meta (for built dist)
+  try {
+    const Dirname = Path.dirname(new URL(import.meta.url).pathname);
+    Candidates.push(Path.resolve(Dirname, "../../node_modules/youtube-dl-exec/bin/yt-dlp"));
+    Candidates.push(Path.resolve(Dirname, "../../../node_modules/youtube-dl-exec/bin/yt-dlp"));
+  } catch {}
+
+  for (const Candidate of Candidates) {
+    try {
+      accessSync(Candidate, FsConstants.X_OK);
+      return Candidate;
+    } catch {}
+  }
+
+  return "";
+}
+
+function pickBestYtDlpBinary(Logger?: PluginLoggerContract): string {
+  const EnvPath = process.env.YOUTUBE_DL_PATH?.trim() || process.env.YT_DLP_PATH?.trim();
+  if (EnvPath) {
+    try {
+      accessSync(EnvPath, FsConstants.X_OK);
+      return EnvPath;
+    } catch {
+      Logger?.Warn(`YOUTUBE_DL_PATH points to non-executable file: ${EnvPath}`);
+    }
+  }
+
+  const Bundled = resolveBundledYtDlpPath();
+  let BestPath = Bundled;
+  let BestVersion = getYtDlpVersion(Bundled);
+
+  for (const Candidate of SYSTEM_YT_DLP_CANDIDATES) {
+    try {
+      accessSync(Candidate, FsConstants.X_OK);
+      const Version = getYtDlpVersion(Candidate);
+      if (isNewerVersion(Version, BestVersion)) {
+        BestPath = Candidate;
+        BestVersion = Version;
+      }
+    } catch {
+      // ignore missing candidate
+    }
+  }
+
+  if (BestPath && BestPath !== Bundled) {
+    Logger?.Info(`Using yt-dlp binary at ${BestPath} (version ${BestVersion ?? "unknown"}) instead of bundled ${Bundled} (${BestVersion ?? "unknown"})`);
+  }
+
+  return BestPath || Bundled;
+}
+
+function getYtDlpVersion(BinaryPath: string): string | null {
+  if (!BinaryPath) return null;
+  try {
+    const Result = spawnSync(BinaryPath, ["--version"], { timeout: 5000, encoding: "utf8" });
+    const Version = Result.stdout?.trim() ?? Result.stderr?.trim() ?? "";
+    return Version || null;
+  } catch {
+    return null;
+  }
+}
+
+function isNewerVersion(Candidate: string | null, Current: string | null): boolean {
+  if (!Candidate) return false;
+  if (!Current) return true;
+  // yt-dlp versions are date-based like 2026.08.19 ; lexicographic compare works, but parse as date
+  const Parse = (V: string) => V.split(".").map((Part) => Number.parseInt(Part, 10) || 0);
+  const C = Parse(Candidate);
+  const O = Parse(Current);
+  for (let i = 0; i < Math.max(C.length, O.length); i++) {
+    const Cd = C[i] ?? 0;
+    const Od = O[i] ?? 0;
+    if (Cd > Od) return true;
+    if (Cd < Od) return false;
+  }
+  return false;
+}
+
+function isVersionOutdated(Version: string | null): boolean {
+  if (!Version) return false;
+  // Consider versions older than ~90 days as outdated; yt-dlp releases frequently and YouTube breaks often.
+  // Date-based version like 2026.03.17 -> treat as date
+  const Match = Version.match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+  if (!Match) return false;
+  const [, Y, M, D] = Match;
+  const ReleaseDate = new Date(Number(Y), Number(M) - 1, Number(D));
+  const AgeMs = Date.now() - ReleaseDate.getTime();
+  return AgeMs > 90 * 24 * 3600 * 1000;
+}
 
 export type TempVoiceMusicTrack = {
   Author?: string;
@@ -71,7 +176,40 @@ export type LazyResolveResult = {
 };
 
 export class TempVoiceMusicResolver {
-  public constructor(private readonly Logger: PluginLoggerContract) {}
+  private readonly YoutubeDl: typeof YoutubeDl & { exec?: unknown; create?: unknown };
+  private readonly YoutubeDlPath: string;
+  private VersionWarningEmitted = false;
+
+  public constructor(private readonly Logger: PluginLoggerContract) {
+    const BestPath = pickBestYtDlpBinary(Logger);
+    this.YoutubeDlPath = BestPath || "";
+    this.YoutubeDl = (BestPath ? createYoutubeDl(BestPath) : YoutubeDl) as typeof YoutubeDl;
+
+    if (BestPath) {
+      const Version = getYtDlpVersion(BestPath);
+      if (Version && isVersionOutdated(Version)) {
+        Logger.Warn(`yt-dlp version ${Version} is outdated (>90 days). YouTube playback may fail with 403 errors. Please update: ${BestPath} -U or npm run update:yt-dlp`, {
+          BinaryPath: BestPath,
+          Version,
+        });
+      } else if (Version) {
+        Logger.Info(`Using yt-dlp ${Version} at ${BestPath}`);
+      }
+    }
+  }
+
+  private getYoutubeDl(): typeof YoutubeDl {
+    return this.YoutubeDl;
+  }
+
+  private warnIfOutdatedOnce(): void {
+    if (this.VersionWarningEmitted) return;
+    const Version = getYtDlpVersion(this.YoutubeDlPath);
+    if (Version && isVersionOutdated(Version)) {
+      this.Logger.Warn(`yt-dlp ${Version} appears outdated. Consider updating to fix potential 403 errors.`, { Version, Path: this.YoutubeDlPath });
+      this.VersionWarningEmitted = true;
+    }
+  }
 
   public detectSource(input: string): string {
     if (input.startsWith("http://") || input.startsWith("https://")) {
@@ -559,7 +697,7 @@ export class TempVoiceMusicResolver {
     }
 
     const playlistUrl = `https://www.youtube.com/playlist?list=${playlistId}`;
-    const output = await YoutubeDl(playlistUrl, this.buildYoutubeDlFlags({
+    const output = await this.getYoutubeDl()(playlistUrl, this.buildYoutubeDlFlags({
       dumpSingleJson: true,
       flatPlaylist: true,
       ignoreErrors: true,
@@ -949,12 +1087,16 @@ export class TempVoiceMusicResolver {
   public async resolveDirectStreamUrl(url: string, youtubeCookiesPath?: string | null): Promise<string> {
     let output: YoutubeDlPayload | string;
     try {
-      output = await YoutubeDl(url, this.buildYoutubeDlFlags({
+      output = await this.getYoutubeDl()(url, this.buildYoutubeDlFlags({
         format: "bestaudio/best",
         getUrl: true,
       }, youtubeCookiesPath));
     } catch (err) {
-      throw new Error(`Stream URL could not be resolved: ${err instanceof Error ? err.message : String(err)}`);
+      const Message = err instanceof Error ? err.message : String(err);
+      if (Message.includes("403") || Message.toLowerCase().includes("forbidden") || Message.includes("Unable to extract")) {
+        this.warnIfOutdatedOnce();
+      }
+      throw new Error(`Stream URL could not be resolved: ${Message}`);
     }
 
     const directUrl = String(output).trim().split(/\r?\n/u).find(Boolean);
@@ -963,7 +1105,7 @@ export class TempVoiceMusicResolver {
   }
 
   private async loadYoutubeInfo(url: string, youtubeCookiesPath?: string | null): Promise<YoutubeDlPayload> {
-    const output = await YoutubeDl(url, this.buildYoutubeDlFlags({
+    const output = await this.getYoutubeDl()(url, this.buildYoutubeDlFlags({
       dumpSingleJson: true,
       skipDownload: true,
     }, youtubeCookiesPath));
@@ -971,7 +1113,7 @@ export class TempVoiceMusicResolver {
   }
 
   private async loadPlaylistTracks(url: string, youtubeCookiesPath?: string | null, source?: string): Promise<TempVoiceMusicTrack[]> {
-    const output = await YoutubeDl(url, this.buildYoutubeDlFlags({
+    const output = await this.getYoutubeDl()(url, this.buildYoutubeDlFlags({
       dumpSingleJson: true,
       flatPlaylist: true,
       ignoreErrors: true,
