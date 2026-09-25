@@ -548,7 +548,7 @@ export function PluginSettingsPanel(Properties: PluginSettingsPanelProperties) {
                             </div>
                             <div className="grid gap-4">
                               {SelectedPlugin.DashboardElements.map((Element) => (
-                                <DashboardElementRenderer Element={Element} key={Element.Key} />
+                                <DashboardElementRenderer BotId={Properties.BotId} Element={Element} GuildId={Properties.GuildId} key={Element.Key} />
                               ))}
                             </div>
                           </section>

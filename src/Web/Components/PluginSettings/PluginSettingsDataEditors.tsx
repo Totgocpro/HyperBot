@@ -8,7 +8,7 @@ import type { BackupSummary, ChannelCounterDraft } from "./PluginSettingsTypes";
 import { ParseEditableEmbed, type EditableEmbed } from "../PluginInterfaceRenderer";
 import { AdvancedEmbedEditor, BuildGuildHeaders, CreateClientId, EmbedInputClassName, FormatChartValue, IsRecord, ParseChannelCounters, ParseSavedEmbeds } from "./PluginSettingsShared";
 
-export function DashboardElementRenderer(Properties: { Element: DashboardElement & { Value: unknown } }) {
+export function DashboardElementRenderer(Properties: { Element: DashboardElement & { Value: unknown }; BotId?: string; GuildId?: string }) {
   const [SelectedMonth, SetSelectedMonth] = UseState(BuildCurrentMonth());
   const Series = BuildMonthlySeries(Properties.Element.Value, SelectedMonth);
   const Total = Series.reduce((TotalValue, Point) => TotalValue + Point.Value, 0);
@@ -19,7 +19,7 @@ export function DashboardElementRenderer(Properties: { Element: DashboardElement
   }
 
   if (Properties.Element.Type === "InviteLeaderboard") {
-    return <InviteLeaderboard Element={Properties.Element} />;
+    return <InviteLeaderboard BotId={Properties.BotId} Element={Properties.Element} GuildId={Properties.GuildId} />;
   }
 
   if (Properties.Element.Type === "PieChart") {
@@ -114,7 +114,7 @@ export function StatisticsEditor(Properties: {
           <section className="min-w-0 scroll-mt-28 rounded-none border-0 bg-transparent p-0 lg:rounded-3xl lg:border lg:border-slate-800 lg:bg-slate-950 lg:p-4" id="plugin-section-overview">
             <div className="grid min-w-0 gap-3 sm:gap-4">
               {Properties.Plugin.DashboardElements.map((Element) => (
-                <DashboardElementRenderer Element={Element} key={Element.Key} />
+                <DashboardElementRenderer BotId={Properties.BotId} Element={Element} GuildId={Properties.GuildId} key={Element.Key} />
               ))}
             </div>
           </section>
@@ -871,11 +871,75 @@ function ActivityHeatmap(Properties: { Element: DashboardElement & { Value: unkn
   );
 }
 
-function InviteLeaderboard(Properties: { Element: DashboardElement & { Value: unknown } }) {
+function InviteLeaderboard(Properties: { BotId?: string; Element: DashboardElement & { Value: unknown }; GuildId?: string }) {
   const Rows = BuildInviteLeaderboardRows(Properties.Element.Value).slice(0, 10);
   const TotalRegular = Rows.reduce((TotalValue, Row) => TotalValue + Row.Regular, 0);
   const TotalFake = Rows.reduce((TotalValue, Row) => TotalValue + Row.Fake, 0);
   const TotalLeaves = Rows.reduce((TotalValue, Row) => TotalValue + Row.Leaves, 0);
+  const [MemberMap, SetMemberMap] = UseState<Map<string, string>>(new Map());
+
+  UseEffect(() => {
+    let IsActive = true;
+
+    async function LoadMembers(): Promise<void> {
+      let BotId = Properties.BotId;
+      let GuildId = Properties.GuildId;
+
+      if (!BotId || !GuildId || GuildId === "Global") {
+        if (typeof window === "undefined") {
+          return;
+        }
+        const Match = window.location.pathname.match(/\/dashboard\/([^/]+)\/([^/]+)/u);
+        if (!Match) {
+          return;
+        }
+        BotId = BotId || Match[1];
+        GuildId = GuildId || Match[2];
+      }
+
+      if (!BotId || !GuildId || GuildId === "Global") {
+        return;
+      }
+
+      try {
+        const Response = await fetch(`/api/plugins/${BotId}/${GuildId}/mentions`);
+        if (!Response.ok || !IsActive) {
+          return;
+        }
+        const Payload = (await Response.json()) as { Members?: Array<{ Id: string; DisplayName: string; Username: string }> };
+        const Members = Array.isArray(Payload.Members) ? Payload.Members : [];
+        const NextMap = new Map<string, string>();
+        for (const Member of Members) {
+          if (typeof Member.Id === "string" && Member.Id) {
+            const Name = (Member.DisplayName?.trim() || Member.Username?.trim() || "").trim();
+            if (Name) {
+              NextMap.set(Member.Id, Name);
+            }
+          }
+        }
+        if (IsActive) {
+          SetMemberMap(NextMap);
+        }
+      } catch {}
+    }
+
+    void LoadMembers();
+
+    return () => {
+      IsActive = false;
+    };
+  }, [Properties.BotId, Properties.GuildId]);
+
+  function FormatUserCell(UserId: string): string {
+    const Name = MemberMap.get(UserId);
+    if (Name) {
+      return `${Name} (${UserId})`;
+    }
+    if (MemberMap.size > 0) {
+      return `Unknown user (${UserId})`;
+    }
+    return UserId;
+  }
 
   return (
     <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-950 p-3 sm:rounded-3xl sm:p-5">
@@ -909,7 +973,7 @@ function InviteLeaderboard(Properties: { Element: DashboardElement & { Value: un
               {Rows.map((Row, Index) => (
                 <tr className="text-slate-200" key={Row.UserId}>
                   <td className="px-3 py-3 font-black text-white">#{Index + 1}</td>
-                  <td className="px-3 py-3 font-semibold">{Row.UserId}</td>
+                  <td className="px-3 py-3 font-semibold">{FormatUserCell(Row.UserId)}</td>
                   <td className="px-3 py-3 text-right font-black text-blue-200">{Row.Score.toLocaleString()}</td>
                   <td className="px-3 py-3 text-right">{Row.Regular.toLocaleString()}</td>
                   <td className="px-3 py-3 text-right">{Row.Fake.toLocaleString()}</td>

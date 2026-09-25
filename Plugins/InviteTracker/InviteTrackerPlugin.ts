@@ -231,9 +231,14 @@ export default class InviteTrackerPlugin extends BasePlugin {
 
     const Config = await this.GetConfig(Interaction.guildId);
     const Rows = this.BuildLeaderboardRows(await this.GetInviteStats(Interaction.guildId)).slice(0, Config.LeaderboardSize);
+    const Guild = Interaction.guild ?? this.DiscordClient.guilds.cache.get(Interaction.guildId) ?? null;
     const Description = Rows.length === 0
       ? "No invitations have been tracked yet."
-      : Rows.map((Row, Index) => `**${Index + 1}.** <@${Row.UserId}> - **${Row.Score.toLocaleString()}** · ${Row.Regular.toLocaleString()} regular · ${Row.Fake.toLocaleString()} fake · ${Row.Leaves.toLocaleString()} left`).join("\n");
+      : (await Promise.all(Rows.map(async (Row, Index) => {
+          const DisplayName = await this.ResolveInviteLeaderboardDisplayName(Guild, Row.UserId);
+          const SafeName = this.EscapeMarkdown(DisplayName);
+          return `**${Index + 1}.** ${SafeName} (${Row.UserId}) - **${Row.Score.toLocaleString()}** · ${Row.Regular.toLocaleString()} regular · ${Row.Fake.toLocaleString()} fake · ${Row.Leaves.toLocaleString()} left`;
+        }))).join("\n");
     const Embed = new EmbedBuilder()
       .setColor(this.ParseEmbedColor(Config.EmbedColor))
       .setTitle("Invite leaderboard")
@@ -241,6 +246,34 @@ export default class InviteTrackerPlugin extends BasePlugin {
       .setTimestamp(new Date());
 
     await Interaction.reply({ embeds: [Embed] });
+  }
+
+  private async ResolveInviteLeaderboardDisplayName(Guild: Guild | null, UserId: string): Promise<string> {
+    if (Guild) {
+      const CachedMember = Guild.members.cache.get(UserId);
+      if (CachedMember) {
+        return CachedMember.displayName || CachedMember.user.username || (CachedMember.user as unknown as { displayName?: string }).displayName || "Unknown user";
+      }
+      try {
+        const Member = await Guild.members.fetch(UserId).catch(() => null);
+        if (Member) {
+          return Member.displayName || Member.user.username || (Member.user as unknown as { displayName?: string }).displayName || "Unknown user";
+        }
+      } catch {}
+    }
+
+    try {
+      const User = await this.DiscordClient.users.fetch(UserId).catch(() => null);
+      if (User) {
+        return (User as unknown as { displayName?: string }).displayName || User.username || "Unknown user";
+      }
+    } catch {}
+
+    return "Unknown user";
+  }
+
+  private EscapeMarkdown(Text: string): string {
+    return Text.replace(/([*_`~|\\])/g, "\\$1");
   }
 
   private async RefreshInviteCache(GuildValue: Guild): Promise<void> {
